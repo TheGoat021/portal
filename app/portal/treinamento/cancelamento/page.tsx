@@ -26,7 +26,8 @@ export default function CancelamentoVideo() {
 
       <iframe
         className="w-full h-[600px] rounded-lg border"
-        src="https://www.youtube.com/embed/sFdmx83ddcI"
+        src="https://drive.google.com/file/d/1yUATWMehbfkF2UTJ_EovxHXYsFySg2B2/preview"
+        allow="autoplay"
         allowFullScreen
       />
 

@@ -26,7 +26,8 @@ export default function ExamesVideo() {
 
       <iframe
         className="w-full h-[600px] rounded-lg border"
-        src="https://www.youtube.com/embed/n9DdIn4Rll0"
+        src="https://drive.google.com/file/d/1PFE13Nl9za3HojPM44cuit2_P1t6_KJV/preview"
+        allow="autoplay"
         allowFullScreen
       />
 

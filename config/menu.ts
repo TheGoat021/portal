@@ -42,6 +42,8 @@ export const menuConfig = [
     title: "Agendamento",
     roles: ["AGENDAMENTO", "EXAMES", "DIRETORIA"],
     items: [
+      { label:'TN Cancelamento', href: 'https://docs.google.com/document/d/1xxRstJptIuIYeVqroVEk-bZZ8n5jq9foXbOeg55_9_0/edit?usp=sharing'},
+      { label:'TN Agendamento', href: 'https://docs.google.com/document/d/1b-YmFMyM8ecsB5W_tFplAUR7KygjhWpjqcDNRLG2yUk/edit?usp=sharing'},
       { label: "Clínicas", href: "https://docs.google.com/spreadsheets/d/1R0UVojq0po_O0YFcywHANnK4-zEEK_pz7M3oftLgJNk/edit?gid=275434661#gid=275434661" },
       { label: "Agendas", href: "https://sage-macaron-e8a43f.netlify.app/" },
       { label:'Metas', href:'https://docs.google.com/spreadsheets/d/11yDILj0SU1j-oHeIsMQUAT12GDy5lKilPB7U_m9v_TU/edit?gid=1777785698#gid=1777785698' },
@@ -72,6 +74,7 @@ export const menuConfig = [
     title: "Exames",
     roles: ["EXAMES", "DIRETORIA"],
     items: [
+      { label:'TN Cancelamento', href: 'https://docs.google.com/document/d/15gOYw1BFQ6F6TmmTNdLqhEvl7hmL1QjQaSR82DDoxOE/edit?usp=sharing'},
       { label:'Formulário de envio', href:'https://docs.google.com/forms/d/e/1FAIpQLSdMJCBwV0mRuyUX2zMVfNJxPM6Kp-LU3cnNsPe9I9X-uO5B1A/viewform' },
       { label:'Cotação', href:'https://reliable-bienenstitch-be5e7d.netlify.app/' },
       { label:'Geral', href:'https://docs.google.com/spreadsheets/d/1ccKvDXwcLzYhqqdGflU_ZB3gUMtcK5kEGD48TjdphZI/edit?gid=471605490#gid=471605490' },

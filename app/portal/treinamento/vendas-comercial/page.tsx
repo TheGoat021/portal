@@ -26,7 +26,8 @@ export default function ComercialVideo() {
 
       <iframe
         className="w-full h-[600px] rounded-lg border"
-        src="https://www.youtube.com/embed/mjEtGBGbb3s"
+        src="https://drive.google.com/file/d/1cpttzOUYFMlBWaE5UsTH70tQjlw8HM8o/preview"
+        allow="autoplay"
         allowFullScreen
       />
 

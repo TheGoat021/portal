@@ -26,7 +26,8 @@ export default function AgendamentoVideo() {
 
       <iframe
         className="w-full h-[600px] rounded-lg border"
-        src="https://www.youtube.com/embed/dmIFhpQe9Zk"
+        src="https://drive.google.com/file/d/1cyyKKu-_waaiHrTBqAlNz827PX8hcJ9R/preview"
+        allow="autoplay"
         allowFullScreen
       />
 
