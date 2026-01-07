@@ -1,44 +1,27 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useTrainingStore } from "@/store/trainingStore";
+import { TrainingVideoModule } from "@/components/TrainingVideoModule";
 
 export default function AgendamentoVideo() {
-  const router = useRouter();
-  const isUnlocked = useTrainingStore(
-    (s) => s.isUnlocked
-  );
-
-  // 🔒 Guard de rota (NÃO remove nada)
-  useEffect(() => {
-    if (!isUnlocked("agendamento")) {
-      router.replace("/portal");
-    }
-  }, [isUnlocked, router]);
-
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">
-        Treinamento – Agendamento
-      </h1>
-
-      <iframe
-        className="w-full h-[600px] rounded-lg border"
-        src="https://drive.google.com/file/d/1cyyKKu-_waaiHrTBqAlNz827PX8hcJ9R/preview"
-        allow="autoplay"
-        allowFullScreen
-      />
-
-      <div className="text-right">
-        <Link
-          href="/portal/treinamento/agendamento/prova"
-          className="inline-block bg-blue-600 text-white px-6 py-2 rounded"
-        >
-          Ir para prova
-        </Link>
-      </div>
-    </div>
+    <TrainingVideoModule
+      moduleKey="agendamento"
+      title="Treinamento – Agendamento"
+      provaHref="/portal/treinamento/agendamento/prova"
+      aulas={[
+        {
+          id: 1,
+          title: "Introdução ao Agendamento",
+          videoUrl:
+            "https://drive.google.com/file/d/1fCTRHI1oge1H-t8E2woJOhcl8tOK2MRT/preview",
+        },
+        {
+          id: 1,
+          title: "Teste 2",
+          videoUrl:
+            "https://drive.google.com/file/d/1J4KSkts-CP7HCMQkuJbL3h2QGFvNW2c0/preview",
+        },
+      ]}
+    />
   );
 }

@@ -89,6 +89,10 @@ export const menuConfig = [
     title: "Diretoria",
     roles: ["DIRETORIA"],
     items: [
+      {
+      label: "Avaliações dos Colaboradores",
+      href: "/portal/diretoria/avaliacoes",
+    },
       { label:'Geral Empresa', href:'https://docs.google.com/spreadsheets/d/1UTz8gqUmWQH_E2LgwZqZro31APchbT-BodexzcZZEjs/edit?gid=1536522903#gid=1536522903' },
       { label:'Enel', href:'https://docs.google.com/spreadsheets/d/1NEp86R1RJY-T_9Q27EY4wHiKmgBkeCmi6VdJBWaylmI/edit?gid=1422568270#gid=1422568270' },
       { label:'Boleto', href:'https://docs.google.com/spreadsheets/d/1ckPdHqETORG6D1iwdUB60qQxDVFYmrnxxUaV_ludW8o/edit?gid=337204937#gid=337204937' },
@@ -98,7 +102,7 @@ export const menuConfig = [
       { label:'Parcial',href:'https://docs.google.com/spreadsheets/d/1zJ3yWflaC_r2hnc5Zh97Iq4M8LoeiypE4gvtrdjiUX0/edit?gid=0#gid=0' },
       { label:'Bonificação',href:'https://docs.google.com/spreadsheets/d/12EiH6UxsH9CHBTzSY0qNkMWopDWiwxpBh6ZYh8PUzIw/edit?gid=0#gid=0' },
       { label:'Calendário',href:'https://docs.google.com/spreadsheets/d/12EiH6UxsH9CHBTzSY0qNkMWopDWiwxpBh6ZYh8PUzIw/edit?gid=0#gid=0' },
-      { label:'Recados',href:'https://docs.google.com/spreadsheets/d/1H7yH9Y7Q0Ywmm78U9FuhS2nbzimyIm5olDS2YH-ehTM/edit?gid=0#gid=0' }
+      { label:'Recados',href:'https://docs.google.com/spreadsheets/d/1H7yH9Y7Q0Ywmm78U9FuhS2nbzimyIm5olDS2YH-ehTM/edit?gid=0#gid=0' },
     ],
   },
   {

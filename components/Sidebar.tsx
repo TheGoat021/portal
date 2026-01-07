@@ -74,22 +74,24 @@ export function Sidebar() {
   }
 
   function handleClick(
-    href?: string,
-    locked?: boolean,
-    isTrainingItem?: boolean
-  ) {
-    if (!href || locked) return;
+  href?: string,
+  locked?: boolean
+) {
+  if (!href || locked) return;
 
-    if (isTrainingItem) {
-      setActiveHref(null);
-      router.push(href);
-    } else {
-      router.push("/portal");
-      setTimeout(() => {
-        setActiveHref(href);
-      }, 0);
-    }
+  // 🔗 LINK EXTERNO → iframe
+  if (href.startsWith("http")) {
+    router.push("/portal");
+    setTimeout(() => {
+      setActiveHref(href);
+    }, 0);
+    return;
   }
+
+  // 📄 ROTA INTERNA DO PORTAL → navegação normal
+  setActiveHref(null);
+  router.push(href);
+}
 
   return (
     <aside className="w-64 bg-slate-900 text-white p-4 flex flex-col">
@@ -155,12 +157,8 @@ export function Sidebar() {
                         <li key={item.label}>
                           <button
                             onClick={() =>
-                              handleClick(
-                                item.href,
-                                locked,
-                                isTrainingItem
-                              )
-                            }
+  handleClick(item.href, locked)
+}
                             disabled={locked}
                             className={`w-full flex items-center gap-3 px-3 py-2 rounded text-left hover:bg-slate-800 ${
                               locked

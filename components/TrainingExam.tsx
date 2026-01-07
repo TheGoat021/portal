@@ -15,6 +15,7 @@ export function TrainingExam({ moduleId }: { moduleId: string }) {
   const [answers, setAnswers] = useState<number[]>([]);
   const [finished, setFinished] = useState(false);
   const [score, setScore] = useState<number | null>(null);
+  const [approved, setApproved] = useState(false);
 
   useEffect(() => {
     loadQuestions();
@@ -26,7 +27,7 @@ export function TrainingExam({ moduleId }: { moduleId: string }) {
       .select("*")
       .eq("module_id", moduleId);
 
-    if (data) setQuestions(data);
+    setQuestions(data || []);
   }
 
   async function finishExam() {
@@ -38,24 +39,99 @@ export function TrainingExam({ moduleId }: { moduleId: string }) {
       }
     });
 
-    const percent = Math.round((correct / questions.length) * 100);
-    const approved = percent >= 70;
-
-    setScore(percent);
-    setFinished(true);
+    const percent = Math.round(
+      (correct / questions.length) * 100
+    );
+    const isApproved = percent >= 70;
 
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (!user) return;
+    if (!user) {
+      console.error("Usuário não autenticado");
+      return;
+    }
 
+    // ===============================
+    // 🔹 SNAPSHOT DAS RESPOSTAS (JSON)
+    // ===============================
+    const answersSnapshot = questions.map((q, index) => ({
+      question_id: q.id,
+      selected_index: answers[index],
+      correct_index: q.correct_index,
+      is_correct: answers[index] === q.correct_index,
+    }));
+
+    // ===============================
+    // 1️⃣ INSERT DA TENTATIVA
+    // ===============================
+    const { error: insertError } = await supabase
+      .from("training_exam_attempts")
+      .insert([
+        {
+          user_id: user.id,
+          module_id: moduleId,
+          score: percent,
+          total_questions: questions.length,
+          approved: isApproved,
+          answers: answersSnapshot, // ✅ OBRIGATÓRIO
+        },
+      ]);
+
+    if (insertError) {
+      console.error("Erro ao salvar tentativa:", insertError);
+      return;
+    }
+
+    // ===============================
+    // 2️⃣ BUSCA A TENTATIVA CRIADA
+    // ===============================
+    const { data: attempt } = await supabase
+      .from("training_exam_attempts")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("module_id", moduleId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (!attempt) {
+      console.error("Tentativa não encontrada");
+      return;
+    }
+
+    // ===============================
+    // 3️⃣ SALVA RESPOSTAS NORMALIZADAS
+    // ===============================
+    const normalizedAnswers = answersSnapshot.map((a) => ({
+      attempt_id: attempt.id,
+      question_id: a.question_id,
+      selected_index: a.selected_index,
+      correct_index: a.correct_index,
+      is_correct: a.is_correct,
+    }));
+
+    await supabase
+      .from("training_exam_answers")
+      .insert(normalizedAnswers);
+
+    // ===============================
+    // 4️⃣ ATUALIZA PROGRESSO
+    // ===============================
     await supabase.from("training_progress").upsert({
       user_id: user.id,
       module_id: moduleId,
       score: percent,
-      approved,
+      approved: isApproved,
     });
+
+    // ===============================
+    // 5️⃣ UI
+    // ===============================
+    setScore(percent);
+    setApproved(isApproved);
+    setFinished(true);
   }
 
   if (finished) {
@@ -65,26 +141,15 @@ export function TrainingExam({ moduleId }: { moduleId: string }) {
           Resultado: {score}%
         </h2>
 
-        {score! >= 70 ? (
+        {approved ? (
           <p className="text-green-600 font-semibold">
-            ✅ Aprovado! Próximo módulo liberado.
+            ✅ Aprovado!
           </p>
         ) : (
           <p className="text-red-600 font-semibold">
-            ❌ Reprovado. Você pode tentar novamente.
+            ❌ Reprovado.
           </p>
         )}
-
-        <button
-          onClick={() => {
-            setAnswers([]);
-            setFinished(false);
-            setScore(null);
-          }}
-          className="px-4 py-2 bg-blue-600 text-white rounded"
-        >
-          Refazer prova
-        </button>
       </div>
     );
   }
@@ -92,8 +157,10 @@ export function TrainingExam({ moduleId }: { moduleId: string }) {
   return (
     <div className="space-y-6">
       {questions.map((q, i) => (
-        <div key={q.id} className="space-y-2">
-          <p className="font-medium">{i + 1}. {q.question}</p>
+        <div key={q.id}>
+          <p className="font-medium">
+            {i + 1}. {q.question}
+          </p>
 
           {q.options.map((opt, idx) => (
             <label key={idx} className="block">
@@ -101,11 +168,12 @@ export function TrainingExam({ moduleId }: { moduleId: string }) {
                 type="radio"
                 name={`q-${i}`}
                 onChange={() => {
-                  const newAnswers = [...answers];
-                  newAnswers[i] = idx;
-                  setAnswers(newAnswers);
+                  const a = [...answers];
+                  a[i] = idx;
+                  setAnswers(a);
                 }}
-              />{" "}
+                className="mr-2"
+              />
               {opt}
             </label>
           ))}
