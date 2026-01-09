@@ -121,6 +121,10 @@ export const menuConfig = [
         label: "Lançar Evolução",
         href: "/portal/evolucao/lancar",
       },
+      {
+        label: "Equipe",
+        href: "/portal/evolucao/equipe",
+      },
     ],
   },
 
