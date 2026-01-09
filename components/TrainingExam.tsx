@@ -10,12 +10,32 @@ type Question = {
   correct_index: number;
 };
 
+// ✅ FUNÇÃO UTILITÁRIA (APENAS ADICIONADA)
+function shuffleOptions(options: string[]) {
+  const mapped = options.map((option, index) => ({
+    text: option,
+    originalIndex: index,
+  }));
+
+  for (let i = mapped.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [mapped[i], mapped[j]] = [mapped[j], mapped[i]];
+  }
+
+  return mapped;
+}
+
 export function TrainingExam({ moduleId }: { moduleId: string }) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<number[]>([]);
   const [finished, setFinished] = useState(false);
   const [score, setScore] = useState<number | null>(null);
   const [approved, setApproved] = useState(false);
+
+  // ✅ STATE ADICIONADO (SEM AFETAR O RESTO)
+  const [shuffledOptions, setShuffledOptions] = useState<
+    Record<string, { text: string; originalIndex: number }[]>
+  >({});
 
   useEffect(() => {
     loadQuestions();
@@ -28,6 +48,18 @@ export function TrainingExam({ moduleId }: { moduleId: string }) {
       .eq("module_id", moduleId);
 
     setQuestions(data || []);
+
+    // ✅ EMBARALHA UMA VEZ POR QUESTÃO
+    const map: Record<
+      string,
+      { text: string; originalIndex: number }[]
+    > = {};
+
+    (data || []).forEach((q: Question) => {
+      map[q.id] = shuffleOptions(q.options);
+    });
+
+    setShuffledOptions(map);
   }
 
   async function finishExam() {
@@ -53,9 +85,6 @@ export function TrainingExam({ moduleId }: { moduleId: string }) {
       return;
     }
 
-    // ===============================
-    // 🔹 SNAPSHOT DAS RESPOSTAS (JSON)
-    // ===============================
     const answersSnapshot = questions.map((q, index) => ({
       question_id: q.id,
       selected_index: answers[index],
@@ -63,9 +92,6 @@ export function TrainingExam({ moduleId }: { moduleId: string }) {
       is_correct: answers[index] === q.correct_index,
     }));
 
-    // ===============================
-    // 1️⃣ INSERT DA TENTATIVA
-    // ===============================
     const { error: insertError } = await supabase
       .from("training_exam_attempts")
       .insert([
@@ -75,7 +101,7 @@ export function TrainingExam({ moduleId }: { moduleId: string }) {
           score: percent,
           total_questions: questions.length,
           approved: isApproved,
-          answers: answersSnapshot, // ✅ OBRIGATÓRIO
+          answers: answersSnapshot,
         },
       ]);
 
@@ -84,9 +110,6 @@ export function TrainingExam({ moduleId }: { moduleId: string }) {
       return;
     }
 
-    // ===============================
-    // 2️⃣ BUSCA A TENTATIVA CRIADA
-    // ===============================
     const { data: attempt } = await supabase
       .from("training_exam_attempts")
       .select("id")
@@ -101,9 +124,6 @@ export function TrainingExam({ moduleId }: { moduleId: string }) {
       return;
     }
 
-    // ===============================
-    // 3️⃣ SALVA RESPOSTAS NORMALIZADAS
-    // ===============================
     const normalizedAnswers = answersSnapshot.map((a) => ({
       attempt_id: attempt.id,
       question_id: a.question_id,
@@ -116,9 +136,6 @@ export function TrainingExam({ moduleId }: { moduleId: string }) {
       .from("training_exam_answers")
       .insert(normalizedAnswers);
 
-    // ===============================
-    // 4️⃣ ATUALIZA PROGRESSO
-    // ===============================
     await supabase.from("training_progress").upsert({
       user_id: user.id,
       module_id: moduleId,
@@ -126,9 +143,6 @@ export function TrainingExam({ moduleId }: { moduleId: string }) {
       approved: isApproved,
     });
 
-    // ===============================
-    // 5️⃣ UI
-    // ===============================
     setScore(percent);
     setApproved(isApproved);
     setFinished(true);
@@ -162,19 +176,19 @@ export function TrainingExam({ moduleId }: { moduleId: string }) {
             {i + 1}. {q.question}
           </p>
 
-          {q.options.map((opt, idx) => (
+          {shuffledOptions[q.id]?.map((opt, idx) => (
             <label key={idx} className="block">
               <input
                 type="radio"
                 name={`q-${i}`}
                 onChange={() => {
                   const a = [...answers];
-                  a[i] = idx;
+                  a[i] = opt.originalIndex; // ✅ ÍNDICE ORIGINAL
                   setAnswers(a);
                 }}
                 className="mr-2"
               />
-              {opt}
+              {opt.text}
             </label>
           ))}
         </div>

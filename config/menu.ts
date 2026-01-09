@@ -1,3 +1,5 @@
+import { Home, FileText } from "lucide-react";
+
 export type MenuItem = {
   label: string;
   href?: string;
@@ -52,8 +54,8 @@ export const menuConfig = [
       { label:'Declaração', href:'https://docs.google.com/document/d/1MMYLt9PC_4sJ58wHwUVGoLo_uT-tpgpd1k8IdETp9RM/edit?tab=t.0' },
       { label:'Ficticio', href:'https://docs.google.com/spreadsheets/d/18RGJdJKcZiDA5k5bnuqVV_2fDNSUqlVwfZlYhdjoD9E/edit?gid=191968330#gid=191968330' },
       { label:'Elev', href:'http://179.125.68.164:9000/nxt3000/login.php' },
-{ label:'Gestão', href:'https://gestao.drdetodos.com.br/' },
-{ label:'Duotalk', href:'https://app.duotalk.io/login?to=&acc=687fdae2b21652ca230157e5' }
+      { label:'Gestão', href:'https://gestao.drdetodos.com.br/' },
+      { label:'Duotalk', href:'https://app.duotalk.io/login?to=&acc=687fdae2b21652ca230157e5' }
     ],
   },
   {
@@ -66,8 +68,8 @@ export const menuConfig = [
       { label:'Agendas', href:'https://sage-macaron-e8a43f.netlify.app/' },
       { label:'Fic', href:'https://docs.google.com/forms/d/e/1FAIpQLSegsWrwcEw9DalA_NzueAbPJzquyPQ6Owy04OHhlSZh_3MEYg/viewform' },
       { label:'Elev', href:'http://179.125.68.164:9000/nxt3000/login.php' },
-{ label:'Gestão', href:'https://gestao.drdetodos.com.br/' },
-{ label:'Duotalk', href:'https://app.duotalk.io/login?to=&acc=687fdae2b21652ca230157e5' }
+      { label:'Gestão', href:'https://gestao.drdetodos.com.br/' },
+      { label:'Duotalk', href:'https://app.duotalk.io/login?to=&acc=687fdae2b21652ca230157e5' }
     ],
   },
   {
@@ -80,9 +82,9 @@ export const menuConfig = [
       { label:'Geral', href:'https://docs.google.com/spreadsheets/d/1ccKvDXwcLzYhqqdGflU_ZB3gUMtcK5kEGD48TjdphZI/edit?gid=471605490#gid=471605490' },
       { label:'Relatório', href:'https://docs.google.com/spreadsheets/d/1AMGifoSs6wXnCLGisiYsdyiXDm4ztpi0yHqunL6YqEk/edit?gid=677795770#gid=677795770' },
       { label:'Elev', href:'http://179.125.68.164:9000/nxt3000/login.php' },
-{ label:'Gestão', href:'https://gestao.drdetodos.com.br/' },
-{ label:'Duotalk', href:'https://app.duotalk.io/login?to=&acc=687fdae2b21652ca230157e5' },
-{ label:'Voucher', href:'https://docs.google.com/forms/d/e/1FAIpQLSf7skQvwV4oTecTaIahCLjLMwHsXFmoI8_SaF21rOwAm-pFAg/viewform?usp=header' }
+      { label:'Gestão', href:'https://gestao.drdetodos.com.br/' },
+      { label:'Duotalk', href:'https://app.duotalk.io/login?to=&acc=687fdae2b21652ca230157e5' },
+      { label:'Voucher', href:'https://docs.google.com/forms/d/e/1FAIpQLSf7skQvwV4oTecTaIahCLjLMwHsXFmoI8_SaF21rOwAm-pFAg/viewform?usp=header' }
     ],
   },
   {
@@ -90,9 +92,9 @@ export const menuConfig = [
     roles: ["DIRETORIA"],
     items: [
       {
-      label: "Avaliações dos Colaboradores",
-      href: "/portal/diretoria/avaliacoes",
-    },
+        label: "Avaliações dos Colaboradores",
+        href: "/portal/diretoria/avaliacoes",
+      },
       { label:'Geral Empresa', href:'https://docs.google.com/spreadsheets/d/1UTz8gqUmWQH_E2LgwZqZro31APchbT-BodexzcZZEjs/edit?gid=1536522903#gid=1536522903' },
       { label:'Enel', href:'https://docs.google.com/spreadsheets/d/1NEp86R1RJY-T_9Q27EY4wHiKmgBkeCmi6VdJBWaylmI/edit?gid=1422568270#gid=1422568270' },
       { label:'Boleto', href:'https://docs.google.com/spreadsheets/d/1ckPdHqETORG6D1iwdUB60qQxDVFYmrnxxUaV_ludW8o/edit?gid=337204937#gid=337204937' },
@@ -105,6 +107,23 @@ export const menuConfig = [
       { label:'Recados',href:'https://docs.google.com/spreadsheets/d/1H7yH9Y7Q0Ywmm78U9FuhS2nbzimyIm5olDS2YH-ehTM/edit?gid=0#gid=0' },
     ],
   },
+
+  /* ✅ ÚNICA ADIÇÃO */
+  {
+    title: "Evolução",
+    roles: ["COMERCIAL", "DIRETORIA"],
+    items: [
+      {
+        label: "Minha Evolução",
+        href: "/portal/evolucao",
+      },
+      {
+        label: "Lançar Evolução",
+        href: "/portal/evolucao/lancar",
+      },
+    ],
+  },
+
   {
     title: "Administração",
     roles: ["DIRETORIA"],

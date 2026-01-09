@@ -73,25 +73,26 @@ export function Sidebar() {
     }));
   }
 
-  function handleClick(
-  href?: string,
-  locked?: boolean
-) {
-  if (!href || locked) return;
+  function handleClick(href?: string, locked?: boolean) {
+    if (!href || locked) return;
 
-  // 🔗 LINK EXTERNO → iframe
-  if (href.startsWith("http")) {
-    router.push("/portal");
-    setTimeout(() => {
-      setActiveHref(href);
-    }, 0);
-    return;
+    if (href.startsWith("http")) {
+      router.push("/portal");
+      setTimeout(() => {
+        setActiveHref(href);
+      }, 0);
+      return;
+    }
+
+    setActiveHref(null);
+    router.push(href);
   }
 
-  // 📄 ROTA INTERNA DO PORTAL → navegação normal
-  setActiveHref(null);
-  router.push(href);
-}
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setActiveHref(null);
+    router.replace("/login");
+  }
 
   return (
     <aside className="w-64 bg-slate-900 text-white p-4 flex flex-col">
@@ -101,14 +102,10 @@ export function Sidebar() {
           <LayoutDashboard size={26} />
         </div>
 
-        <p className="text-sm text-gray-300">
-          Bem-vindo ao
-        </p>
-        <p className="text-xs text-gray-400">
-          Portal Interno
-        </p>
+        <p className="text-sm text-gray-300">Bem-vindo ao</p>
+        <p className="text-xs text-gray-400">Portal Interno</p>
       </div>
-
+      
       {/* 📂 MENU */}
       <div className="flex-1 space-y-6">
         {menuConfig
@@ -157,8 +154,8 @@ export function Sidebar() {
                         <li key={item.label}>
                           <button
                             onClick={() =>
-  handleClick(item.href, locked)
-}
+                              handleClick(item.href, locked)
+                            }
                             disabled={locked}
                             className={`w-full flex items-center gap-3 px-3 py-2 rounded text-left hover:bg-slate-800 ${
                               locked
@@ -167,15 +164,11 @@ export function Sidebar() {
                             }`}
                           >
                             <FileText size={16} />
-
                             <span className="flex-1">
                               {item.label}
                             </span>
-
-                            {isTrainingItem &&
-                              approved && <span>✔️</span>}
-                            {isTrainingItem &&
-                              locked && <span>🔒</span>}
+                            {approved && <span>✔️</span>}
+                            {locked && <span>🔒</span>}
                           </button>
                         </li>
                       );
@@ -188,7 +181,10 @@ export function Sidebar() {
       </div>
 
       {/* 🚪 LOGOUT */}
-      <button className="mt-6 flex items-center gap-3 px-3 py-2 rounded hover:bg-slate-800 text-sm">
+      <button
+        onClick={handleLogout}
+        className="mt-6 flex items-center gap-3 px-3 py-2 rounded hover:bg-slate-800 text-sm"
+      >
         <LogOut size={16} />
         Logout
       </button>

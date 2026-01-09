@@ -1,0 +1,11 @@
+export default function EvolucaoLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="p-6">
+      {children}
+    </div>
+  );
+}
