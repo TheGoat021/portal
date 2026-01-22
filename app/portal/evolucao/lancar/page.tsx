@@ -13,7 +13,7 @@ export default function LancarEvolucaoPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [existingId, setExistingId] = useState<string | null>(null);
+  const [isDiretoria, setIsDiretoria] = useState(false);
 
   const [form, setForm] = useState({
     user_id: "",
@@ -28,48 +28,38 @@ export default function LancarEvolucaoPage() {
     improvements: "",
   });
 
-  /* 🔄 usuários */
   useEffect(() => {
-    fetch("/api/users")
-      .then((r) => r.json())
-      .then(setUsers)
-      .finally(() => setLoading(false));
-  }, []);
+    async function load() {
+      /** usuário logado */
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-  /* 🔎 verifica lançamento existente */
-  useEffect(() => {
-    async function checkExisting() {
-      if (!form.user_id || !form.month || !form.year) return;
-
-      const { data } = await supabase
-        .from("seller_monthly_performance")
-        .select("*")
-        .eq("user_id", form.user_id)
-        .eq("month", Number(form.month))
-        .eq("year", Number(form.year))
-        .single();
-
-      if (data) {
-        setExistingId(data.id);
-        setForm({
-          user_id: data.user_id,
-          month: String(data.month),
-          year: String(data.year),
-          sales_count: String(data.sales_count ?? ""),
-          revenue: String(data.revenue ?? ""),
-          commission: String(data.commission ?? ""),
-          salary: String(data.salary ?? ""),
-          supervisor_score: String(data.supervisor_score ?? ""),
-          strengths: data.strengths ?? "",
-          improvements: data.improvements ?? "",
-        });
-      } else {
-        setExistingId(null);
+      if (!user) {
+        setLoading(false);
+        return;
       }
+
+      /** carrega usuários */
+      const res = await fetch("/api/users");
+      const data: User[] = await res.json();
+
+      /** valida diretoria */
+      const current = data.find((u) => u.id === user.id);
+
+      if (current?.role !== "DIRETORIA") {
+        setIsDiretoria(false);
+        setLoading(false);
+        return;
+      }
+
+      setIsDiretoria(true);
+      setUsers(data);
+      setLoading(false);
     }
 
-    checkExisting();
-  }, [form.user_id, form.month, form.year]);
+    load();
+  }, []);
 
   function handleChange(
     e: React.ChangeEvent<
@@ -83,49 +73,59 @@ export default function LancarEvolucaoPage() {
     e.preventDefault();
     setSaving(true);
 
-    const payload = {
-      user_id: form.user_id,
-      month: Number(form.month),
-      year: Number(form.year),
-      sales_count: Number(form.sales_count),
-      revenue: Number(form.revenue),
-      commission: Number(form.commission),
-      salary: Number(form.salary),
-      supervisor_score: Number(form.supervisor_score),
-      strengths: form.strengths,
-      improvements: form.improvements,
-    };
-
-    const result = existingId
-      ? await supabase
-          .from("seller_monthly_performance")
-          .update(payload)
-          .eq("id", existingId)
-      : await supabase.from("seller_monthly_performance").insert(payload);
+    const { error } = await supabase
+      .from("seller_monthly_performance")
+      .insert({
+        user_id: form.user_id,
+        month: Number(form.month),
+        year: Number(form.year),
+        sales_count: Number(form.sales_count),
+        revenue: Number(form.revenue),
+        commission: Number(form.commission),
+        salary: Number(form.salary),
+        supervisor_score: Number(form.supervisor_score),
+        strengths: form.strengths,
+        improvements: form.improvements,
+      });
 
     setSaving(false);
 
-    if (result.error) {
-      alert(result.error.message);
+    if (error) {
+      alert(error.message);
       return;
     }
 
-    alert(existingId ? "Lançamento atualizado!" : "Lançamento criado!");
+    alert("Evolução lançada com sucesso!");
+
+    setForm({
+      user_id: "",
+      month: "",
+      year: "",
+      sales_count: "",
+      revenue: "",
+      commission: "",
+      salary: "",
+      supervisor_score: "",
+      strengths: "",
+      improvements: "",
+    });
   }
 
-  if (loading) return <div className="p-6">Carregando...</div>;
+  if (loading) {
+    return <div className="p-6">Carregando...</div>;
+  }
+
+  if (!isDiretoria) {
+    return (
+      <div className="p-6 text-red-600 font-semibold">
+        Acesso restrito à diretoria.
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-xl">
-      <h1 className="text-2xl font-bold mb-4">
-        {existingId ? "Editar Evolução" : "Lançar Evolução"}
-      </h1>
-
-      {existingId && (
-        <div className="mb-4 bg-yellow-100 p-3 rounded text-sm">
-          ⚠️ Este mês já possui lançamento. Você está editando os dados.
-        </div>
-      )}
+      <h1 className="text-2xl font-bold mb-6">Lançar Evolução Mensal</h1>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <select
@@ -135,7 +135,7 @@ export default function LancarEvolucaoPage() {
           required
           className="w-full border p-2 rounded"
         >
-          <option value="">Selecione o vendedor</option>
+          <option value="">Selecione o colaborador</option>
           {users.map((u) => (
             <option key={u.id} value={u.id}>
               {u.email}
@@ -145,65 +145,96 @@ export default function LancarEvolucaoPage() {
 
         <div className="flex gap-2">
           <input
-            name="month"
             type="number"
-            min={1}
-            max={12}
+            name="month"
             placeholder="Mês"
+            required
+            className="w-1/2 border p-2 rounded"
             value={form.month}
             onChange={handleChange}
-            required
-            className="w-1/2 border p-2 rounded"
           />
           <input
-            name="year"
             type="number"
+            name="year"
             placeholder="Ano"
-            value={form.year}
-            onChange={handleChange}
             required
             className="w-1/2 border p-2 rounded"
+            value={form.year}
+            onChange={handleChange}
           />
         </div>
 
-        <input name="sales_count" placeholder="Vendas" value={form.sales_count} onChange={handleChange} className="w-full border p-2 rounded" />
-        <input name="revenue" placeholder="Faturamento" value={form.revenue} onChange={handleChange} className="w-full border p-2 rounded" />
-        <input name="commission" placeholder="Comissão" value={form.commission} onChange={handleChange} className="w-full border p-2 rounded" />
-        <input name="salary" placeholder="Salário" value={form.salary} onChange={handleChange} className="w-full border p-2 rounded" />
+        <input
+          type="number"
+          name="sales_count"
+          placeholder="Quantidade de vendas"
+          className="w-full border p-2 rounded"
+          value={form.sales_count}
+          onChange={handleChange}
+        />
 
         <input
+          type="number"
+          step="0.01"
+          name="revenue"
+          placeholder="Faturamento"
+          className="w-full border p-2 rounded"
+          value={form.revenue}
+          onChange={handleChange}
+        />
+
+        <input
+          type="number"
+          step="0.01"
+          name="commission"
+          placeholder="Comissão"
+          className="w-full border p-2 rounded"
+          value={form.commission}
+          onChange={handleChange}
+        />
+
+        <input
+          type="number"
+          step="0.01"
+          name="salary"
+          placeholder="Salário"
+          className="w-full border p-2 rounded"
+          value={form.salary}
+          onChange={handleChange}
+        />
+
+        <input
+          type="number"
+          step="0.1"
           name="supervisor_score"
           placeholder="Nota do supervisor"
+          className="w-full border p-2 rounded"
           value={form.supervisor_score}
           onChange={handleChange}
-          className="w-full border p-2 rounded"
         />
 
         <textarea
           name="strengths"
           placeholder="Pontos fortes"
+          className="w-full border p-2 rounded"
           value={form.strengths}
           onChange={handleChange}
-          className="w-full border p-2 rounded"
         />
 
         <textarea
           name="improvements"
           placeholder="Pontos a melhorar"
+          className="w-full border p-2 rounded"
           value={form.improvements}
           onChange={handleChange}
-          className="w-full border p-2 rounded"
         />
 
         <button
+          type="submit"
           disabled={saving}
-          className="bg-blue-600 text-white px-4 py-2 rounded w-full"
+          className="bg-blue-600 text-white px-4 py-2 rounded"
         >
-          {saving
-            ? "Salvando..."
-            : existingId
-            ? "Atualizar lançamento"
-            : "Salvar lançamento"}
+          {saving ? "Salvando..." : "Salvar evolução"}
         </button>
       </form>
     </div>

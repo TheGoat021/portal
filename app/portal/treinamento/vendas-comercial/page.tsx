@@ -11,9 +11,9 @@ export default function ComercialVideo() {
       aulas={[
         {
           id: 1,
-          title: "Introdução Comercial",
+          title: "Comercial script e os 3 pilares",
           videoUrl:
-            "https://drive.google.com/file/d/1cpttzOUYFMlBWaE5UsTH70tQjlw8HM8o/preview",
+            "https://drive.google.com/file/d/1sZkCPIx4tth-3vBv8DjObuLwVYLOSalk/preview",
         },
       ]}
     />
