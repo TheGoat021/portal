@@ -62,10 +62,12 @@ export const menuConfig = [
     title: "Comercial",
     roles: ["COMERCIAL", "DIRETORIA"],
     items: [
+      { label:'Metas Geral',href:'https://glittering-dieffenbachia-ed9bc9.netlify.app/' },
       { label:'Equipe A',href:'https://docs.google.com/spreadsheets/d/1x5vfTy5datDHqFq2HJtMxVfBXTG0l4gSaJjh4RxjL7o/edit?gid=0#gid=0' },
       { label:'Equipe B', href:'https://docs.google.com/spreadsheets/d/1kp8WvwvDNMQZHW3jRAUGAzp4oXtqvjGtk4oIclCGhi0/edit?gid=1570139612#gid=1570139612' },
       { label:'Consulta CPF ', href:'https://servicos.receita.fazenda.gov.br/Servicos/CPF/ConsultaSituacao/ConsultaPublica.asp' },
       { label:'Agendas', href:'https://sage-macaron-e8a43f.netlify.app/' },
+      { label:'Credênciadas',href:'https://docs.google.com/spreadsheets/d/1R0UVojq0po_O0YFcywHANnK4-zEEK_pz7M3oftLgJNk/edit?usp=sharing' },
       { label:'Fic', href:'https://docs.google.com/forms/d/e/1FAIpQLSegsWrwcEw9DalA_NzueAbPJzquyPQ6Owy04OHhlSZh_3MEYg/viewform' },
       { label:'Elev', href:'http://179.125.68.164:9000/nxt3000/login.php' },
       { label:'Gestão', href:'https://gestao.drdetodos.com.br/' },
@@ -78,7 +80,8 @@ export const menuConfig = [
     items: [
       { label:'TN Cancelamento', href: 'https://docs.google.com/document/d/15gOYw1BFQ6F6TmmTNdLqhEvl7hmL1QjQaSR82DDoxOE/edit?usp=sharing'},
       { label:'Formulário de envio', href:'https://docs.google.com/forms/d/e/1FAIpQLSdMJCBwV0mRuyUX2zMVfNJxPM6Kp-LU3cnNsPe9I9X-uO5B1A/viewform' },
-      { label:'Cotação', href:'https://reliable-bienenstitch-be5e7d.netlify.app/' },
+      { label:'Cotação Planilha', href:'https://docs.google.com/spreadsheets/d/1mk0o6hhLPOHDZ9KQEdI1gEsjIetFX-J_BeJt9pGhRpE/edit?usp=sharing' },
+      { label:'Calculadora', href:'https://reliable-bienenstitch-be5e7d.netlify.app/' },
       { label:'Geral', href:'https://docs.google.com/spreadsheets/d/1ccKvDXwcLzYhqqdGflU_ZB3gUMtcK5kEGD48TjdphZI/edit?gid=471605490#gid=471605490' },
       { label:'Relatório', href:'https://docs.google.com/spreadsheets/d/1AMGifoSs6wXnCLGisiYsdyiXDm4ztpi0yHqunL6YqEk/edit?gid=677795770#gid=677795770' },
       { label:'Elev', href:'http://179.125.68.164:9000/nxt3000/login.php' },
