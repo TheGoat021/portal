@@ -1,0 +1,11 @@
+{
+  "crons": [
+    {
+      "path": "/api/jobs/ads-daily-close",
+      "schedule": "30 3 * * *",
+      "headers": {
+        "x-cron-secret": "@cron_secret"
+      }
+    }
+  ]
+}

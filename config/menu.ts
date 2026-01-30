@@ -100,7 +100,11 @@ export const menuConfig = [
     roles: ["DIRETORIA"],
     items: [
       {
-        label: "Avaliações dos Colaboradores",
+        label: "Marketing",
+        href: "/portal/diretoria/visao-geral",
+      },
+      {
+        label: "Avaliações",
         href: "/portal/diretoria/avaliacoes",
       },
       { label:'Geral Empresa', href:'https://docs.google.com/spreadsheets/d/1UTz8gqUmWQH_E2LgwZqZro31APchbT-BodexzcZZEjs/edit?gid=1536522903#gid=1536522903', allowExternal: true },
