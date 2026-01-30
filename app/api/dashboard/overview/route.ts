@@ -49,26 +49,25 @@ export async function GET(req: Request) {
     /* ===============================
        🔥 REALTIME GOOGLE
     ================================ */
-    if (isGoogleRealtime && !hasTodayInDb) {
-      const refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN;
-      if (!refreshToken) {
-        throw new Error('GOOGLE_ADS_REFRESH_TOKEN não configurado');
-      }
+    if (
+  isGoogleRealtime &&
+  process.env.GOOGLE_ADS_REFRESH_TOKEN
+) {
+  const realtimeData = await getGoogleAdsOverviewRealtime({
+    googleCustomerId: customerId,
+    loginCustomerId: process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID!,
+    refreshToken: process.env.GOOGLE_ADS_REFRESH_TOKEN!,
+    startDate,
+    endDate,
+  });
 
-      const realtimeData = await getGoogleAdsOverviewRealtime({
-        googleCustomerId: customerId,
-        loginCustomerId: '720-721-9221',
-        refreshToken,
-        startDate,
-        endDate,
-      });
+  return NextResponse.json({
+    success: true,
+    source: 'google_ads_realtime',
+    data: realtimeData,
+  });
+}
 
-      return NextResponse.json({
-        success: true,
-        source: 'google_ads_realtime',
-        data: realtimeData,
-      });
-    }
 
     /* ===============================
        🔥 REALTIME META
