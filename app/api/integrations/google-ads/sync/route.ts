@@ -6,32 +6,52 @@ import {
   saveCampaignMetrics
 } from '@/services/ads/google/googleAds.repository';
 
+function getYesterday() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    /* ===============================
+       🔐 SEGURANÇA CRON (OBRIGATÓRIO)
+    ================================ */
+    const { searchParams } = new URL(req.url);
+    const secret = searchParams.get('secret');
 
-    const loginCustomerId = String(body.loginCustomerId);
-    const customerId = String(body.customerId);
-
-    const refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN as string;
-
-    if (!refreshToken) {
+    if (secret !== process.env.CRON_SECRET) {
       return NextResponse.json(
-        { success: false, error: 'GOOGLE_ADS_REFRESH_TOKEN não configurado' },
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    /* ===============================
+       🔧 CONFIGURAÇÕES FIXAS
+    ================================ */
+    const refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN as string;
+    const loginCustomerId = process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID as string;
+    const customerId = process.env.GOOGLE_ADS_CUSTOMER_ID as string;
+
+    if (!refreshToken || !loginCustomerId || !customerId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Variáveis Google Ads não configuradas'
+        },
         { status: 500 }
       );
     }
 
-    // 🔧 data explícita (hardcoded, como está hoje)
-    const date = '2026-01-27';
+    /* ===============================
+       📅 DATA (ONTEM)
+    ================================ */
+    const date = getYesterday();
 
-    if (!loginCustomerId || !customerId) {
-      return NextResponse.json(
-        { success: false, error: 'loginCustomerId e customerId são obrigatórios' },
-        { status: 400 }
-      );
-    }
-
+    /* ===============================
+       🚀 BUSCA + SALVA
+    ================================ */
     const metrics = await getCampaignMetricsDaily(
       customerId,
       loginCustomerId,
@@ -43,6 +63,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
+      date,
       inserted: metrics.length
     });
   } catch (error: any) {
