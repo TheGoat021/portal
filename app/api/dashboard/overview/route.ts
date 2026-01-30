@@ -47,48 +47,58 @@ export async function GET(req: Request) {
     const hasTodayInDb = (todayRows ?? []).length > 0;
 
     /* ===============================
-       🔥 REALTIME GOOGLE
+       🔥 REALTIME GOOGLE (PROTEGIDO)
     ================================ */
     if (
-  isGoogleRealtime &&
-  process.env.GOOGLE_ADS_REFRESH_TOKEN
-) {
-  const realtimeData = await getGoogleAdsOverviewRealtime({
-    googleCustomerId: customerId,
-    loginCustomerId: process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID!,
-    refreshToken: process.env.GOOGLE_ADS_REFRESH_TOKEN!,
-    startDate,
-    endDate,
-  });
+      isGoogleRealtime &&
+      process.env.GOOGLE_ADS_REFRESH_TOKEN &&
+      process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID
+    ) {
+      try {
+        const realtimeData = await getGoogleAdsOverviewRealtime({
+          googleCustomerId: customerId,
+          loginCustomerId: process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID!,
+          refreshToken: process.env.GOOGLE_ADS_REFRESH_TOKEN!,
+          startDate,
+          endDate,
+        });
 
-  return NextResponse.json({
-    success: true,
-    source: 'google_ads_realtime',
-    data: realtimeData,
-  });
-}
-
+        return NextResponse.json({
+          success: true,
+          source: 'google_ads_realtime',
+          data: realtimeData,
+        });
+      } catch (err) {
+        console.error('GOOGLE REALTIME ERROR (IGNORADO)', err);
+        // cai para o banco
+      }
+    }
 
     /* ===============================
-       🔥 REALTIME META
+       🔥 REALTIME META (PROTEGIDO)
     ================================ */
     if (isMetaRealtime && !hasTodayInDb) {
-      const accessToken = process.env.META_ADS_ACCESS_TOKEN;
-      if (!accessToken) {
-        throw new Error('META_ADS_ACCESS_TOKEN não configurado');
+      try {
+        const accessToken = process.env.META_ADS_ACCESS_TOKEN;
+        if (!accessToken) {
+          throw new Error('META_ADS_ACCESS_TOKEN não configurado');
+        }
+
+        const realtimeData = await getMetaAdsOverviewRealtime({
+          adAccountId: 'act_1471558083175379',
+          accessToken,
+          date: today,
+        });
+
+        return NextResponse.json({
+          success: true,
+          source: 'meta_ads_realtime',
+          data: realtimeData,
+        });
+      } catch (err) {
+        console.error('META REALTIME ERROR (IGNORADO)', err);
+        // cai para o banco
       }
-
-      const realtimeData = await getMetaAdsOverviewRealtime({
-        adAccountId: 'act_1471558083175379',
-        accessToken,
-        date: today,
-      });
-
-      return NextResponse.json({
-        success: true,
-        source: 'meta_ads_realtime',
-        data: realtimeData,
-      });
     }
 
     /* ===============================
