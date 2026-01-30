@@ -4,7 +4,8 @@ import { listChildAccounts } from '@/services/ads/google/googleAds.service';
 export async function GET() {
   try {
     const mccCustomerId = '7207219221'; // seu MCC
-    const refreshToken = '1//0hkI1m2yyze4TCgYIARAAGBESNwF-L9IrkWOcEKQuMGOl3tTupWZT9HYjsbqbIxKHGctPvWwZ6sNpRQIsT18qO7tIDKpsQ2iXDWE'; // depois vem do banco
+    const refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN!;
+ // depois vem do banco
 
     const accounts = await listChildAccounts(
       mccCustomerId,

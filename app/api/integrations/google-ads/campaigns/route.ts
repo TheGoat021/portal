@@ -5,7 +5,8 @@ export async function GET() {
   try {
     const loginCustomerId = '720-721-9221'; // MCC
     const customerId = '1730254242';        // conta filha
-    const refreshToken = '1//0hkI1m2yyze4TCgYIARAAGBESNwF-L9IrkWOcEKQuMGOl3tTupWZT9HYjsbqbIxKHGctPvWwZ6sNpRQIsT18qO7tIDKpsQ2iXDWE';
+    const refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN!;
+
 
     const campaigns = await getCampaignMetrics(
       customerId,

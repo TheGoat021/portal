@@ -4,6 +4,10 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const code = searchParams.get('code');
 
+  if (process.env.NODE_ENV !== 'development') {
+  return NextResponse.json({ error: 'Not found' }, { status: 404 });
+}
+
   if (!code) {
     return NextResponse.json(
       { error: 'Authorization code not found' },
