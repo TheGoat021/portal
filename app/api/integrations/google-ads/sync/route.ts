@@ -45,9 +45,10 @@ export async function POST(req: Request) {
     }
 
     /* ===============================
-       📅 DATA (ONTEM)
+       📅 DATA (query ou ontem)
     ================================ */
-    const date = getYesterday();
+    const dateParam = searchParams.get('date');
+    const date = dateParam ?? getYesterday();
 
     /* ===============================
        🚀 BUSCA + SALVA
@@ -59,12 +60,12 @@ export async function POST(req: Request) {
       date
     );
 
-    await saveCampaignMetrics(metrics);
+    await saveCampaignMetrics(metrics, date);
 
     return NextResponse.json({
       success: true,
       date,
-      inserted: metrics.length
+      fetched: metrics.length
     });
   } catch (error: any) {
     console.error('[GOOGLE ADS SYNC ERROR]', error);

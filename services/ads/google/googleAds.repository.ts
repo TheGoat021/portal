@@ -1,39 +1,34 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
-const GOOGLE_CUSTOMER_ID = process.env.GOOGLE_CUSTOMER_ID
-  ? Number(process.env.GOOGLE_CUSTOMER_ID)
-  : null;
-
-export async function saveCampaignMetrics(metrics: any[]) {
+export async function saveCampaignMetrics(
+  metrics: any[],
+  date: string
+) {
   if (!metrics || metrics.length === 0) {
     console.warn('[GoogleAds] Nenhuma métrica para salvar');
     return;
   }
 
-  if (!GOOGLE_CUSTOMER_ID) {
-    throw new Error('GOOGLE_CUSTOMER_ID não configurado');
-  }
+  const sanitized = metrics.map(m => ({
+    ...m,
 
-  const sanitized = metrics
-    .filter(m => m.date)
-    .map(m => {
-      const date =
-        typeof m.date === 'string'
-          ? m.date
-          : new Date(m.date).toISOString().split('T')[0];
+    // 📅 data controlada pelo sync
+    date,
 
-      return {
-        ...m,
-        date,
-        // 🔒 BLINDAGEM FINAL
-        customer_id: GOOGLE_CUSTOMER_ID
-      };
-    });
+    // 🔥 NORMALIZAÇÃO (campo CORRETO da tabela)
+    cost: m.costMicros
+      ? Number(m.costMicros) / 1_000_000
+      : Number(m.cost ?? 0),
+
+    impressions: Number(m.impressions ?? 0),
+    clicks: Number(m.clicks ?? 0),
+    conversions: Number(m.conversions ?? 0),
+  }));
 
   const { error } = await supabaseAdmin
     .from('ads_campaign_metrics')
     .upsert(sanitized, {
-      onConflict: 'platform,campaign_id,date'
+      onConflict: 'platform,campaign_id,date',
     });
 
   if (error) {

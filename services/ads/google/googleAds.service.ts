@@ -1,11 +1,21 @@
 import { googleAdsApi } from './googleAds.client';
 
+/* =====================================================
+   🔧 Utils
+===================================================== */
+function normalizeCustomerId(id: string) {
+  return id.replace(/-/g, '');
+}
+
+/* =====================================================
+   🧪 Teste simples da API (conta direta ou MCC)
+===================================================== */
 export async function testGoogleAdsApi(
   customerId: string,
   refreshToken: string
 ) {
   const customer = googleAdsApi.Customer({
-    customer_id: customerId.replace(/-/g, ''),
+    customer_id: normalizeCustomerId(customerId),
     refresh_token: refreshToken,
   });
 
@@ -21,12 +31,15 @@ export async function testGoogleAdsApi(
   return result;
 }
 
+/* =====================================================
+   🏢 Listar contas filhas (MCC)
+===================================================== */
 export async function listChildAccounts(
   mccCustomerId: string,
   refreshToken: string
 ) {
   const mcc = googleAdsApi.Customer({
-    customer_id: mccCustomerId.replace(/-/g, ''),
+    customer_id: normalizeCustomerId(mccCustomerId),
     refresh_token: refreshToken,
   });
 
@@ -44,20 +57,24 @@ export async function listChildAccounts(
   const results = await mcc.query(query);
 
   return results.map((row: any) => ({
-  id: row.customer_client.id,
-  name: row.customer_client.descriptive_name,
-  isManager: row.customer_client.manager,
-  status: row.customer_client.status,
-}));
+    id: row.customer_client.id,
+    name: row.customer_client.descriptive_name,
+    isManager: row.customer_client.manager,
+    status: row.customer_client.status,
+  }));
 }
+
+/* =====================================================
+   ⚡ Métricas gerais (Realtime / últimos 30 dias)
+   👉 Aqui USAMOS MCC como customer
+===================================================== */
 export async function getCampaignMetrics(
-  customerId: string,
-  loginCustomerId: string,
+  customerId: string,          // aqui pode ser MCC
+  loginCustomerId: string,     // mantido por compatibilidade
   refreshToken: string
 ) {
   const customer = googleAdsApi.Customer({
-    customer_id: customerId.replace(/-/g, ''),
-    login_customer_id: loginCustomerId.replace(/-/g, ''),
+    customer_id: normalizeCustomerId(customerId),
     refresh_token: refreshToken,
   });
 
@@ -82,19 +99,24 @@ export async function getCampaignMetrics(
     status: row.campaign.status,
     impressions: row.metrics.impressions,
     clicks: row.metrics.clicks,
-    cost: row.metrics.cost_micros / 1_000_000, // normalização
+    cost: row.metrics.cost_micros / 1_000_000,
     conversions: row.metrics.conversions,
   }));
 }
+
+/* =====================================================
+   📅 Métricas DIÁRIAS (cron / sync / histórico)
+   👉 Aqui É OBRIGATÓRIO usar login_customer_id
+===================================================== */
 export async function getCampaignMetricsDaily(
-customerId: string,
-loginCustomerId: string,
-refreshToken: string,
-date: string
+  customerId: string,          // conta anunciante
+  loginCustomerId: string,     // MCC
+  refreshToken: string,
+  date: string
 ) {
   const customer = googleAdsApi.Customer({
-    customer_id: customerId.replace(/-/g, ''),
-    login_customer_id: loginCustomerId.replace(/-/g, ''),
+    customer_id: normalizeCustomerId(customerId),
+    login_customer_id: normalizeCustomerId(loginCustomerId), // 🔥 FIX REAL
     refresh_token: refreshToken,
   });
 
@@ -116,15 +138,15 @@ date: string
 
   return results.map((row: any) => ({
     platform: 'google',
-    mcc_customer_id: Number(loginCustomerId.replace(/-/g, '')),
-    customer_id: Number(customerId),
+    mcc_customer_id: Number(normalizeCustomerId(loginCustomerId)),
+    customer_id: Number(normalizeCustomerId(customerId)),
     campaign_id: row.campaign.id,
     campaign_name: row.campaign.name,
     campaign_status: row.campaign.status,
     date: row.segments.date,
-    impressions: row.metrics.impressions,
-    clicks: row.metrics.clicks,
-    cost: row.metrics.cost_micros / 1_000_000,
-    conversions: row.metrics.conversions,
+    impressions: Number(row.metrics.impressions ?? 0),
+    clicks: Number(row.metrics.clicks ?? 0),
+    cost: Number(row.metrics.cost_micros ?? 0) / 1_000_000,
+    conversions: Number(row.metrics.conversions ?? 0),
   }));
 }
