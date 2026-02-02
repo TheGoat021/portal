@@ -49,7 +49,7 @@ export async function POST(req: Request) {
         date
       );
 
-      await saveCampaignMetrics(googleMetrics);
+      await saveCampaignMetrics(googleMetrics, date);
 
       /* ===============================
          🔴 META ADS
