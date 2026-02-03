@@ -30,7 +30,6 @@ export default function LancarEvolucaoPage() {
 
   useEffect(() => {
     async function load() {
-      /** usuário logado */
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -40,11 +39,9 @@ export default function LancarEvolucaoPage() {
         return;
       }
 
-      /** carrega usuários */
       const res = await fetch("/api/users");
       const data: User[] = await res.json();
 
-      /** valida diretoria */
       const current = data.find((u) => u.id === user.id);
 
       if (current?.role !== "DIRETORIA") {
@@ -73,19 +70,61 @@ export default function LancarEvolucaoPage() {
     e.preventDefault();
     setSaving(true);
 
+    // 🔎 Busca evolução existente (se houver)
+    const { data: existing } = await supabase
+      .from("seller_monthly_performance")
+      .select("*")
+      .eq("user_id", form.user_id)
+      .eq("month", Number(form.month))
+      .eq("year", Number(form.year))
+      .maybeSingle();
+
+    // 🧩 Monta payload preservando dados antigos
+    const payload = {
+      user_id: form.user_id,
+      month: Number(form.month),
+      year: Number(form.year),
+
+      sales_count:
+        form.sales_count !== ""
+          ? Number(form.sales_count)
+          : existing?.sales_count ?? 0,
+
+      revenue:
+        form.revenue !== ""
+          ? Number(form.revenue)
+          : existing?.revenue ?? 0,
+
+      commission:
+        form.commission !== ""
+          ? Number(form.commission)
+          : existing?.commission ?? 0,
+
+      salary:
+        form.salary !== ""
+          ? Number(form.salary)
+          : existing?.salary ?? 0,
+
+      supervisor_score:
+        form.supervisor_score !== ""
+          ? Number(form.supervisor_score)
+          : existing?.supervisor_score ?? 0,
+
+      strengths:
+        form.strengths !== ""
+          ? form.strengths
+          : existing?.strengths ?? "",
+
+      improvements:
+        form.improvements !== ""
+          ? form.improvements
+          : existing?.improvements ?? "",
+    };
+
     const { error } = await supabase
       .from("seller_monthly_performance")
-      .insert({
-        user_id: form.user_id,
-        month: Number(form.month),
-        year: Number(form.year),
-        sales_count: Number(form.sales_count),
-        revenue: Number(form.revenue),
-        commission: Number(form.commission),
-        salary: Number(form.salary),
-        supervisor_score: Number(form.supervisor_score),
-        strengths: form.strengths,
-        improvements: form.improvements,
+      .upsert(payload, {
+        onConflict: "user_id,month,year",
       });
 
     setSaving(false);
@@ -95,7 +134,7 @@ export default function LancarEvolucaoPage() {
       return;
     }
 
-    alert("Evolução lançada com sucesso!");
+    alert("Evolução salva com sucesso!");
 
     setForm({
       user_id: "",
