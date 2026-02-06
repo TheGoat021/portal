@@ -99,15 +99,17 @@ export async function POST(req: Request) {
       fetched: metrics.length
     });
   } catch (error: any) {
-    console.error('[GOOGLE ADS SYNC ERROR RAW]', error);
-    return NextResponse.json(
-      { success: false,
-      error:
-        error?.message ||
-        error?.toString?.() ||
-        JSON.stringify(error),
+  console.error(
+    '[GOOGLE ADS SYNC ERROR FULL]',
+    JSON.stringify(error, null, 2)
+  );
+
+  return NextResponse.json(
+    {
+      success: false,
+      error: JSON.stringify(error, null, 2),
     },
     { status: 500 }
-    );
-  }
+  );
+}
 }
