@@ -14,22 +14,32 @@ function getYesterday() {
 
 export async function POST(req: Request) {
   try {
+    console.log('[GOOGLE ADS SYNC] Execução iniciada');
+
     /* ===============================
        🔐 SEGURANÇA CRON (OBRIGATÓRIO)
     ================================ */
     const { searchParams } = new URL(req.url);
 
-const secret =
-  req.headers.get('x-cron-secret') ||
-  searchParams.get('secret');
+    const secret =
+      req.headers.get('x-cron-secret') ||
+      searchParams.get('secret');
 
-if (secret !== process.env.CRON_SECRET) {
-  return NextResponse.json(
-    { success: false, error: 'Unauthorized' },
-    { status: 401 }
-  );
-}
+    if (!secret) {
+      console.error('[GOOGLE ADS SYNC] Secret ausente');
+      return NextResponse.json(
+        { success: false, error: 'Secret missing' },
+        { status: 401 }
+      );
+    }
 
+    if (secret !== process.env.CRON_SECRET) {
+      console.error('[GOOGLE ADS SYNC] Secret inválido');
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
 
     /* ===============================
        🔧 CONFIGURAÇÕES FIXAS
@@ -39,6 +49,7 @@ if (secret !== process.env.CRON_SECRET) {
     const customerId = process.env.GOOGLE_ADS_CUSTOMER_ID as string;
 
     if (!refreshToken || !loginCustomerId || !customerId) {
+      console.error('[GOOGLE ADS SYNC] Variáveis de ambiente ausentes');
       return NextResponse.json(
         {
           success: false,
@@ -54,6 +65,8 @@ if (secret !== process.env.CRON_SECRET) {
     const dateParam = searchParams.get('date');
     const date = dateParam ?? getYesterday();
 
+    console.log('[GOOGLE ADS SYNC] Data processada:', date);
+
     /* ===============================
        🚀 BUSCA + SALVA
     ================================ */
@@ -64,7 +77,14 @@ if (secret !== process.env.CRON_SECRET) {
       date
     );
 
+    console.log(
+      '[GOOGLE ADS SYNC] Campanhas encontradas:',
+      metrics.length
+    );
+
     await saveCampaignMetrics(metrics, date);
+
+    console.log('[GOOGLE ADS SYNC] Salvamento concluído');
 
     return NextResponse.json({
       success: true,
