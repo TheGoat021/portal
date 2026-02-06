@@ -16,6 +16,12 @@ export async function POST(req: Request) {
   try {
     console.log('[GOOGLE ADS SYNC] Execução iniciada');
 
+    console.log(
+  "[DEBUG] CRON_SECRET ENV:",
+  process.env.CRON_SECRET ? "EXISTE" : "UNDEFINED"
+);
+
+
     /* ===============================
        🔐 SEGURANÇA CRON (OBRIGATÓRIO)
     ================================ */
@@ -81,6 +87,7 @@ export async function POST(req: Request) {
       '[GOOGLE ADS SYNC] Campanhas encontradas:',
       metrics.length
     );
+
 
     await saveCampaignMetrics(metrics, date);
 
