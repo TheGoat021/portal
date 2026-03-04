@@ -68,7 +68,7 @@ export default function ConversationsList({
   const fetchConversations = async () => {
     try {
       const res = await fetch(
-        `http://apiwhats.drdetodos.com.br/conversations?userId=${currentUser.id}&role=${currentUser.role}`
+        `https://apiwhats.drdetodos.com.br/conversations?userId=${currentUser.id}&role=${currentUser.role}`
       )
       if (!res.ok) return
 
@@ -112,7 +112,7 @@ export default function ConversationsList({
     if (!newPhone || !newMessage) return
 
     try {
-      const res = await fetch("http://apiwhats.drdetodos.com.br/send", {
+      const res = await fetch("https://apiwhats.drdetodos.com.br/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -143,7 +143,7 @@ export default function ConversationsList({
 
       if (!conv.agentId) {
         const res = await fetch(
-          `http://apiwhats.drdetodos.com.br/conversations/${conv.id}/lock`,
+          `https://apiwhats.drdetodos.com.br/conversations/${conv.id}/lock`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },

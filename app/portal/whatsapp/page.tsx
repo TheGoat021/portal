@@ -9,7 +9,7 @@ export default function WhatsAppConnect() {
   const [loading, setLoading] = useState(false)
 
   const fetchStatus = async () => {
-    const res = await fetch("http://apiwhats.drdetodos.com.br/qr")
+    const res = await fetch("https://apiwhats.drdetodos.com.br/qr")
     const data = await res.json()
     setQr(data.qr)
     setConnected(data.connected)
@@ -23,7 +23,7 @@ export default function WhatsAppConnect() {
 
   const handleRestart = async () => {
     setLoading(true)
-    await fetch("http://apiwhats.drdetodos.com.br/restart", {
+    await fetch("https://apiwhats.drdetodos.com.br/restart", {
       method: "POST"
     })
     setTimeout(fetchStatus, 2000)
@@ -32,7 +32,7 @@ export default function WhatsAppConnect() {
 
   const handleDisconnect = async () => {
     setLoading(true)
-    await fetch("http://apiwhats.drdetodos.com.br/disconnect", {
+    await fetch("https://apiwhats.drdetodos.com.br/disconnect", {
       method: "POST"
     })
     setTimeout(fetchStatus, 1000)
