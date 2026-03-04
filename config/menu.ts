@@ -46,6 +46,28 @@ export const menuConfig = [
     ],
   },
   {
+    title: "vendas",
+    roles: ["COMERCIAL", "AGENDAMENTO", "EXAMES", "DIRETORIA"],
+    items: [
+      {
+        label: "WhatsApp",
+        href: "/portal/conversas",
+      },
+      {
+        label: "Conexão Whats",
+        href: "/portal/whatsapp",
+      },
+      {
+        label: "leads",
+        href: "/portal/leads",
+      },
+     {
+        label: "vendas",
+        href: "/portal/vendas",
+      },
+    ],
+  },
+  {
     title: "Agendamento",
     roles: ["AGENDAMENTO", "EXAMES", "DIRETORIA"],
     items: [
@@ -117,7 +139,11 @@ export const menuConfig = [
       { label:'Bonificação',href:'https://docs.google.com/spreadsheets/d/12EiH6UxsH9CHBTzSY0qNkMWopDWiwxpBh6ZYh8PUzIw/edit?gid=0#gid=0', allowExternal: true },
       { label:'Calendário',href:'https://docs.google.com/spreadsheets/d/12EiH6UxsH9CHBTzSY0qNkMWopDWiwxpBh6ZYh8PUzIw/edit?gid=0#gid=0', allowExternal: true },
       { label:'Recados',href:'https://docs.google.com/spreadsheets/d/1H7yH9Y7Q0Ywmm78U9FuhS2nbzimyIm5olDS2YH-ehTM/edit?gid=0#gid=0', allowExternal: true },
-    ],
+      {
+        label: "Equipe",
+        href: "/portal/evolucao/equipe",
+      },
+      ],
   },
 
   /* ✅ ÚNICA ADIÇÃO */
@@ -129,22 +155,17 @@ export const menuConfig = [
         label: "Minha Evolução",
         href: "/portal/evolucao",
       },
-      {
-        label: "Lançar Evolução",
-        href: "/portal/evolucao/lancar",
-      },
-      {
-        label: "Equipe",
-        href: "/portal/evolucao/equipe",
-      },
     ],
   },
-
   {
     title: "Administração",
     roles: ["DIRETORIA"],
     items: [
       { label: "Usuários", href: "/portal/usuarios" },
+      {
+        label: "Lançar Evolução",
+        href: "/portal/evolucao/lancar",
+      },
     ],
   },
 ];
