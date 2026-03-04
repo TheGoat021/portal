@@ -104,7 +104,7 @@ export default function ClientDetails({ selectedConversationId }: Props) {
       setSaving(true)
 
       const res = await fetch(
-        `http://167.71.247.30:4000/conversations/${client.id}`,
+        `http://apiwhats.drdetodos.com.br/conversations/${client.id}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -139,7 +139,7 @@ export default function ClientDetails({ selectedConversationId }: Props) {
       // precisa existir a coluna `lead_status` na tabela `conversations`.
       // Se ainda não existir, crie no Supabase como text/varchar.
       const res = await fetch(
-        `http://167.71.247.30:4000/conversations/${client.id}`,
+        `http://apiwhats.drdetodos.com.br/conversations/${client.id}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },

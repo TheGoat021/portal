@@ -81,7 +81,7 @@ export default function ChatWindow({ selectedConversationId }: Props) {
   const fetchMessages = async (conversationId: string) => {
     try {
       setLoading(true)
-      const res = await fetch(`http://167.71.247.30:4000/messages/${conversationId}`)
+      const res = await fetch(`http://apiwhats.drdetodos.com.br/messages/${conversationId}`)
       if (!res.ok) return
 
       const data: BackendMessage[] = await res.json()
@@ -134,7 +134,7 @@ export default function ChatWindow({ selectedConversationId }: Props) {
     if (!newMessage.trim() || !selectedConversationId) return
 
     try {
-      const res = await fetch("http://167.71.247.30:4000/send", {
+      const res = await fetch("http://apiwhats.drdetodos.com.br/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -160,7 +160,7 @@ export default function ChatWindow({ selectedConversationId }: Props) {
     formData.append("file", file)
 
     try {
-      const res = await fetch("http://167.71.247.30:4000/send-media", {
+      const res = await fetch("http://apiwhats.drdetodos.com.br/send-media", {
         method: "POST",
         body: formData
       })
@@ -250,7 +250,7 @@ export default function ChatWindow({ selectedConversationId }: Props) {
     setAgentsLoading(true)
 
     try {
-      const res = await fetch("http://167.71.247.30:4000/agents")
+      const res = await fetch("http://apiwhats.drdetodos.com.br/agents")
       if (!res.ok) {
         console.error("Erro ao buscar atendentes:", await res.text())
         setAgents([])
@@ -272,7 +272,7 @@ export default function ChatWindow({ selectedConversationId }: Props) {
       setTransferSaving(true)
 
       const res = await fetch(
-        `http://167.71.247.30:4000/conversations/${selectedConversationId}/transfer`,
+        `http://apiwhats.drdetodos.com.br/conversations/${selectedConversationId}/transfer`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

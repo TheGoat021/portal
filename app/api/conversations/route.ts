@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 export async function GET() {
   try {
-    const res = await fetch("http://167.71.247.30:4000/conversations", {
+    const res = await fetch("http://apiwhats.drdetodos.com.br/conversations", {
       cache: "no-store"
     })
 
