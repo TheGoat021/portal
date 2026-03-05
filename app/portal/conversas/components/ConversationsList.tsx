@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 interface Props {
   selectedConversationId: string | null
@@ -54,6 +54,12 @@ function getInitials(nameOrPhone: string) {
   return cleaned.replace(/\D/g, "").slice(-2) || cleaned.slice(0, 2).toUpperCase()
 }
 
+function toTs(dateString?: string) {
+  if (!dateString) return 0
+  const t = new Date(dateString).getTime()
+  return Number.isFinite(t) ? t : 0
+}
+
 export default function ConversationsList({
   selectedConversationId,
   onSelectConversation,
@@ -65,11 +71,34 @@ export default function ConversationsList({
   const [newMessage, setNewMessage] = useState("")
   const [search, setSearch] = useState("")
 
+  // ✅ Normaliza role (evita "Diretoria" vs "DIRETORIA" dar bug)
+  const roleUpper = (currentUser.role || "").toUpperCase()
+  const isDiretoria = roleUpper === "DIRETORIA"
+
+  /**
+   * ✅ Guarda a última mensagem "vista" por conversa (timestamp).
+   * - Se chegar lastMessageAt maior que lastSeenAt, e a conversa NÃO está aberta, mostramos "nova".
+   */
+  const [lastSeenAtById, setLastSeenAtById] = useState<Record<string, number>>({})
+  const selectedRef = useRef<string | null>(null)
+
   const fetchConversations = async () => {
     try {
-      const res = await fetch(
-        `https://apiwhats.drdetodos.com.br/conversations?userId=${currentUser.id}&role=${currentUser.role}`
-      )
+      /**
+       * ✅ Importante: seu backend provavelmente exige userId.
+       * Então SEMPRE mandamos userId.
+       *
+       * ✅ Diretoria pede "todas" via scope=all (se o backend ignorar, não quebra).
+       * Depois no backend (quando você mandar) a gente faz respeitar.
+       */
+      const base = `https://apiwhats.drdetodos.com.br/conversations`
+      const url = isDiretoria
+        ? `${base}?userId=${encodeURIComponent(currentUser.id)}&role=${encodeURIComponent(
+            roleUpper
+          )}&scope=all`
+        : `${base}?userId=${encodeURIComponent(currentUser.id)}&role=${encodeURIComponent(roleUpper)}`
+
+      const res = await fetch(url, { cache: "no-store" })
       if (!res.ok) return
 
       const data: BackendConversation[] = await res.json()
@@ -83,6 +112,22 @@ export default function ConversationsList({
         agentId: conv.agent_id ?? null
       }))
 
+      // ✅ Se a conversa estiver aberta, considera "vista" automaticamente
+      const selectedId = selectedRef.current
+      if (selectedId) {
+        const openConv = mapped.find((c) => c.id === selectedId)
+        if (openConv?.lastMessageAt) {
+          const ts = toTs(openConv.lastMessageAt)
+          if (ts) {
+            setLastSeenAtById((prev) => {
+              const cur = prev[selectedId] ?? 0
+              if (ts <= cur) return prev
+              return { ...prev, [selectedId]: ts }
+            })
+          }
+        }
+      }
+
       setConversations(mapped)
     } catch (error) {
       console.error("Erro ao buscar conversas", error)
@@ -95,6 +140,10 @@ export default function ConversationsList({
     return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser.id, currentUser.role])
+
+  useEffect(() => {
+    selectedRef.current = selectedConversationId
+  }, [selectedConversationId])
 
   const filteredConversations = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -136,25 +185,39 @@ export default function ConversationsList({
 
   const handleSelectConversation = async (conv: Conversation) => {
     try {
-      if (conv.agentId && conv.agentId !== currentUser.id) {
-        alert("Essa conversa já está sendo atendida por outro usuário.")
-        return
-      }
-
-      if (!conv.agentId) {
-        const res = await fetch(
-          `https://apiwhats.drdetodos.com.br/conversations/${conv.id}/lock`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId: currentUser.id })
-          }
-        )
-
-        if (!res.ok) {
-          alert("Não foi possível assumir a conversa.")
+      // ✅ Diretoria: nunca bloqueia por lock e NÃO tenta dar lock.
+      if (!isDiretoria) {
+        // regras normais (time comercial)
+        if (conv.agentId && conv.agentId !== currentUser.id) {
+          alert("Essa conversa já está sendo atendida por outro usuário.")
           return
         }
+
+        if (!conv.agentId) {
+          const res = await fetch(
+            `https://apiwhats.drdetodos.com.br/conversations/${conv.id}/lock`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId: currentUser.id })
+            }
+          )
+
+          if (!res.ok) {
+            alert("Não foi possível assumir a conversa.")
+            return
+          }
+        }
+      }
+
+      // ✅ Ao abrir a conversa, marca como "vista" (zera badge)
+      const ts = toTs(conv.lastMessageAt)
+      if (ts) {
+        setLastSeenAtById((prev) => {
+          const cur = prev[conv.id] ?? 0
+          if (ts <= cur) return prev
+          return { ...prev, [conv.id]: ts }
+        })
       }
 
       onSelectConversation(conv.id)
@@ -165,9 +228,6 @@ export default function ConversationsList({
 
   return (
     <div className="relative min-h-0">
-      {/* Search (agora fica aqui dentro da lista pra não duplicar com o layout, mas é opcional)
-          Se você quiser só 1 search, deixa aqui e remove do Layout.
-          Como você quer Intercom, eu recomendo 1 search só: vamos manter aqui na lista. */}
       <div className="p-3 border-b border-gray-100 bg-white sticky top-0 z-10">
         <div className="flex items-center gap-2">
           <input
@@ -189,18 +249,23 @@ export default function ConversationsList({
       {/* List */}
       <div className="min-h-0">
         {filteredConversations.length === 0 ? (
-          <div className="p-6 text-sm text-gray-500">
-            Nenhuma conversa encontrada.
-          </div>
+          <div className="p-6 text-sm text-gray-500">Nenhuma conversa encontrada.</div>
         ) : (
           filteredConversations.map((conv) => {
             const isSelected = selectedConversationId === conv.id
-            const isLockedByOther = !!conv.agentId && conv.agentId !== currentUser.id
+
+            // ✅ Diretoria não “sofre” lock
+            const isLockedByOther = !isDiretoria && !!conv.agentId && conv.agentId !== currentUser.id
 
             const title = conv.name?.trim() ? conv.name : conv.phone
             const subtitle = conv.name?.trim() ? conv.phone : ""
             const time = formatListTime(conv.lastMessageAt)
             const initials = getInitials(title)
+
+            // ✅ indicador de "nova mensagem"
+            const lastSeenTs = lastSeenAtById[conv.id] ?? 0
+            const lastMsgTs = toTs(conv.lastMessageAt)
+            const hasNew = !isSelected && lastMsgTs > 0 && lastMsgTs > lastSeenTs
 
             return (
               <button
@@ -219,18 +284,34 @@ export default function ConversationsList({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="font-semibold text-gray-900 truncate">
+                        <div
+                          className={[
+                            "truncate",
+                            hasNew ? "font-bold text-gray-900" : "font-semibold text-gray-900"
+                          ].join(" ")}
+                        >
                           {title}
                         </div>
-                        {subtitle ? (
-                          <div className="text-xs text-gray-500 truncate">
-                            {subtitle}
-                          </div>
-                        ) : null}
+                        {subtitle ? <div className="text-xs text-gray-500 truncate">{subtitle}</div> : null}
                       </div>
 
                       <div className="flex flex-col items-end gap-1 shrink-0">
-                        <div className="text-xs text-gray-400">{time}</div>
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={[
+                              "text-xs",
+                              hasNew ? "text-gray-800 font-semibold" : "text-gray-400"
+                            ].join(" ")}
+                          >
+                            {time}
+                          </div>
+
+                          {/* 🔴 bolinha de nova mensagem */}
+                          {hasNew ? (
+                            <span className="w-2.5 h-2.5 rounded-full bg-green-500" title="Nova mensagem" />
+                          ) : null}
+                        </div>
+
                         {isLockedByOther ? (
                           <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-100">
                             Em atendimento
@@ -239,7 +320,12 @@ export default function ConversationsList({
                       </div>
                     </div>
 
-                    <div className="text-sm text-gray-600 truncate mt-1">
+                    <div
+                      className={[
+                        "text-sm truncate mt-1",
+                        hasNew ? "text-gray-900 font-semibold" : "text-gray-600"
+                      ].join(" ")}
+                    >
                       {conv.lastMessage || "—"}
                     </div>
                   </div>
@@ -252,11 +338,9 @@ export default function ConversationsList({
 
       {/* Modal Nova Conversa */}
       {showModal && (
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-    <div className="bg-white p-6 rounded-2xl w-[420px] max-w-[92vw] space-y-4 shadow-xl border border-black/5">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Nova conversa
-            </h2>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-2xl w-[420px] max-w-[92vw] space-y-4 shadow-xl border border-black/5">
+            <h2 className="text-lg font-semibold text-gray-900">Nova conversa</h2>
 
             <input
               placeholder="Telefone (5511999999999)"

@@ -40,6 +40,15 @@ let sock: WASocket | null = null
 let isConnected = false
 let manuallyDisconnected = false
 
+function normRole(input: any) {
+  return String(input ?? "").trim().toLowerCase()
+}
+
+function isPrivilegedRole(role: any) {
+  const r = normRole(role)
+  return r === "admin" || r === "diretoria"
+}
+
 async function resetSession() {
   try {
     if (sock) {
@@ -260,26 +269,27 @@ app.get("/status", (_req: Request, res: Response) => {
 })
 
 /**
- * GET Conversations (Admin vê todas | Atendente vê só as dele)
+ * GET Conversations (Admin/Diretoria vê todas | Atendente vê só as dele + livres)
  * Query params:
- * ?userId=uuid&role=admin|agent
+ * ?userId=uuid&role=admin|agent|diretoria
  */
 app.get("/conversations", async (req: Request, res: Response) => {
   try {
-    const { userId, role } = req.query
+    const userId = String(req.query.userId ?? "")
+    const role = normRole(req.query.role)
 
     let query = supabaseAdmin
       .from("conversations")
       .select("*")
       .order("last_message_at", { ascending: false })
 
-    // Admin e Diretoria veem tudo
-    if (role !== "admin" && role !== "diretoria") {
+    // ✅ Admin e Diretoria veem tudo
+    if (!isPrivilegedRole(role)) {
       if (!userId) {
         return res.status(400).json({ error: "userId é obrigatório" })
       }
 
-      // Agent vê as dele + livres
+      // ✅ Agent vê as dele + livres
       query = query.or(`agent_id.eq.${userId},agent_id.is.null`)
     }
 
@@ -289,7 +299,7 @@ app.get("/conversations", async (req: Request, res: Response) => {
       return res.status(500).json({ error: error.message })
     }
 
-    res.json(data)
+    res.json(data ?? [])
   } catch (error) {
     res.status(500).json({ error: "Erro ao buscar conversas" })
   }
@@ -310,7 +320,7 @@ app.get("/conversations/unassigned", async (_req: Request, res: Response) => {
       return res.status(500).json({ error: error.message })
     }
 
-    res.json(data)
+    res.json(data ?? [])
   } catch (error) {
     res.status(500).json({ error: "Erro ao buscar conversas não atribuídas" })
   }
@@ -333,7 +343,7 @@ app.get("/conversations/by-agent/:userId", async (req: Request, res: Response) =
       return res.status(500).json({ error: error.message })
     }
 
-    res.json(data)
+    res.json(data ?? [])
   } catch (error) {
     res.status(500).json({ error: "Erro ao buscar conversas do agente" })
   }
@@ -341,19 +351,33 @@ app.get("/conversations/by-agent/:userId", async (req: Request, res: Response) =
 
 /**
  * POST Lock Conversation
+ * Body: { userId: string, role?: string }
+ * (role pode vir também via header x-user-role)
  */
 app.post("/conversations/:id/lock", async (req: Request, res: Response) => {
   try {
     const { id } = req.params
-    const { userId } = req.body
+    const { userId, role: roleBody } = req.body as { userId?: string; role?: string }
 
-    const { data: conversation } = await supabaseAdmin
+    if (!userId) {
+      return res.status(400).json({ error: "userId é obrigatório" })
+    }
+
+    const roleHeader = req.headers["x-user-role"]
+    const role = normRole(roleBody ?? roleHeader)
+
+    // ✅ Diretoria/Admin: nunca trava conversa
+    if (isPrivilegedRole(role)) {
+      return res.json({ success: true, skipped: true })
+    }
+
+    const { data: conversation, error: convErr } = await supabaseAdmin
       .from("conversations")
       .select("agent_id")
       .eq("id", id)
       .single()
 
-    if (!conversation) {
+    if (convErr || !conversation) {
       return res.status(404).json({ error: "Conversa não encontrada" })
     }
 
@@ -363,13 +387,17 @@ app.post("/conversations/:id/lock", async (req: Request, res: Response) => {
       })
     }
 
-    await supabaseAdmin
+    const { error: upErr } = await supabaseAdmin
       .from("conversations")
       .update({
         agent_id: userId,
         locked_at: new Date()
       })
       .eq("id", id)
+
+    if (upErr) {
+      return res.status(500).json({ error: upErr.message })
+    }
 
     res.json({ success: true })
   } catch (error) {
@@ -383,7 +411,7 @@ app.post("/conversations/:id/lock", async (req: Request, res: Response) => {
 app.post("/conversations/:id/unlock", async (req: Request, res: Response) => {
   try {
     const { id } = req.params
-    const { role } = req.body
+    const role = normRole((req.body as any)?.role)
 
     // Apenas admin pode forçar unlock
     if (role !== "admin") {
@@ -408,12 +436,9 @@ app.post("/conversations/:id/unlock", async (req: Request, res: Response) => {
  * ✅ GET Agents (SEM name)
  * Busca no auth.users (id/email) e retorna:
  * [{ id, email, role: "agent" }]
- *
- * Obs: Se você tiver profiles com role, a gente pode enriquecer depois.
  */
 app.get("/agents", async (_req: Request, res: Response) => {
   try {
-    // admin API do Supabase Auth
     const { data, error } = await supabaseAdmin.auth.admin.listUsers()
 
     if (error) {
@@ -448,7 +473,6 @@ app.post("/conversations/:id/transfer", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "toUserId é obrigatório" })
     }
 
-    // confere se conversa existe
     const { data: conv, error: convError } = await supabaseAdmin
       .from("conversations")
       .select("id")
@@ -459,7 +483,6 @@ app.post("/conversations/:id/transfer", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Conversa não encontrada" })
     }
 
-    // confere se user existe no auth
     const { data: userData, error: userError } =
       await supabaseAdmin.auth.admin.getUserById(toUserId)
 
@@ -543,7 +566,7 @@ app.put("/conversations/:id", async (req: Request, res: Response) => {
  */
 app.post("/send", async (req: Request, res: Response) => {
   try {
-    const { conversationId, phone, message } = req.body
+    const { conversationId, phone, message } = req.body as any
 
     if (!sock || !isConnected) {
       return res.status(400).json({ error: "WhatsApp não conectado" })
@@ -579,27 +602,36 @@ app.post("/send", async (req: Request, res: Response) => {
       })
     }
 
-    const cleanPhone = finalPhone.replace(/\D/g, "")
+    const cleanPhone = String(finalPhone).replace(/\D/g, "")
     const jid = `${cleanPhone}@s.whatsapp.net`
 
     let conversationIdFinal = conversationId
 
+    // ✅ Criar conversa ao enviar para um phone ainda não existente
     if (!conversationId && phone) {
-      const { userId } = req.body
+      const { userId, role } = req.body as { userId?: string; role?: string }
 
       if (!userId) {
         return res.status(400).json({ error: "userId é obrigatório" })
       }
 
+      const privileged = isPrivilegedRole(role)
+
+      const insertPayload: any = {
+        phone: cleanPhone,
+        last_message: message,
+        last_message_at: new Date()
+      }
+
+      // ✅ Só agente nasce atribuída / lockada
+      if (!privileged) {
+        insertPayload.agent_id = userId
+        insertPayload.locked_at = new Date()
+      }
+
       const { data: newConversation, error } = await supabaseAdmin
         .from("conversations")
-        .insert({
-          phone: cleanPhone,
-          last_message: message,
-          last_message_at: new Date(),
-          agent_id: userId, // 🔥 nasce atribuída
-          locked_at: new Date()
-        })
+        .insert(insertPayload)
         .select()
         .single()
 
@@ -646,7 +678,7 @@ app.post(
   upload.single("file"),
   async (req: Request, res: Response) => {
     try {
-      const { conversationId } = req.body
+      const { conversationId } = req.body as any
       const file = req.file
 
       if (!sock || !isConnected) {

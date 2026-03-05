@@ -25,12 +25,14 @@ export function Sidebar() {
   const { setProgress, isUnlocked, progress } = useTrainingStore();
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const [collapsed, setCollapsed] = useState(true);
 
   useEffect(() => {
     async function loadProgress() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
+
       if (!user) return;
 
       const { data: progressData } = await supabase
@@ -87,42 +89,81 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="w-64 bg-slate-900 text-white p-4 flex flex-col">
+    <aside
+      onMouseEnter={() => setCollapsed(false)}
+      onMouseLeave={() => setCollapsed(true)}
+      className={`bg-slate-900 text-white p-4 flex flex-col transition-all duration-300 ${
+        collapsed ? "w-[72px]" : "w-64"
+      }`}
+    >
+      {/* Logo */}
       <div className="flex flex-col items-center text-center mb-8 mt-6">
-        <div className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center mb-3">
-          <LayoutDashboard size={26} />
+        <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center mb-3">
+          <LayoutDashboard size={24} />
         </div>
-        <p className="text-sm text-gray-300">Bem-vindo ao</p>
-        <p className="text-xs text-gray-400">Portal Interno</p>
+
+        {!collapsed && (
+          <>
+            <p className="text-sm text-gray-300">Bem-vindo ao</p>
+            <p className="text-xs text-gray-400">Portal Interno</p>
+          </>
+        )}
       </div>
 
-      <div className="flex-1 space-y-6">
+      {/* Menu */}
+      <div className="flex-1 space-y-5 overflow-y-auto">
         {menuConfig
-          .filter((section) => section && (!section.roles || section.roles.includes(role!)))
-          .map((section) => {
-            const isOpen = openSections[section.title];
+          .filter((section) => !section.roles || section.roles.includes(role!))
+          .map((section, index) => {
+            const key = section.title ?? `section-${index}`;
+            const isOpen = openSections[key];
+            const Icon = section.icon;
 
             return (
-              <div key={section.title}>
-                <button
-                  onClick={() => toggleSection(section.title)}
-                  className="w-full flex items-center justify-between text-xs uppercase text-gray-400 mb-2 hover:text-gray-200"
-                >
-                  <span>{section.title}</span>
-                  {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                </button>
+              <div key={key}>
+                {/* SECTION TITLE */}
+                {section.title && !collapsed && (
+                  <button
+                    onClick={() => toggleSection(section.title!)}
+                    className="w-full flex items-center justify-between text-xs uppercase text-gray-400 mb-2 hover:text-gray-200"
+                  >
+                    <div className="flex items-center gap-2">
+                      {Icon && <Icon size={14} />}
+                      <span>{section.title}</span>
+                    </div>
 
-                {isOpen && (
+                    {isOpen ? (
+                      <ChevronDown size={14} />
+                    ) : (
+                      <ChevronRight size={14} />
+                    )}
+                  </button>
+                )}
+
+                {/* SECTION ICON (quando retraída) */}
+                {collapsed && Icon && (
+                  <div className="flex justify-center py-2 text-gray-400">
+                    <Icon size={18} />
+                  </div>
+                )}
+
+                {/* ITEMS */}
+                {(section.title ? isOpen : true) && !collapsed && (
                   <ul className="space-y-1">
                     {section.items.map((item) => {
                       const isTrainingItem = "module" in item;
+
                       const current = isTrainingItem
                         ? progress.find((p) => p.module === item.module)
                         : null;
 
                       const approved = current?.approved === true;
-                      const locked =
-                        isTrainingItem && !approved && !isUnlocked(item.module);
+
+                     const locked =
+  isTrainingItem &&
+  !approved &&
+  item.module !== undefined &&
+  !isUnlocked(item.module);
 
                       return (
                         <li key={item.label}>
@@ -130,28 +171,33 @@ export function Sidebar() {
                             <button
                               onClick={() => handleClick(item.href, locked)}
                               disabled={locked}
-                              className={`w-full flex items-center gap-3 px-3 py-2 rounded text-left hover:bg-slate-800 ${
+                              className={`w-full flex items-center gap-3 px-3 py-2 rounded hover:bg-slate-800 ${
                                 locked ? "opacity-50 cursor-not-allowed" : ""
                               }`}
                             >
-                              <FileText size={16} />
-                              <span className="flex-1">{item.label}</span>
+                              {/* sem ícone nos submenus */}
+                              <span className="flex-1 text-left">
+                                {item.label}
+                              </span>
+
                               {approved && <span>✔️</span>}
                               {locked && <span>🔒</span>}
                             </button>
 
-                            {"allowExternal" in item && item.allowExternal && item.href && (
-                              <a
-                                href={item.href}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="text-slate-400 hover:text-white pr-2"
-                                title="Abrir em nova guia"
-                              >
-                                <ExternalLink size={14} />
-                              </a>
-                            )}
+                            {"allowExternal" in item &&
+                              item.allowExternal &&
+                              item.href && (
+                                <a
+                                  href={item.href}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-slate-400 hover:text-white pr-2"
+                                  title="Abrir em nova guia"
+                                >
+                                  <ExternalLink size={14} />
+                                </a>
+                              )}
                           </div>
                         </li>
                       );
@@ -163,12 +209,13 @@ export function Sidebar() {
           })}
       </div>
 
+      {/* Logout */}
       <button
         onClick={handleLogout}
         className="mt-6 flex items-center gap-3 px-3 py-2 rounded hover:bg-slate-800 text-sm"
       >
         <LogOut size={16} />
-        Logout
+        {!collapsed && <span>Logout</span>}
       </button>
     </aside>
   );
