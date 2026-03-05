@@ -23,6 +23,10 @@ const upload = multer({
 })
 
 const app = express()
+
+// ✅ importante pra montar URL correta atrás de proxy (nginx/caddy/vercel/etc)
+app.set("trust proxy", true)
+
 app.use(cors())
 app.use(express.json())
 
@@ -30,6 +34,34 @@ app.use(express.json())
 const uploadsDir = path.join(process.cwd(), "uploads")
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir)
+}
+
+// 🔥 BASE URL pública (produção)
+// Ex: PUBLIC_BASE_URL=https://apiwhats.drdetodos.com.br
+const PUBLIC_BASE_URL = String(
+  process.env.PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_PUBLIC_BASE_URL || ""
+).replace(/\/$/, "")
+
+function getBaseUrl(req?: Request) {
+  if (PUBLIC_BASE_URL) return PUBLIC_BASE_URL
+
+  // fallback: usa host real da request
+  if (req) {
+    const proto =
+      (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "http"
+    const host =
+      (req.headers["x-forwarded-host"] as string) || (req.get("host") as string | undefined)
+
+    if (host) return `${proto}://${host}`
+  }
+
+  // último fallback (dev)
+  return "http://localhost:4000"
+}
+
+function publicUploadUrl(fileName: string, req?: Request) {
+  const base = getBaseUrl(req)
+  return `${base}/uploads/${encodeURIComponent(fileName)}`
 }
 
 // 🔥 SERVIR ARQUIVOS DE MÍDIA
@@ -166,7 +198,8 @@ async function startWhatsApp() {
           const filePath = path.join(uploadsDir, fileName)
 
           fs.writeFileSync(filePath, buffer)
-          mediaUrl = `http://localhost:4000/uploads/${fileName}`
+          // ✅ URL pública (não mais localhost)
+          mediaUrl = publicUploadUrl(fileName)
         }
 
         // 🔥 ÁUDIO
@@ -180,7 +213,8 @@ async function startWhatsApp() {
           const filePath = path.join(uploadsDir, fileName)
 
           fs.writeFileSync(filePath, buffer)
-          mediaUrl = `http://localhost:4000/uploads/${fileName}`
+          // ✅ URL pública (não mais localhost)
+          mediaUrl = publicUploadUrl(fileName)
         }
 
         // 🔥 DOCUMENTO
@@ -197,7 +231,8 @@ async function startWhatsApp() {
           const filePath = path.join(uploadsDir, fileName)
 
           fs.writeFileSync(filePath, buffer)
-          mediaUrl = `http://localhost:4000/uploads/${fileName}`
+          // ✅ URL pública (não mais localhost)
+          mediaUrl = publicUploadUrl(fileName)
         }
 
         const { data: existingConversation } = await supabaseAdmin
@@ -214,7 +249,10 @@ async function startWhatsApp() {
             .insert({
               phone,
               last_message: text,
-              last_message_at: new Date()
+              last_message_at: new Date(),
+              // ✅ inbound nasce SEM agente (ninguém vê até alguém assumir)
+              agent_id: null,
+              locked_at: null
             })
             .select()
             .single()
@@ -269,36 +307,41 @@ app.get("/status", (_req: Request, res: Response) => {
 })
 
 /**
- * GET Conversations (Admin/Diretoria vê todas | Atendente vê só as dele + livres)
- * Query params:
- * ?userId=uuid&role=admin|agent|diretoria
+ * GET Conversations
+ * - admin/diretoria: vê tudo
+ * - comercial/agent: vê SOMENTE as conversas atribuídas ao userId
+ *
+ * Query:
+ * ?userId=uuid&role=admin|diretoria|comercial|agent
  */
 app.get("/conversations", async (req: Request, res: Response) => {
   try {
     const userId = String(req.query.userId ?? "")
     const role = normRole(req.query.role)
 
-    let query = supabaseAdmin
+    // ✅ Admin/Diretoria vê tudo
+    if (isPrivilegedRole(role)) {
+      const { data, error } = await supabaseAdmin
+        .from("conversations")
+        .select("*")
+        .order("last_message_at", { ascending: false })
+
+      if (error) return res.status(500).json({ error: error.message })
+      return res.json(data ?? [])
+    }
+
+    // ✅ Comercial/agent: só as dele
+    if (!userId) {
+      return res.status(400).json({ error: "userId é obrigatório" })
+    }
+
+    const { data, error } = await supabaseAdmin
       .from("conversations")
       .select("*")
+      .eq("agent_id", userId)
       .order("last_message_at", { ascending: false })
 
-    // ✅ Admin e Diretoria veem tudo
-    if (!isPrivilegedRole(role)) {
-      if (!userId) {
-        return res.status(400).json({ error: "userId é obrigatório" })
-      }
-
-      // ✅ Agent vê as dele + livres
-      query = query.or(`agent_id.eq.${userId},agent_id.is.null`)
-    }
-
-    const { data, error } = await query
-
-    if (error) {
-      return res.status(500).json({ error: error.message })
-    }
-
+    if (error) return res.status(500).json({ error: error.message })
     res.json(data ?? [])
   } catch (error) {
     res.status(500).json({ error: "Erro ao buscar conversas" })
@@ -307,6 +350,7 @@ app.get("/conversations", async (req: Request, res: Response) => {
 
 /**
  * GET Conversations não atribuídas
+ * (mantive, mas pelo seu fluxo atual, o comercial NÃO usa)
  */
 app.get("/conversations/unassigned", async (_req: Request, res: Response) => {
   try {
@@ -316,10 +360,7 @@ app.get("/conversations/unassigned", async (_req: Request, res: Response) => {
       .is("agent_id", null)
       .order("last_message_at", { ascending: false })
 
-    if (error) {
-      return res.status(500).json({ error: error.message })
-    }
-
+    if (error) return res.status(500).json({ error: error.message })
     res.json(data ?? [])
   } catch (error) {
     res.status(500).json({ error: "Erro ao buscar conversas não atribuídas" })
@@ -339,10 +380,7 @@ app.get("/conversations/by-agent/:userId", async (req: Request, res: Response) =
       .eq("agent_id", userId)
       .order("last_message_at", { ascending: false })
 
-    if (error) {
-      return res.status(500).json({ error: error.message })
-    }
-
+    if (error) return res.status(500).json({ error: error.message })
     res.json(data ?? [])
   } catch (error) {
     res.status(500).json({ error: "Erro ao buscar conversas do agente" })
@@ -351,52 +389,43 @@ app.get("/conversations/by-agent/:userId", async (req: Request, res: Response) =
 
 /**
  * POST Lock Conversation
+ * Regra:
+ * - admin/diretoria: não trava (só abre)
+ * - comercial/agent:
+ *    - se estiver livre -> atribui ao userId e trava
+ *    - se já for dele -> ok
+ *    - se for de outro -> 403
+ *
  * Body: { userId: string, role?: string }
- * (role pode vir também via header x-user-role)
  */
 app.post("/conversations/:id/lock", async (req: Request, res: Response) => {
   try {
     const { id } = req.params
     const { userId, role: roleBody } = req.body as { userId?: string; role?: string }
 
-    if (!userId) {
-      return res.status(400).json({ error: "userId é obrigatório" })
-    }
+    if (!userId) return res.status(400).json({ error: "userId é obrigatório" })
 
     const roleHeader = req.headers["x-user-role"]
     const role = normRole(roleBody ?? roleHeader)
 
-    // ✅ Diretoria/Admin: nunca trava conversa
+    // ✅ admin/diretoria: não tranca
     if (isPrivilegedRole(role)) {
       return res.json({ success: true, skipped: true })
     }
 
-    const { data: conversation, error: convErr } = await supabaseAdmin
+    // ✅ LOCK ATÔMICO (evita duas pessoas pegarem ao mesmo tempo)
+    const { data, error } = await supabaseAdmin
       .from("conversations")
-      .select("agent_id")
+      .update({ agent_id: userId, locked_at: new Date() })
       .eq("id", id)
-      .single()
+      .or(`agent_id.is.null,agent_id.eq.${userId}`)
+      .select("id,agent_id")
+      .maybeSingle()
 
-    if (convErr || !conversation) {
-      return res.status(404).json({ error: "Conversa não encontrada" })
-    }
+    if (error) return res.status(500).json({ error: error.message })
 
-    if (conversation.agent_id && conversation.agent_id !== userId) {
-      return res.status(403).json({
-        error: "Essa conversa já está sendo atendida"
-      })
-    }
-
-    const { error: upErr } = await supabaseAdmin
-      .from("conversations")
-      .update({
-        agent_id: userId,
-        locked_at: new Date()
-      })
-      .eq("id", id)
-
-    if (upErr) {
-      return res.status(500).json({ error: upErr.message })
+    if (!data) {
+      return res.status(403).json({ error: "Essa conversa já está sendo atendida" })
     }
 
     res.json({ success: true })
@@ -407,13 +436,13 @@ app.post("/conversations/:id/lock", async (req: Request, res: Response) => {
 
 /**
  * POST Unlock Conversation
+ * Apenas admin pode forçar unlock
  */
 app.post("/conversations/:id/unlock", async (req: Request, res: Response) => {
   try {
     const { id } = req.params
     const role = normRole((req.body as any)?.role)
 
-    // Apenas admin pode forçar unlock
     if (role !== "admin") {
       return res.status(403).json({ error: "Apenas admin pode liberar conversa" })
     }
@@ -434,16 +463,12 @@ app.post("/conversations/:id/unlock", async (req: Request, res: Response) => {
 
 /**
  * ✅ GET Agents (SEM name)
- * Busca no auth.users (id/email) e retorna:
- * [{ id, email, role: "agent" }]
  */
 app.get("/agents", async (_req: Request, res: Response) => {
   try {
     const { data, error } = await supabaseAdmin.auth.admin.listUsers()
 
-    if (error) {
-      return res.status(500).json({ error: error.message })
-    }
+    if (error) return res.status(500).json({ error: error.message })
 
     const mapped =
       (data.users ?? []).map((u) => ({
@@ -462,16 +487,13 @@ app.get("/agents", async (_req: Request, res: Response) => {
 /**
  * ✅ POST Transfer Conversation
  * Body: { toUserId: string }
- * Transfere a conversa e já trava no novo agente.
  */
 app.post("/conversations/:id/transfer", async (req: Request, res: Response) => {
   try {
     const { id } = req.params
     const { toUserId } = req.body as { toUserId?: string }
 
-    if (!toUserId) {
-      return res.status(400).json({ error: "toUserId é obrigatório" })
-    }
+    if (!toUserId) return res.status(400).json({ error: "toUserId é obrigatório" })
 
     const { data: conv, error: convError } = await supabaseAdmin
       .from("conversations")
@@ -498,9 +520,7 @@ app.post("/conversations/:id/transfer", async (req: Request, res: Response) => {
       })
       .eq("id", id)
 
-    if (upError) {
-      return res.status(500).json({ error: upError.message })
-    }
+    if (upError) return res.status(500).json({ error: upError.message })
 
     res.json({ success: true })
   } catch (error) {
@@ -563,10 +583,12 @@ app.put("/conversations/:id", async (req: Request, res: Response) => {
 
 /**
  * POST Send Message
+ * - se conversationId existe -> envia nela
+ * - se não existe e veio phone -> cria conversa NOVA atribuída ao userId (comercial)
  */
 app.post("/send", async (req: Request, res: Response) => {
   try {
-    const { conversationId, phone, message } = req.body as any
+    const { conversationId, phone, message, userId, role } = req.body as any
 
     if (!sock || !isConnected) {
       return res.status(400).json({ error: "WhatsApp não conectado" })
@@ -597,9 +619,7 @@ app.post("/send", async (req: Request, res: Response) => {
     }
 
     if (!finalPhone) {
-      return res.status(400).json({
-        error: "conversationId ou phone é obrigatório"
-      })
+      return res.status(400).json({ error: "conversationId ou phone é obrigatório" })
     }
 
     const cleanPhone = String(finalPhone).replace(/\D/g, "")
@@ -607,13 +627,9 @@ app.post("/send", async (req: Request, res: Response) => {
 
     let conversationIdFinal = conversationId
 
-    // ✅ Criar conversa ao enviar para um phone ainda não existente
+    // ✅ Criar conversa nova (e atribuir ao criador)
     if (!conversationId && phone) {
-      const { userId, role } = req.body as { userId?: string; role?: string }
-
-      if (!userId) {
-        return res.status(400).json({ error: "userId é obrigatório" })
-      }
+      if (!userId) return res.status(400).json({ error: "userId é obrigatório" })
 
       const privileged = isPrivilegedRole(role)
 
@@ -623,7 +639,8 @@ app.post("/send", async (req: Request, res: Response) => {
         last_message_at: new Date()
       }
 
-      // ✅ Só agente nasce atribuída / lockada
+      // ✅ Comercial: sempre nasce atribuída
+      // ✅ Admin/Diretoria: pode criar sem atribuir
       if (!privileged) {
         insertPayload.agent_id = userId
         insertPayload.locked_at = new Date()
@@ -635,9 +652,7 @@ app.post("/send", async (req: Request, res: Response) => {
         .select()
         .single()
 
-      if (error) {
-        return res.status(500).json({ error: error.message })
-      }
+      if (error) return res.status(500).json({ error: error.message })
 
       conversationIdFinal = newConversation.id
     }
@@ -654,7 +669,6 @@ app.post("/send", async (req: Request, res: Response) => {
       created_at: new Date()
     })
 
-    // 🔥 ATUALIZA ÚLTIMA MENSAGEM SEMPRE
     await supabaseAdmin
       .from("conversations")
       .update({
@@ -710,7 +724,6 @@ app.post(
 
       if (file.mimetype.startsWith("image/")) {
         messageType = "image"
-
         sendPayload = { image: fileBuffer }
 
         const finalPath = path.join(
@@ -720,7 +733,8 @@ app.post(
 
         fs.renameSync(file.path, finalPath)
 
-        mediaUrl = `http://localhost:4000/uploads/${path.basename(finalPath)}`
+        // ✅ URL pública (não mais localhost)
+        mediaUrl = publicUploadUrl(path.basename(finalPath), req)
       } else if (file.mimetype.startsWith("audio/")) {
         messageType = "audio"
 
@@ -749,7 +763,8 @@ app.post(
         const finalPath = path.join(uploadsDir, `audio_${Date.now()}.ogg`)
         fs.renameSync(outputPath, finalPath)
 
-        mediaUrl = `http://localhost:4000/uploads/${path.basename(finalPath)}`
+        // ✅ URL pública (não mais localhost)
+        mediaUrl = publicUploadUrl(path.basename(finalPath), req)
 
         fs.unlinkSync(inputPath)
       } else {
@@ -768,7 +783,8 @@ app.post(
 
         fs.renameSync(file.path, finalPath)
 
-        mediaUrl = `http://localhost:4000/uploads/${path.basename(finalPath)}`
+        // ✅ URL pública (não mais localhost)
+        mediaUrl = publicUploadUrl(path.basename(finalPath), req)
       }
 
       await sock.sendMessage(jid, sendPayload)

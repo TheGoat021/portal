@@ -229,7 +229,7 @@ export const menuConfig: MenuSection[] = [
       },
       {
         label: "Formulário de envio",
-        href: "https://docs.google.com/forms/d/e/1FAIpQLSdMJCBwV0mRuyUX2zMVfNJxPM6Kp-LHU3cnNsPe9I9X-uO5B1A/viewform",
+        href: "https://docs.google.com/forms/d/e/1FAIpQLSdMJCBwV0mRuyUX2zMVfNJxPM6Kp-LU3cnNsPe9I9X-uO5B1A/viewform",
         allowExternal: true,
       },
       {
