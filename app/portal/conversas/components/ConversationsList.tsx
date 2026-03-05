@@ -75,22 +75,11 @@ export default function ConversationsList({
   const roleUpper = (currentUser.role || "").toUpperCase()
   const isDiretoria = roleUpper === "DIRETORIA"
 
-  /**
-   * ✅ Guarda a última mensagem "vista" por conversa (timestamp).
-   * - Se chegar lastMessageAt maior que lastSeenAt, e a conversa NÃO está aberta, mostramos "nova".
-   */
   const [lastSeenAtById, setLastSeenAtById] = useState<Record<string, number>>({})
   const selectedRef = useRef<string | null>(null)
 
   const fetchConversations = async () => {
     try {
-      /**
-       * ✅ Importante: seu backend provavelmente exige userId.
-       * Então SEMPRE mandamos userId.
-       *
-       * ✅ Diretoria pede "todas" via scope=all (se o backend ignorar, não quebra).
-       * Depois no backend (quando você mandar) a gente faz respeitar.
-       */
       const base = `https://apiwhats.drdetodos.com.br/conversations`
       const url = isDiretoria
         ? `${base}?userId=${encodeURIComponent(currentUser.id)}&role=${encodeURIComponent(
@@ -147,15 +136,24 @@ export default function ConversationsList({
 
   const filteredConversations = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return conversations
 
-    return conversations.filter((c) => {
+    // ✅ Regra de visibilidade no FRONT:
+    // - Diretoria: vê tudo
+    // - Outros: NÃO podem ver conversas já atribuídas a outra pessoa
+    let base = conversations
+    if (!isDiretoria) {
+      base = base.filter((c) => !c.agentId || c.agentId === currentUser.id)
+    }
+
+    if (!q) return base
+
+    return base.filter((c) => {
       const name = (c.name || "").toLowerCase()
       const phone = (c.phone || "").toLowerCase()
       const last = (c.lastMessage || "").toLowerCase()
       return name.includes(q) || phone.includes(q) || last.includes(q)
     })
-  }, [conversations, search])
+  }, [conversations, search, isDiretoria, currentUser.id])
 
   const handleCreateConversation = async () => {
     if (!newPhone || !newMessage) return
@@ -167,7 +165,8 @@ export default function ConversationsList({
         body: JSON.stringify({
           phone: newPhone,
           message: newMessage,
-          userId: currentUser.id
+          userId: currentUser.id,
+          role: roleUpper // ✅ importante
         })
       })
 
@@ -185,21 +184,24 @@ export default function ConversationsList({
 
   const handleSelectConversation = async (conv: Conversation) => {
     try {
-      // ✅ Diretoria: nunca bloqueia por lock e NÃO tenta dar lock.
       if (!isDiretoria) {
-        // regras normais (time comercial)
+        // ✅ se já está com outro, bloqueia
         if (conv.agentId && conv.agentId !== currentUser.id) {
           alert("Essa conversa já está sendo atendida por outro usuário.")
           return
         }
 
+        // ✅ se está livre, tenta assumir
         if (!conv.agentId) {
           const res = await fetch(
             `https://apiwhats.drdetodos.com.br/conversations/${conv.id}/lock`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ userId: currentUser.id })
+              body: JSON.stringify({
+                userId: currentUser.id,
+                role: roleUpper // ✅ importante
+              })
             }
           )
 
@@ -207,10 +209,12 @@ export default function ConversationsList({
             alert("Não foi possível assumir a conversa.")
             return
           }
+
+          // ✅ puxa lista de novo pra sumir pros outros e aparecer corretamente pra você
+          await fetchConversations()
         }
       }
 
-      // ✅ Ao abrir a conversa, marca como "vista" (zera badge)
       const ts = toTs(conv.lastMessageAt)
       if (ts) {
         setLastSeenAtById((prev) => {
@@ -246,7 +250,6 @@ export default function ConversationsList({
         </div>
       </div>
 
-      {/* List */}
       <div className="min-h-0">
         {filteredConversations.length === 0 ? (
           <div className="p-6 text-sm text-gray-500">Nenhuma conversa encontrada.</div>
@@ -254,15 +257,14 @@ export default function ConversationsList({
           filteredConversations.map((conv) => {
             const isSelected = selectedConversationId === conv.id
 
-            // ✅ Diretoria não “sofre” lock
-            const isLockedByOther = !isDiretoria && !!conv.agentId && conv.agentId !== currentUser.id
+            const isLockedByOther =
+              !isDiretoria && !!conv.agentId && conv.agentId !== currentUser.id
 
             const title = conv.name?.trim() ? conv.name : conv.phone
             const subtitle = conv.name?.trim() ? conv.phone : ""
             const time = formatListTime(conv.lastMessageAt)
             const initials = getInitials(title)
 
-            // ✅ indicador de "nova mensagem"
             const lastSeenTs = lastSeenAtById[conv.id] ?? 0
             const lastMsgTs = toTs(conv.lastMessageAt)
             const hasNew = !isSelected && lastMsgTs > 0 && lastMsgTs > lastSeenTs
@@ -292,7 +294,9 @@ export default function ConversationsList({
                         >
                           {title}
                         </div>
-                        {subtitle ? <div className="text-xs text-gray-500 truncate">{subtitle}</div> : null}
+                        {subtitle ? (
+                          <div className="text-xs text-gray-500 truncate">{subtitle}</div>
+                        ) : null}
                       </div>
 
                       <div className="flex flex-col items-end gap-1 shrink-0">
@@ -306,7 +310,6 @@ export default function ConversationsList({
                             {time}
                           </div>
 
-                          {/* 🔴 bolinha de nova mensagem */}
                           {hasNew ? (
                             <span className="w-2.5 h-2.5 rounded-full bg-green-500" title="Nova mensagem" />
                           ) : null}
@@ -336,7 +339,6 @@ export default function ConversationsList({
         )}
       </div>
 
-      {/* Modal Nova Conversa */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-2xl w-[420px] max-w-[92vw] space-y-4 shadow-xl border border-black/5">
