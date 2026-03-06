@@ -95,7 +95,36 @@ export async function GET(_req: NextRequest, context: RouteContext) {
       return dateA - dateB
     })
 
-    return NextResponse.json(merged)
+    const deduped: typeof merged = []
+    const seen = new Set<string>()
+
+    for (const item of merged) {
+      const timestampBucket = Math.floor(new Date(item.created_at).getTime() / 1000)
+
+      const key = item.is_system
+        ? [
+            "system",
+            item.conversation_id,
+            item.message.trim(),
+            timestampBucket
+          ].join("|")
+        : [
+            item.direction,
+            item.type,
+            item.conversation_id,
+            (item.message ?? "").trim(),
+            item.media_url ?? "",
+            item.agent_name ?? "",
+            timestampBucket
+          ].join("|")
+
+      if (seen.has(key)) continue
+
+      seen.add(key)
+      deduped.push(item)
+    }
+
+    return NextResponse.json(deduped)
   } catch (error) {
     console.error("Erro em /api/conversations/[id]/messages:", error)
 

@@ -55,6 +55,8 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
   const [isRecording, setIsRecording] = useState(false)
   const [recordTime, setRecordTime] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [sendingMessage, setSendingMessage] = useState(false)
+  const [sendingMedia, setSendingMedia] = useState(false)
 
   const [transferOpen, setTransferOpen] = useState(false)
   const [agents, setAgents] = useState<Agent[]>([])
@@ -158,14 +160,19 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
   }, [messages.length])
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !selectedConversationId) return
+    if (!newMessage.trim() || !selectedConversationId || sendingMessage) return
+
+    const messageToSend = newMessage
 
     try {
+      setSendingMessage(true)
+      setNewMessage("")
+
       const res = await fetch(`/api/conversations/${selectedConversationId}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: newMessage,
+          message: messageToSend,
           agentId: currentUser.id,
           agentEmail: currentUser.email
         })
@@ -173,18 +180,21 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
 
       if (!res.ok) {
         console.error("Erro ao enviar mensagem:", await res.text())
+        setNewMessage(messageToSend)
         return
       }
 
-      setNewMessage("")
       await fetchMessages(selectedConversationId)
     } catch (error) {
       console.error("Erro ao enviar mensagem:", error)
+      setNewMessage(messageToSend)
+    } finally {
+      setSendingMessage(false)
     }
   }
 
   const sendMedia = async (file: File) => {
-    if (!selectedConversationId) return
+    if (!selectedConversationId || sendingMedia) return
 
     const formData = new FormData()
     formData.append("file", file)
@@ -192,6 +202,8 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
     formData.append("agentEmail", currentUser.email)
 
     try {
+      setSendingMedia(true)
+
       const res = await fetch(`/api/conversations/${selectedConversationId}/send-media`, {
         method: "POST",
         body: formData
@@ -205,6 +217,8 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
       await fetchMessages(selectedConversationId)
     } catch (error) {
       console.error("Erro ao enviar mídia:", error)
+    } finally {
+      setSendingMedia(false)
     }
   }
 
@@ -216,7 +230,7 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
   }
 
   const startRecording = async () => {
-    if (!selectedConversationId) return
+    if (!selectedConversationId || sendingMedia || sendingMessage) return
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -443,7 +457,7 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
             onClick={openTransfer}
             className={iconBtn}
             title="Transferir para outro atendente"
-            disabled={!selectedConversationId}
+            disabled={!selectedConversationId || transferSaving}
           >
             <Users size={20} />
           </button>
@@ -515,7 +529,7 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
               onClick={() => fileInputRef.current?.click()}
               className={iconBtn}
               title="Anexar"
-              disabled={!selectedConversationId}
+              disabled={!selectedConversationId || sendingMedia || sendingMessage}
             >
               <Paperclip size={20} />
             </button>
@@ -525,27 +539,29 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
               onClick={() => imageInputRef.current?.click()}
               className={iconBtn}
               title="Imagem"
-              disabled={!selectedConversationId}
+              disabled={!selectedConversationId || sendingMedia || sendingMessage}
             >
               <ImageIcon size={20} />
             </button>
 
             <div className="flex-1">
-  <textarea
-    className="w-full min-h-[40px] max-h-32 px-4 py-2 rounded-2xl bg-gray-100 border border-transparent focus:border-gray-200 focus:bg-white outline-none disabled:opacity-60 resize-none overflow-y-auto"
-    value={newMessage}
-    onChange={(e) => setNewMessage(e.target.value)}
-    placeholder={selectedConversationId ? "Digite uma mensagem" : "Selecione uma conversa"}
-    disabled={!selectedConversationId}
-    rows={1}
-    onKeyDown={(e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault()
-        sendMessage()
-      }
-    }}
-  />
-</div>
+              <textarea
+                className="w-full min-h-[40px] max-h-32 px-4 py-2 rounded-2xl bg-gray-100 border border-transparent focus:border-gray-200 focus:bg-white outline-none disabled:opacity-60 resize-none overflow-y-auto"
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                placeholder={selectedConversationId ? "Digite uma mensagem" : "Selecione uma conversa"}
+                disabled={!selectedConversationId || sendingMessage}
+                rows={1}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault()
+                    if (!sendingMessage) {
+                      sendMessage()
+                    }
+                  }
+                }}
+              />
+            </div>
 
             {newMessage.trim().length === 0 ? (
               <button
@@ -553,7 +569,7 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
                 onClick={startRecording}
                 className={iconBtn}
                 title="Gravar áudio"
-                disabled={!selectedConversationId}
+                disabled={!selectedConversationId || sendingMedia || sendingMessage}
               >
                 <Mic size={20} />
               </button>
@@ -563,7 +579,7 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
                 onClick={sendMessage}
                 className="h-10 w-10 rounded-full flex items-center justify-center bg-green-500 text-white hover:bg-green-600 active:bg-green-700 transition disabled:opacity-60"
                 title="Enviar"
-                disabled={!selectedConversationId}
+                disabled={!selectedConversationId || sendingMessage}
               >
                 <Send size={18} />
               </button>
@@ -599,6 +615,7 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
               onClick={cancelRecording}
               className={iconBtn}
               title="Cancelar"
+              disabled={sendingMedia}
             >
               <Trash2 size={20} className="text-red-500" />
             </button>
@@ -621,8 +638,9 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
             <button
               type="button"
               onClick={stopRecording}
-              className="h-10 w-10 rounded-full flex items-center justify-center bg-green-500 text-white hover:bg-green-600 active:bg-green-700 transition"
+              className="h-10 w-10 rounded-full flex items-center justify-center bg-green-500 text-white hover:bg-green-600 active:bg-green-700 transition disabled:opacity-60"
               title="Enviar áudio"
+              disabled={sendingMedia}
             >
               <Send size={18} />
             </button>
@@ -657,7 +675,7 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
                 value={transferTo}
                 onChange={(e) => setTransferTo(e.target.value)}
                 className="w-full h-11 px-4 rounded-xl border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
-                disabled={agentsLoading}
+                disabled={agentsLoading || transferSaving}
               >
                 <option value="">
                   {agentsLoading ? "Carregando atendentes..." : "Selecione um atendente"}
