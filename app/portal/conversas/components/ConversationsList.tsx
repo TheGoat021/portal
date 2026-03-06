@@ -14,10 +14,11 @@ interface Props {
 interface BackendConversation {
   id: string
   phone: string
-  last_message: string
-  last_message_at: string
-  agent_id?: string | null
   name?: string | null
+  lastMessage: string
+  lastMessageAt?: string | null
+  agentId?: string | null
+  agentName?: string | null
 }
 
 interface Conversation {
@@ -27,6 +28,7 @@ interface Conversation {
   lastMessage: string
   lastMessageAt?: string
   agentId?: string | null
+  agentName?: string | null
 }
 
 function formatListTime(dateString?: string) {
@@ -71,37 +73,35 @@ export default function ConversationsList({
   const [newMessage, setNewMessage] = useState("")
   const [search, setSearch] = useState("")
 
-  // ✅ Normaliza role (evita "Diretoria" vs "DIRETORIA" dar bug)
   const roleUpper = (currentUser.role || "").toUpperCase()
-  const isDiretoria = roleUpper === "DIRETORIA"
+  const isDiretoria =
+    roleUpper === "DIRETORIA" ||
+    roleUpper === "ADMINISTRAÇÃO" ||
+    roleUpper === "ADMINISTRACAO"
 
   const [lastSeenAtById, setLastSeenAtById] = useState<Record<string, number>>({})
   const selectedRef = useRef<string | null>(null)
 
   const fetchConversations = async () => {
     try {
-      const base = `https://apiwhats.drdetodos.com.br/conversations`
-      const url = isDiretoria
-        ? `${base}?userId=${encodeURIComponent(currentUser.id)}&role=${encodeURIComponent(
-            roleUpper
-          )}&scope=all`
-        : `${base}?userId=${encodeURIComponent(currentUser.id)}&role=${encodeURIComponent(roleUpper)}`
-
-      const res = await fetch(url, { cache: "no-store" })
-      if (!res.ok) return
+      const res = await fetch("/api/conversations", { cache: "no-store" })
+      if (!res.ok) {
+        console.error("Erro ao buscar conversas:", await res.text())
+        return
+      }
 
       const data: BackendConversation[] = await res.json()
 
-      const mapped: Conversation[] = data.map((conv) => ({
+      const mapped: Conversation[] = (data ?? []).map((conv) => ({
         id: String(conv.id),
         phone: conv.phone,
         name: conv.name ?? null,
-        lastMessage: conv.last_message ?? "",
-        lastMessageAt: conv.last_message_at ?? undefined,
-        agentId: conv.agent_id ?? null
+        lastMessage: conv.lastMessage ?? "",
+        lastMessageAt: conv.lastMessageAt ?? undefined,
+        agentId: conv.agentId ?? null,
+        agentName: conv.agentName ?? null
       }))
 
-      // ✅ Se a conversa estiver aberta, considera "vista" automaticamente
       const selectedId = selectedRef.current
       if (selectedId) {
         const openConv = mapped.find((c) => c.id === selectedId)
@@ -127,7 +127,6 @@ export default function ConversationsList({
     fetchConversations()
     const interval = setInterval(fetchConversations, 3000)
     return () => clearInterval(interval)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser.id, currentUser.role])
 
   useEffect(() => {
@@ -137,10 +136,8 @@ export default function ConversationsList({
   const filteredConversations = useMemo(() => {
     const q = search.trim().toLowerCase()
 
-    // ✅ Regra de visibilidade no FRONT:
-    // - Diretoria: vê tudo
-    // - Outros: NÃO podem ver conversas já atribuídas a outra pessoa
     let base = conversations
+
     if (!isDiretoria) {
       base = base.filter((c) => !c.agentId || c.agentId === currentUser.id)
     }
@@ -151,7 +148,14 @@ export default function ConversationsList({
       const name = (c.name || "").toLowerCase()
       const phone = (c.phone || "").toLowerCase()
       const last = (c.lastMessage || "").toLowerCase()
-      return name.includes(q) || phone.includes(q) || last.includes(q)
+      const agent = (c.agentName || "").toLowerCase()
+
+      return (
+        name.includes(q) ||
+        phone.includes(q) ||
+        last.includes(q) ||
+        agent.includes(q)
+      )
     })
   }, [conversations, search, isDiretoria, currentUser.id])
 
@@ -166,11 +170,14 @@ export default function ConversationsList({
           phone: newPhone,
           message: newMessage,
           userId: currentUser.id,
-          role: roleUpper // ✅ importante
+          role: roleUpper
         })
       })
 
-      if (!res.ok) return
+      if (!res.ok) {
+        console.error("Erro ao criar conversa:", await res.text())
+        return
+      }
 
       setNewPhone("")
       setNewMessage("")
@@ -185,13 +192,11 @@ export default function ConversationsList({
   const handleSelectConversation = async (conv: Conversation) => {
     try {
       if (!isDiretoria) {
-        // ✅ se já está com outro, bloqueia
         if (conv.agentId && conv.agentId !== currentUser.id) {
           alert("Essa conversa já está sendo atendida por outro usuário.")
           return
         }
 
-        // ✅ se está livre, tenta assumir
         if (!conv.agentId) {
           const res = await fetch(
             `https://apiwhats.drdetodos.com.br/conversations/${conv.id}/lock`,
@@ -200,7 +205,7 @@ export default function ConversationsList({
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 userId: currentUser.id,
-                role: roleUpper // ✅ importante
+                role: roleUpper
               })
             }
           )
@@ -210,7 +215,6 @@ export default function ConversationsList({
             return
           }
 
-          // ✅ puxa lista de novo pra sumir pros outros e aparecer corretamente pra você
           await fetchConversations()
         }
       }
@@ -294,8 +298,15 @@ export default function ConversationsList({
                         >
                           {title}
                         </div>
+
                         {subtitle ? (
                           <div className="text-xs text-gray-500 truncate">{subtitle}</div>
+                        ) : null}
+
+                        {conv.agentName ? (
+                          <div className="text-[11px] text-gray-400 truncate mt-0.5">
+                            Atendente: {conv.agentName}
+                          </div>
                         ) : null}
                       </div>
 
@@ -311,7 +322,10 @@ export default function ConversationsList({
                           </div>
 
                           {hasNew ? (
-                            <span className="w-2.5 h-2.5 rounded-full bg-green-500" title="Nova mensagem" />
+                            <span
+                              className="w-2.5 h-2.5 rounded-full bg-green-500"
+                              title="Nova mensagem"
+                            />
                           ) : null}
                         </div>
 
