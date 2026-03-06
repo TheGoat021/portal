@@ -7,6 +7,7 @@ import ConversationsLayout from "./components/ConversationsLayout"
 type UserProfile = {
   id: string
   role: string
+  email: string
 }
 
 export default function ConversasPage() {
@@ -18,25 +19,40 @@ export default function ConversasPage() {
 
   useEffect(() => {
     async function loadUser() {
-      const { data } = await supabase.auth.getUser()
+      const { data, error } = await supabase.auth.getUser()
+
+      if (error) {
+        console.error("Erro ao buscar usuário autenticado:", error)
+        return
+      }
 
       if (!data?.user) return
 
-      const { data: profile } = await supabase
+      const authUser = data.user
+
+      const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("id, role")
-        .eq("id", data.user.id)
+        .eq("id", authUser.id)
         .single()
 
+      if (profileError) {
+        console.error("Erro ao buscar profile:", profileError)
+        return
+      }
+
       if (profile) {
-        setCurrentUser(profile)
+        setCurrentUser({
+          id: profile.id,
+          role: profile.role,
+          email: authUser.email ?? ""
+        })
       }
     }
 
     loadUser()
   }, [])
 
-  // 🔥 ESSENCIAL: evita undefined
   if (!currentUser) {
     return <div className="p-6">Carregando...</div>
   }

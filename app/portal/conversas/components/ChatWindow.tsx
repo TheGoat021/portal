@@ -10,12 +10,15 @@ import {
   FileText,
   Users,
   X,
-  ChevronDown,
   MessageSquare
 } from "lucide-react"
 
 interface Props {
   selectedConversationId: string | null
+  currentUser: {
+    id: string
+    email: string
+  }
 }
 
 interface BackendMessage {
@@ -23,8 +26,10 @@ interface BackendMessage {
   message: string
   direction: "inbound" | "outbound"
   created_at: string
-  type?: "text" | "image" | "audio" | "document"
+  type?: "text" | "image" | "audio" | "document" | "system"
   media_url?: string | null
+  agent_name?: string | null
+  is_system?: boolean
 }
 
 interface Message {
@@ -32,8 +37,10 @@ interface Message {
   text: string
   direction: "inbound" | "outbound"
   createdAt: string
-  type: "text" | "image" | "audio" | "document"
+  type: "text" | "image" | "audio" | "document" | "system"
   mediaUrl?: string | null
+  agentName?: string | null
+  isSystem?: boolean
 }
 
 type Agent = {
@@ -42,20 +49,18 @@ type Agent = {
   role: string
 }
 
-export default function ChatWindow({ selectedConversationId }: Props) {
+export default function ChatWindow({ selectedConversationId, currentUser }: Props) {
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [isRecording, setIsRecording] = useState(false)
   const [recordTime, setRecordTime] = useState(0)
   const [loading, setLoading] = useState(false)
 
-  // Transfer modal
   const [transferOpen, setTransferOpen] = useState(false)
   const [agents, setAgents] = useState<Agent[]>([])
   const [agentsLoading, setAgentsLoading] = useState(false)
   const [transferTo, setTransferTo] = useState<string>("")
   const [transferSaving, setTransferSaving] = useState(false)
-  const [agentsDropdownOpen, setAgentsDropdownOpen] = useState(false)
 
   const recordIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
@@ -69,7 +74,21 @@ export default function ChatWindow({ selectedConversationId }: Props) {
 
   function formatTime(dateString: string) {
     const date = new Date(dateString)
-    return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    return date.toLocaleTimeString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit"
+    })
+  }
+
+  function formatDateTime(dateString: string) {
+    const date = new Date(dateString)
+    return date.toLocaleString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    })
   }
 
   function formatRecordTime(seconds: number) {
@@ -81,18 +100,27 @@ export default function ChatWindow({ selectedConversationId }: Props) {
   const fetchMessages = async (conversationId: string) => {
     try {
       setLoading(true)
-      const res = await fetch(`https://apiwhats.drdetodos.com.br/messages/${conversationId}`)
-      if (!res.ok) return
+
+      const res = await fetch(`/api/conversations/${conversationId}/messages`, {
+        cache: "no-store"
+      })
+
+      if (!res.ok) {
+        console.error("Erro ao buscar mensagens:", await res.text())
+        return
+      }
 
       const data: BackendMessage[] = await res.json()
 
       const mapped: Message[] = (data ?? []).map((msg) => ({
         id: String(msg.id),
-        text: msg.message,
+        text: msg.message ?? "",
         direction: msg.direction,
         createdAt: msg.created_at,
-        type: msg.type || "text",
-        mediaUrl: msg.media_url || null
+        type: msg.is_system ? "system" : msg.type || "text",
+        mediaUrl: msg.media_url || null,
+        agentName: msg.agent_name || null,
+        isSystem: Boolean(msg.is_system) || msg.type === "system"
       }))
 
       setMessages(mapped)
@@ -103,7 +131,6 @@ export default function ChatWindow({ selectedConversationId }: Props) {
     }
   }
 
-  // Polling + reset ao trocar conversa
   useEffect(() => {
     if (!selectedConversationId) {
       setMessages([])
@@ -112,7 +139,7 @@ export default function ChatWindow({ selectedConversationId }: Props) {
     }
 
     let active = true
-    setMessages([]) // limpa imediatamente ao trocar
+    setMessages([])
     fetchMessages(selectedConversationId)
 
     const interval = setInterval(() => {
@@ -134,16 +161,20 @@ export default function ChatWindow({ selectedConversationId }: Props) {
     if (!newMessage.trim() || !selectedConversationId) return
 
     try {
-      const res = await fetch("https://apiwhats.drdetodos.com.br/send", {
+      const res = await fetch(`/api/conversations/${selectedConversationId}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          conversationId: selectedConversationId,
-          message: newMessage
+          message: newMessage,
+          agentId: currentUser.id,
+          agentEmail: currentUser.email
         })
       })
 
-      if (!res.ok) return
+      if (!res.ok) {
+        console.error("Erro ao enviar mensagem:", await res.text())
+        return
+      }
 
       setNewMessage("")
       await fetchMessages(selectedConversationId)
@@ -156,16 +187,20 @@ export default function ChatWindow({ selectedConversationId }: Props) {
     if (!selectedConversationId) return
 
     const formData = new FormData()
-    formData.append("conversationId", selectedConversationId)
     formData.append("file", file)
+    formData.append("agentId", currentUser.id)
+    formData.append("agentEmail", currentUser.email)
 
     try {
-      const res = await fetch("https://apiwhats.drdetodos.com.br/send-media", {
+      const res = await fetch(`/api/conversations/${selectedConversationId}/send-media`, {
         method: "POST",
         body: formData
       })
 
-      if (!res.ok) return
+      if (!res.ok) {
+        console.error("Erro ao enviar mídia:", await res.text())
+        return
+      }
 
       await fetchMessages(selectedConversationId)
     } catch (error) {
@@ -175,7 +210,7 @@ export default function ChatWindow({ selectedConversationId }: Props) {
 
   const stopStreamTracks = () => {
     try {
-      streamRef.current?.getTracks().forEach((t) => t.stop())
+      streamRef.current?.getTracks().forEach((track) => track.stop())
     } catch {}
     streamRef.current = null
   }
@@ -192,14 +227,20 @@ export default function ChatWindow({ selectedConversationId }: Props) {
       audioChunksRef.current = []
 
       mediaRecorder.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) audioChunksRef.current.push(event.data)
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data)
+        }
       }
 
       mediaRecorder.onstop = async () => {
         try {
           if (audioChunksRef.current.length === 0) return
+
           const audioBlob = new Blob(audioChunksRef.current, { type: "audio/ogg" })
-          const file = new File([audioBlob], `audio_${Date.now()}.ogg`, { type: "audio/ogg" })
+          const file = new File([audioBlob], `audio_${Date.now()}.ogg`, {
+            type: "audio/ogg"
+          })
+
           await sendMedia(file)
         } finally {
           setRecordTime(0)
@@ -238,28 +279,29 @@ export default function ChatWindow({ selectedConversationId }: Props) {
     if (recordIntervalRef.current) clearInterval(recordIntervalRef.current)
   }
 
-  // ----------------------------
-  // Transfer: load agents + submit
-  // ----------------------------
   const openTransfer = async () => {
     if (!selectedConversationId) return
+
     setTransferOpen(true)
     setTransferTo("")
     setAgents([])
-    setAgentsDropdownOpen(false)
     setAgentsLoading(true)
 
     try {
-      const res = await fetch("https://apiwhats.drdetodos.com.br/agents")
+      const res = await fetch("/api/agents", {
+        cache: "no-store"
+      })
+
       if (!res.ok) {
         console.error("Erro ao buscar atendentes:", await res.text())
         setAgents([])
         return
       }
+
       const data: Agent[] = await res.json()
       setAgents(data ?? [])
-    } catch (e) {
-      console.error("Erro ao buscar atendentes:", e)
+    } catch (error) {
+      console.error("Erro ao buscar atendentes:", error)
     } finally {
       setAgentsLoading(false)
     }
@@ -271,16 +313,13 @@ export default function ChatWindow({ selectedConversationId }: Props) {
     try {
       setTransferSaving(true)
 
-      const res = await fetch(
-        `https://apiwhats.drdetodos.com.br/conversations/${selectedConversationId}/transfer`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            toUserId: transferTo
-          })
-        }
-      )
+      const res = await fetch(`/api/conversations/${selectedConversationId}/transfer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          toUserId: transferTo
+        })
+      })
 
       if (!res.ok) {
         console.error("Erro ao transferir:", await res.text())
@@ -288,21 +327,25 @@ export default function ChatWindow({ selectedConversationId }: Props) {
       }
 
       setTransferOpen(false)
-      setAgentsDropdownOpen(false)
-    } catch (e) {
-      console.error("Erro ao transferir conversa:", e)
+      await fetchMessages(selectedConversationId)
+    } catch (error) {
+      console.error("Erro ao transferir conversa:", error)
     } finally {
       setTransferSaving(false)
     }
   }
 
   const selectedAgentLabel = useMemo(() => {
-    const a = agents.find((x) => x.id === transferTo)
-    if (!a) return "Selecione um atendente"
-    return `${a.email} (${a.role})`
+    const agent = agents.find((item) => item.id === transferTo)
+    if (!agent) return "Selecione um atendente"
+    return `${agent.email} (${agent.role})`
   }, [agents, transferTo])
 
   function renderMessageContent(msg: Message) {
+    if (msg.type === "system" || msg.isSystem) {
+      return null
+    }
+
     if (msg.type === "image") {
       if (msg.mediaUrl) {
         return (
@@ -313,6 +356,7 @@ export default function ChatWindow({ selectedConversationId }: Props) {
           />
         )
       }
+
       return (
         <div className="flex items-center gap-2 text-sm text-gray-700">
           <ImageIcon size={16} className="opacity-70" />
@@ -332,6 +376,7 @@ export default function ChatWindow({ selectedConversationId }: Props) {
           </div>
         )
       }
+
       return (
         <div className="flex items-center gap-2 text-sm text-gray-700">
           <Mic size={16} className="opacity-70" />
@@ -346,6 +391,7 @@ export default function ChatWindow({ selectedConversationId }: Props) {
           <a
             href={msg.mediaUrl}
             target="_blank"
+            rel="noreferrer"
             className="inline-flex items-center gap-2 text-sm text-blue-700 hover:underline"
           >
             <FileText size={16} className="opacity-70" />
@@ -353,6 +399,7 @@ export default function ChatWindow({ selectedConversationId }: Props) {
           </a>
         )
       }
+
       return (
         <div className="flex items-center gap-2 text-sm text-gray-700">
           <FileText size={16} className="opacity-70" />
@@ -364,12 +411,22 @@ export default function ChatWindow({ selectedConversationId }: Props) {
     return <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
   }
 
+  function renderSystemMessage(msg: Message) {
+    return (
+      <div key={msg.id} className="flex justify-center py-2">
+        <div className="max-w-[80%] rounded-2xl bg-[#FFF3CD] text-[#6B5B00] px-4 py-3 text-center shadow-sm border border-[#F3E19C]">
+          <div className="text-sm italic">{msg.text}</div>
+          <div className="mt-1 text-xs opacity-70">{formatDateTime(msg.createdAt)}</div>
+        </div>
+      </div>
+    )
+  }
+
   const iconBtn =
     "h-10 w-10 rounded-full flex items-center justify-center text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition disabled:opacity-60 disabled:hover:bg-transparent"
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-[#EFEAE2]">
-      {/* CHAT HEADER (ações) */}
       <div className="h-14 px-3 flex items-center justify-between border-b bg-white">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-gray-900 truncate">
@@ -393,7 +450,6 @@ export default function ChatWindow({ selectedConversationId }: Props) {
         </div>
       </div>
 
-      {/* MESSAGES */}
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-2">
         {!selectedConversationId ? (
           <div className="h-full flex items-center justify-center">
@@ -412,31 +468,45 @@ export default function ChatWindow({ selectedConversationId }: Props) {
             )}
 
             {messages.map((msg) => {
+              if (msg.isSystem || msg.type === "system") {
+                return renderSystemMessage(msg)
+              }
+
               const outbound = msg.direction === "outbound"
+
               return (
                 <div
                   key={msg.id}
                   className={`flex ${outbound ? "justify-end" : "justify-start"}`}
                 >
-                  <div
-                    className={`max-w-[75%] rounded-2xl px-3 py-2 shadow-sm border border-black/5 ${
-                      outbound ? "bg-[#D9FDD3]" : "bg-white"
-                    }`}
-                  >
-                    {renderMessageContent(msg)}
-                    <div className="mt-1 text-[10px] text-gray-500 text-right leading-none">
-                      {formatTime(msg.createdAt)}
+                  <div className="max-w-[75%]">
+                    {outbound && msg.agentName && (
+                      <div className="px-1 mb-1 text-xs font-semibold text-gray-700">
+                        {msg.agentName}:
+                      </div>
+                    )}
+
+                    <div
+                      className={`rounded-2xl px-3 py-2 shadow-sm border border-black/5 ${
+                        outbound ? "bg-[#D9FDD3]" : "bg-white"
+                      }`}
+                    >
+                      {renderMessageContent(msg)}
+
+                      <div className="mt-1 text-[10px] text-gray-500 text-right leading-none">
+                        {formatTime(msg.createdAt)}
+                      </div>
                     </div>
                   </div>
                 </div>
               )
             })}
+
             <div ref={bottomRef} />
           </>
         )}
       </div>
 
-      {/* INPUT BAR */}
       <div className="border-t bg-white px-3 py-2">
         {!isRecording ? (
           <div className="flex items-center gap-2">
@@ -461,20 +531,21 @@ export default function ChatWindow({ selectedConversationId }: Props) {
             </button>
 
             <div className="flex-1">
-              <input
-                className="w-full h-10 px-4 rounded-full bg-gray-100 border border-transparent focus:border-gray-200 focus:bg-white outline-none disabled:opacity-60"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder={selectedConversationId ? "Digite uma mensagem" : "Selecione uma conversa"}
-                disabled={!selectedConversationId}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault()
-                    sendMessage()
-                  }
-                }}
-              />
-            </div>
+  <textarea
+    className="w-full min-h-[40px] max-h-32 px-4 py-2 rounded-2xl bg-gray-100 border border-transparent focus:border-gray-200 focus:bg-white outline-none disabled:opacity-60 resize-none overflow-y-auto"
+    value={newMessage}
+    onChange={(e) => setNewMessage(e.target.value)}
+    placeholder={selectedConversationId ? "Digite uma mensagem" : "Selecione uma conversa"}
+    disabled={!selectedConversationId}
+    rows={1}
+    onKeyDown={(e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault()
+        sendMessage()
+      }
+    }}
+  />
+</div>
 
             {newMessage.trim().length === 0 ? (
               <button
@@ -503,8 +574,8 @@ export default function ChatWindow({ selectedConversationId }: Props) {
               ref={fileInputRef}
               className="hidden"
               onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (f) sendMedia(f)
+                const file = e.target.files?.[0]
+                if (file) sendMedia(file)
                 e.currentTarget.value = ""
               }}
             />
@@ -515,15 +586,20 @@ export default function ChatWindow({ selectedConversationId }: Props) {
               ref={imageInputRef}
               className="hidden"
               onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (f) sendMedia(f)
+                const file = e.target.files?.[0]
+                if (file) sendMedia(file)
                 e.currentTarget.value = ""
               }}
             />
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            <button type="button" onClick={cancelRecording} className={iconBtn} title="Cancelar">
+            <button
+              type="button"
+              onClick={cancelRecording}
+              className={iconBtn}
+              title="Cancelar"
+            >
               <Trash2 size={20} className="text-red-500" />
             </button>
 
@@ -554,80 +630,77 @@ export default function ChatWindow({ selectedConversationId }: Props) {
         )}
       </div>
 
-      {/* TRANSFER MODAL */}
       {transferOpen && (
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-    <div className="w-[520px] max-w-[96vw] bg-white rounded-2xl shadow-xl border border-black/5 overflow-hidden">
-      {/* Header */}
-      <div className="px-5 py-4 border-b flex items-center justify-between">
-        <div>
-          <div className="text-sm font-semibold">Transferir conversa</div>
-          <div className="text-xs text-gray-500">
-            Selecione o atendente que vai assumir
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="w-[520px] max-w-[96vw] bg-white rounded-2xl shadow-xl border border-black/5 overflow-hidden">
+            <div className="px-5 py-4 border-b flex items-center justify-between">
+              <div>
+                <div className="text-sm font-semibold">Transferir conversa</div>
+                <div className="text-xs text-gray-500">
+                  Selecione o atendente que vai assumir
+                </div>
+              </div>
+
+              <button
+                className="h-9 w-9 rounded-full hover:bg-gray-100 flex items-center justify-center"
+                onClick={() => setTransferOpen(false)}
+                title="Fechar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3">
+              <label className="text-xs text-gray-500">Atendente</label>
+
+              <select
+                value={transferTo}
+                onChange={(e) => setTransferTo(e.target.value)}
+                className="w-full h-11 px-4 rounded-xl border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
+                disabled={agentsLoading}
+              >
+                <option value="">
+                  {agentsLoading ? "Carregando atendentes..." : "Selecione um atendente"}
+                </option>
+
+                {agents.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.email} ({a.role})
+                  </option>
+                ))}
+              </select>
+
+              {!agentsLoading && agents.length === 0 && (
+                <div className="text-xs text-gray-500">Nenhum atendente encontrado.</div>
+              )}
+
+              {!!transferTo && (
+                <div className="text-xs text-gray-500">
+                  Selecionado: <span className="font-medium text-gray-700">{selectedAgentLabel}</span>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  className="px-4 py-2 rounded-xl border hover:bg-gray-50"
+                  onClick={() => setTransferOpen(false)}
+                  disabled={transferSaving}
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  className="px-4 py-2 rounded-xl bg-gray-900 text-white hover:bg-black disabled:opacity-60"
+                  onClick={confirmTransfer}
+                  disabled={!transferTo || transferSaving}
+                >
+                  {transferSaving ? "Transferindo..." : "Confirmar"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-        <button
-          className="h-9 w-9 rounded-full hover:bg-gray-100 flex items-center justify-center"
-          onClick={() => setTransferOpen(false)}
-          title="Fechar"
-        >
-          <X size={18} />
-        </button>
-      </div>
-
-      {/* Body */}
-      <div className="p-5 space-y-3">
-        <label className="text-xs text-gray-500">Atendente</label>
-
-        {/* ✅ SIMPLE + CLEAN: select */}
-        <select
-          value={transferTo}
-          onChange={(e) => setTransferTo(e.target.value)}
-          className="w-full h-11 px-4 rounded-xl border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
-          disabled={agentsLoading}
-        >
-          <option value="">
-            {agentsLoading ? "Carregando atendentes..." : "Selecione um atendente"}
-          </option>
-
-          {agents.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.email} ({a.role})
-            </option>
-          ))}
-        </select>
-
-        {!agentsLoading && agents.length === 0 && (
-          <div className="text-xs text-gray-500">Nenhum atendente encontrado.</div>
-        )}
-
-        {/* Footer */}
-        <div className="flex justify-end gap-2 pt-2">
-          <button
-            className="px-4 py-2 rounded-xl border hover:bg-gray-50"
-            onClick={() => setTransferOpen(false)}
-            disabled={transferSaving}
-          >
-            Cancelar
-          </button>
-
-          <button
-            className="px-4 py-2 rounded-xl bg-gray-900 text-white hover:bg-black disabled:opacity-60"
-            onClick={confirmTransfer}
-            disabled={!transferTo || transferSaving}
-          >
-            {transferSaving ? "Transferindo..." : "Confirmar"}
-          </button>
-        </div>
-
-        <p className="text-[11px] text-gray-400 pt-1">
-          Obs: precisa existir no backend: <b>GET /agents</b> e{" "}
-          <b>POST /conversations/:id/transfer</b>.
-        </p>
-      </div>
-    </div>
-  </div>
-)}
+      )}
     </div>
   )
 }
