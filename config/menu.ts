@@ -76,10 +76,7 @@ export const menuConfig: MenuSection[] = [
         label: "WhatsApp",
         href: "/portal/conversas",
       },
-      {
-        label: "Conexão Whats",
-        href: "/portal/whatsapp",
-      },
+      
       {
         label: "Leads",
         href: "/portal/leads",
@@ -96,6 +93,10 @@ export const menuConfig: MenuSection[] = [
     icon: Calendar,
     roles: ["AGENDAMENTO", "EXAMES", "DIRETORIA"],
     items: [
+      {
+        label: "WhatsApp",
+        href: "/portal/conversas",
+      },
       {
         label: "TN Cancelamento",
         href: "https://docs.google.com/document/d/1xxRstJptIuIYeVqroVEk-bZZ8n5jq9foXbOeg55_9_0/edit?usp=sharing",
@@ -366,6 +367,10 @@ export const menuConfig: MenuSection[] = [
       {
         label: "Lançar Evolução",
         href: "/portal/evolucao/lancar",
+      },
+      {
+        label: "Conexão Whats",
+        href: "/portal/whatsapp",
       },
     ],
   },
