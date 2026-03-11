@@ -1,77 +1,172 @@
-import { NextResponse } from "next/server"
-import { supabaseAdmin } from "@/lib/supabaseAdmin"
+import { NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
-const STATUS_VALIDOS = ["novo", "em_contato", "proposta", "ganho", "perdido"] as const
+type LeadStatus =
+  | 'novo'
+  | 'em_contato'
+  | 'proposta'
+  | 'ganho'
+  | 'perdido'
 
-type StatusLead = (typeof STATUS_VALIDOS)[number]
+const DEFAULT_LEAD_STATUS: LeadStatus = 'novo'
 
 /**
- * ATUALIZAR STATUS DO LEAD
- * PATCH /api/leads/:id/status
+ * LISTAR LEADS (PIPELINE)
  */
-type Ctx = { params: Promise<{ id: string }> }
+export async function GET() {
+  const { data, error } = await supabaseAdmin
+    .from('leads')
+    .select(`
+      id,
+      conversation_id,
+      status,
+      created_at,
+      cliente:clientes (
+        id,
+        nome,
+        telefone,
+        email
+      ),
+      origem:origens (
+        id,
+        nome,
+        plataforma
+      )
+    `)
+    .order('created_at', { ascending: false })
 
-export async function PATCH(req: Request, { params }: Ctx) {
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  const normalized = (data ?? []).map((lead) => ({
+    ...lead,
+    status: (lead.status as LeadStatus) || DEFAULT_LEAD_STATUS,
+    cliente: lead.cliente ?? {
+      id: '',
+      nome: 'Cliente não informado',
+      telefone: '',
+      email: null
+    },
+    origem: lead.origem ?? {
+      id: '',
+      nome: 'Sem origem',
+      plataforma: null
+    }
+  }))
+
+  return NextResponse.json(normalized)
+}
+
+/**
+ * CRIAR LEAD
+ */
+export async function POST(req: Request) {
   try {
-    const { id: leadId } = await params
     const body = await req.json()
-    const { status } = body as { status?: StatusLead }
+    const { nome, telefone, email, origem_id, conversation_id } = body
 
-    // 1️⃣ validações básicas
-    if (!leadId) {
-      return NextResponse.json({ error: "ID do lead não informado" }, { status: 400 })
+    if (!nome || !telefone || !origem_id) {
+      return NextResponse.json(
+        { error: 'nome, telefone e origem_id são obrigatórios' },
+        { status: 400 }
+      )
     }
 
-    if (!status || !STATUS_VALIDOS.includes(status)) {
-      return NextResponse.json({ error: "Status inválido" }, { status: 400 })
-    }
-
-    // 2️⃣ regra de negócio: não mover se já finalizado
-    const { data: leadAtual, error: leadError } = await supabaseAdmin
-      .from("leads")
-      .select("status")
-      .eq("id", leadId)
+    /** 1️⃣ Buscar origem */
+    const { data: origem, error: origemError } = await supabaseAdmin
+      .from('origens')
+      .select('id, nome, plataforma')
+      .eq('id', origem_id)
       .single()
 
-    if (leadError || !leadAtual) {
-      return NextResponse.json({ error: "Lead não encontrado" }, { status: 404 })
+    if (origemError || !origem) {
+      return NextResponse.json(
+        { error: 'Origem inválida' },
+        { status: 400 }
+      )
     }
 
-    if (leadAtual.status === "ganho" || leadAtual.status === "perdido") {
-      return NextResponse.json({ error: "Lead já finalizado" }, { status: 409 })
-    }
-
-    // 3️⃣ atualizar status
-    const { data, error } = await supabaseAdmin
-      .from("leads")
-      .update({ status })
-      .eq("id", leadId)
-      .select(
-        `
+    /** 2️⃣ Criar cliente */
+    const { data: cliente, error: clienteError } = await supabaseAdmin
+      .from('clientes')
+      .insert({
+        nome,
+        telefone,
+        email: email || null
+      })
+      .select(`
         id,
+        nome,
+        telefone,
+        email
+      `)
+      .single()
+
+    if (clienteError || !cliente) {
+      return NextResponse.json(
+        { error: clienteError?.message || 'Erro ao criar cliente' },
+        { status: 500 }
+      )
+    }
+
+    /** 3️⃣ Criar lead */
+    const { data: lead, error: leadError } = await supabaseAdmin
+      .from('leads')
+      .insert({
+        cliente_id: cliente.id,
+        origem_id: origem.id,
+        conversation_id: conversation_id || null,
+        status: DEFAULT_LEAD_STATUS,
+        plataforma: 'manual'
+      })
+      .select(`
+        id,
+        conversation_id,
         status,
         created_at,
         cliente:clientes (
           id,
           nome,
-          telefone
+          telefone,
+          email
         ),
         origem:origens (
           id,
           nome,
           plataforma
         )
-      `
-      )
+      `)
       .single()
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (leadError || !lead) {
+      return NextResponse.json(
+        { error: leadError?.message || 'Erro ao criar lead' },
+        { status: 500 }
+      )
     }
 
-    return NextResponse.json(data)
+    return NextResponse.json({
+      ...lead,
+      status: (lead.status as LeadStatus) || DEFAULT_LEAD_STATUS,
+      cliente: lead.cliente ?? {
+        id: cliente.id,
+        nome: cliente.nome,
+        telefone: cliente.telefone,
+        email: cliente.email
+      },
+      origem: lead.origem ?? {
+        id: origem.id,
+        nome: origem.nome,
+        plataforma: origem.plataforma
+      }
+    })
   } catch (error) {
-    console.error(error)
-    return NextResponse.json({ error: "Erro ao atualizar status" }, { status: 500 })
+    console.error('Erro ao criar lead:', error)
+
+    return NextResponse.json(
+      { error: 'Erro interno ao criar lead' },
+      { status: 500 }
+    )
   }
 }

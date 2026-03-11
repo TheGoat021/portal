@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export function DateSelector({
   startDate,
@@ -13,11 +13,9 @@ export function DateSelector({
 }) {
   const today = new Date().toISOString().slice(0, 10);
 
-  // 🔹 estados temporários
   const [tempStart, setTempStart] = useState(startDate);
   const [tempEnd, setTempEnd] = useState(endDate);
 
-  // 🔹 sync quando o pai muda
   useEffect(() => {
     setTempStart(startDate);
     setTempEnd(endDate);
@@ -40,45 +38,54 @@ export function DateSelector({
   }
 
   return (
-    <div className="flex items-center gap-3">
-      <button
-        onClick={setToday}
-        className="px-4 py-2 rounded-md border border-green-500/40 text-green-400 hover:bg-green-500/10"
-      >
-        Hoje
-      </button>
+    <div className="flex flex-wrap items-center gap-2">
+      {/* Botões rápidos */}
+      <QuickButton label="Hoje" onClick={setToday} />
+      <QuickButton label="Ontem" onClick={setYesterday} />
 
-      <button
-        onClick={setYesterday}
-        className="px-4 py-2 rounded-md border border-green-500/40 text-green-400 hover:bg-green-500/10"
-      >
-        Ontem
-      </button>
-
+      {/* Datas */}
       <div className="flex items-center gap-2">
         <input
           type="date"
           value={tempStart}
           onChange={(e) => setTempStart(e.target.value)}
-          className="bg-black border border-green-500/40 text-gray-200 rounded px-2 py-1"
+          className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
         />
 
-        <span className="text-gray-400">até</span>
+        <span className="text-sm text-gray-500">até</span>
 
         <input
           type="date"
           value={tempEnd}
           onChange={(e) => setTempEnd(e.target.value)}
-          className="bg-black border border-green-500/40 text-gray-200 rounded px-2 py-1"
+          className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
         />
       </div>
 
+      {/* Aplicar */}
       <button
         onClick={applyDates}
-        className="px-4 py-2 rounded-md bg-green-600 text-black font-medium hover:bg-green-500"
+        className="h-10 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
       >
         Aplicar
       </button>
     </div>
+  );
+}
+
+function QuickButton({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="h-10 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 hover:bg-gray-50"
+    >
+      {label}
+    </button>
   );
 }

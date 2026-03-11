@@ -11,6 +11,7 @@ export async function GET() {
         name,
         last_message,
         last_message_at,
+        last_message_type,
         agent_id,
         agent_name
       `)
@@ -30,6 +31,7 @@ export async function GET() {
       name: conv.name ?? conv.phone ?? "Sem nome",
       lastMessage: conv.last_message ?? "",
       lastMessageAt: conv.last_message_at ?? null,
+      lastMessageType: conv.last_message_type ?? "text",
       agentId: conv.agent_id ?? null,
       agentName: conv.agent_name ?? null
     }))

@@ -4,45 +4,65 @@ type TopCampaign = {
   conversions: number;
 };
 
+function getPlatformColor(platform: string) {
+  if (platform === 'google') return 'bg-blue-100 text-blue-700';
+  if (platform === 'meta') return 'bg-sky-100 text-sky-700';
+  return 'bg-gray-100 text-gray-700';
+}
+
 export function TopCampaigns({
   campaigns,
 }: {
   campaigns: TopCampaign[];
 }) {
   return (
-    <div className="bg-black border border-green-500 rounded-xl p-6 text-gray-200">
-      <h2 className="text-green-400 mb-4">Top Campanhas</h2>
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-base font-semibold text-gray-900">
+          Top Campanhas
+        </h3>
+        <p className="text-sm text-gray-500">
+          Campanhas com maior volume de conversões.
+        </p>
+      </div>
 
-      <ul className="space-y-3">
-        {campaigns.map((c, index) => (
-          <li
-            key={index}
-            className="flex items-center justify-between"
-          >
-            <div className="flex items-center gap-3">
-              {/* Rank */}
-              <span className="w-6 h-6 flex items-center justify-center rounded-full bg-green-500/20 text-green-400 text-sm font-semibold">
-                {index + 1}
-              </span>
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <ul className="divide-y divide-gray-100">
+          {campaigns.map((c, index) => (
+            <li
+              key={index}
+              className="flex items-center justify-between py-3"
+            >
+              <div className="flex items-center gap-3">
+                {/* Rank */}
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-sm font-semibold text-gray-700">
+                  {index + 1}
+                </span>
 
-              {/* Nome + plataforma */}
-              <div>
-                <p className="text-sm">
-                  {c.campaign_name ?? '—'}
-                </p>
-                <p className="text-xs text-gray-400 capitalize">
-                  {c.platform}
-                </p>
+                {/* Nome */}
+                <div>
+                  <p className="text-sm font-medium text-gray-900">
+                    {c.campaign_name ?? '—'}
+                  </p>
+
+                  <span
+                    className={`inline-block mt-0.5 rounded-full px-2 py-0.5 text-xs font-medium capitalize ${getPlatformColor(
+                      c.platform
+                    )}`}
+                  >
+                    {c.platform}
+                  </span>
+                </div>
               </div>
-            </div>
 
-            {/* Conversões */}
-            <span className="text-green-400 text-sm font-medium">
-              {c.conversions ?? 0}
-            </span>
-          </li>
-        ))}
-      </ul>
+              {/* Conversões */}
+              <span className="text-sm font-semibold text-gray-900">
+                {c.conversions ?? 0}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }

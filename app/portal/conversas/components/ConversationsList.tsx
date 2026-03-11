@@ -1,6 +1,15 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import {
+  FileText,
+  Image as ImageIcon,
+  Mic,
+  MessageSquare,
+  MapPin,
+  UserRound,
+  Video
+} from "lucide-react"
 
 interface Props {
   selectedConversationId: string | null
@@ -15,10 +24,52 @@ interface BackendConversation {
   id: string
   phone: string
   name?: string | null
-  lastMessage: string
+  lastMessage?: string
+  last_message?: string
   lastMessageAt?: string | null
+  last_message_at?: string | null
   agentId?: string | null
+  agent_id?: string | null
   agentName?: string | null
+  agent_name?: string | null
+  lastMessageType?:
+    | "text"
+    | "image"
+    | "audio"
+    | "ptt"
+    | "document"
+    | "video"
+    | "sticker"
+    | "contact"
+    | "location"
+    | "reply"
+    | "system"
+    | "revoked"
+    | "edited"
+    | "button_response"
+    | "list_response"
+    | "template_button_reply"
+    | "interactive_response"
+    | "unknown"
+  last_message_type?:
+    | "text"
+    | "image"
+    | "audio"
+    | "ptt"
+    | "document"
+    | "video"
+    | "sticker"
+    | "contact"
+    | "location"
+    | "reply"
+    | "system"
+    | "revoked"
+    | "edited"
+    | "button_response"
+    | "list_response"
+    | "template_button_reply"
+    | "interactive_response"
+    | "unknown"
 }
 
 interface Conversation {
@@ -29,6 +80,25 @@ interface Conversation {
   lastMessageAt?: string
   agentId?: string | null
   agentName?: string | null
+  lastMessageType?:
+    | "text"
+    | "image"
+    | "audio"
+    | "ptt"
+    | "document"
+    | "video"
+    | "sticker"
+    | "contact"
+    | "location"
+    | "reply"
+    | "system"
+    | "revoked"
+    | "edited"
+    | "button_response"
+    | "list_response"
+    | "template_button_reply"
+    | "interactive_response"
+    | "unknown"
 }
 
 function formatListTime(dateString?: string) {
@@ -62,6 +132,82 @@ function toTs(dateString?: string) {
   return Number.isFinite(t) ? t : 0
 }
 
+function getConversationPreview(conv: Conversation) {
+  const text = conv.lastMessage || ""
+
+  switch (conv.lastMessageType) {
+    case "image":
+      return {
+        icon: <ImageIcon size={14} className="opacity-70 shrink-0" />,
+        text: text && text !== "📷 Imagem" ? text : "Imagem"
+      }
+
+    case "video":
+      return {
+        icon: <Video size={14} className="opacity-70 shrink-0" />,
+        text: text && text !== "🎥 Vídeo" ? text : "Vídeo"
+      }
+
+    case "audio":
+    case "ptt":
+      return {
+        icon: <Mic size={14} className="opacity-70 shrink-0" />,
+        text: "Áudio"
+      }
+
+    case "document":
+      return {
+        icon: <FileText size={14} className="opacity-70 shrink-0" />,
+        text: text || "Documento"
+      }
+
+    case "sticker":
+      return {
+        icon: <MessageSquare size={14} className="opacity-70 shrink-0" />,
+        text: "Figurinha"
+      }
+
+    case "contact":
+      return {
+        icon: <UserRound size={14} className="opacity-70 shrink-0" />,
+        text: text || "Contato"
+      }
+
+    case "location":
+      return {
+        icon: <MapPin size={14} className="opacity-70 shrink-0" />,
+        text: "Localização"
+      }
+
+    case "button_response":
+    case "list_response":
+    case "template_button_reply":
+    case "interactive_response":
+      return {
+        icon: <MessageSquare size={14} className="opacity-70 shrink-0" />,
+        text: text || "Resposta interativa"
+      }
+
+    case "revoked":
+      return {
+        icon: <MessageSquare size={14} className="opacity-70 shrink-0" />,
+        text: "🚫 Mensagem apagada"
+      }
+
+    case "edited":
+      return {
+        icon: <MessageSquare size={14} className="opacity-70 shrink-0" />,
+        text: text ? `${text} · editada` : "Mensagem editada"
+      }
+
+    default:
+      return {
+        icon: null,
+        text: text || "—"
+      }
+  }
+}
+
 export default function ConversationsList({
   selectedConversationId,
   onSelectConversation,
@@ -77,7 +223,8 @@ export default function ConversationsList({
   const isDiretoria =
     roleUpper === "DIRETORIA" ||
     roleUpper === "ADMINISTRAÇÃO" ||
-    roleUpper === "ADMINISTRACAO"
+    roleUpper === "ADMINISTRACAO" ||
+    roleUpper === "ADMIN"
 
   const [lastSeenAtById, setLastSeenAtById] = useState<Record<string, number>>({})
   const selectedRef = useRef<string | null>(null)
@@ -96,10 +243,11 @@ export default function ConversationsList({
         id: String(conv.id),
         phone: conv.phone,
         name: conv.name ?? null,
-        lastMessage: conv.lastMessage ?? "",
-        lastMessageAt: conv.lastMessageAt ?? undefined,
-        agentId: conv.agentId ?? null,
-        agentName: conv.agentName ?? null
+        lastMessage: conv.lastMessage ?? conv.last_message ?? "",
+        lastMessageAt: conv.lastMessageAt ?? conv.last_message_at ?? undefined,
+        agentId: conv.agentId ?? conv.agent_id ?? null,
+        agentName: conv.agentName ?? conv.agent_name ?? null,
+        lastMessageType: conv.lastMessageType ?? conv.last_message_type ?? "text"
       }))
 
       const selectedId = selectedRef.current
@@ -273,6 +421,8 @@ export default function ConversationsList({
             const lastMsgTs = toTs(conv.lastMessageAt)
             const hasNew = !isSelected && lastMsgTs > 0 && lastMsgTs > lastSeenTs
 
+            const preview = getConversationPreview(conv)
+
             return (
               <button
                 key={conv.id}
@@ -339,11 +489,12 @@ export default function ConversationsList({
 
                     <div
                       className={[
-                        "text-sm truncate mt-1",
+                        "text-sm truncate mt-1 flex items-center gap-1.5",
                         hasNew ? "text-gray-900 font-semibold" : "text-gray-600"
                       ].join(" ")}
                     >
-                      {conv.lastMessage || "—"}
+                      {preview.icon}
+                      <span className="truncate">{preview.text}</span>
                     </div>
                   </div>
                 </div>

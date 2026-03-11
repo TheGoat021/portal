@@ -10,7 +10,14 @@ import {
   FileText,
   Users,
   X,
-  MessageSquare
+  MessageSquare,
+  Check,
+  CheckCheck,
+  Reply,
+  Sticker,
+  Video,
+  MapPin,
+  UserRound
 } from "lucide-react"
 
 interface Props {
@@ -26,10 +33,33 @@ interface BackendMessage {
   message: string
   direction: "inbound" | "outbound"
   created_at: string
-  type?: "text" | "image" | "audio" | "document" | "system"
+  type?:
+    | "text"
+    | "image"
+    | "audio"
+    | "ptt"
+    | "document"
+    | "video"
+    | "sticker"
+    | "contact"
+    | "location"
+    | "reply"
+    | "system"
+    | "revoked"
+    | "edited"
+    | "button_response"
+    | "list_response"
+    | "template_button_reply"
+    | "interactive_response"
+    | "unknown"
   media_url?: string | null
   agent_name?: string | null
   is_system?: boolean
+  status?: "sent" | "delivered" | "read" | null
+  quoted_message?: string | null
+  quoted_whatsapp_message_id?: string | null
+  raw_type?: string | null
+  whatsapp_message_id?: string | null
 }
 
 interface Message {
@@ -37,10 +67,33 @@ interface Message {
   text: string
   direction: "inbound" | "outbound"
   createdAt: string
-  type: "text" | "image" | "audio" | "document" | "system"
+  type:
+    | "text"
+    | "image"
+    | "audio"
+    | "ptt"
+    | "document"
+    | "video"
+    | "sticker"
+    | "contact"
+    | "location"
+    | "reply"
+    | "system"
+    | "revoked"
+    | "edited"
+    | "button_response"
+    | "list_response"
+    | "template_button_reply"
+    | "interactive_response"
+    | "unknown"
   mediaUrl?: string | null
   agentName?: string | null
   isSystem?: boolean
+  status?: "sent" | "delivered" | "read" | null
+  quotedMessage?: string | null
+  quotedWhatsappMessageId?: string | null
+  rawType?: string | null
+  whatsappMessageId?: string | null
 }
 
 type Agent = {
@@ -122,7 +175,12 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
         type: msg.is_system ? "system" : msg.type || "text",
         mediaUrl: msg.media_url || null,
         agentName: msg.agent_name || null,
-        isSystem: Boolean(msg.is_system) || msg.type === "system"
+        isSystem: Boolean(msg.is_system) || msg.type === "system",
+        status: msg.status || null,
+        quotedMessage: msg.quoted_message || null,
+        quotedWhatsappMessageId: msg.quoted_whatsapp_message_id || null,
+        rawType: msg.raw_type || null,
+        whatsappMessageId: msg.whatsapp_message_id || null
       }))
 
       setMessages(mapped)
@@ -355,31 +413,109 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
     return `${agent.email} (${agent.role})`
   }, [agents, transferTo])
 
+  function renderStatusIcon(msg: Message) {
+    if (msg.direction !== "outbound") return null
+
+    if (msg.status === "read") {
+      return <CheckCheck size={14} className="text-sky-500" />
+    }
+
+    if (msg.status === "delivered") {
+      return <CheckCheck size={14} className="text-gray-500" />
+    }
+
+    if (msg.status === "sent") {
+      return <Check size={14} className="text-gray-500" />
+    }
+
+    return null
+  }
+
+  function renderQuotedMessage(msg: Message) {
+    if (!msg.quotedMessage) return null
+
+    return (
+      <div className="mb-2 rounded-xl border-l-4 border-green-400 bg-black/5 px-3 py-2">
+        <div className="mb-1 flex items-center gap-1 text-[11px] font-medium text-gray-600">
+          <Reply size={12} />
+          <span>Respondendo</span>
+        </div>
+        <div className="text-xs text-gray-700 whitespace-pre-wrap break-words">
+          {msg.quotedMessage}
+        </div>
+      </div>
+    )
+  }
+
   function renderMessageContent(msg: Message) {
     if (msg.type === "system" || msg.isSystem) {
       return null
     }
 
+    if (msg.type === "revoked") {
+      return (
+        <div className="text-sm italic text-gray-500">
+          🚫 Mensagem apagada
+        </div>
+      )
+    }
+
+    if (msg.type === "sticker") {
+      return (
+        <div className="flex items-center gap-2 text-sm text-gray-700">
+          <Sticker size={16} className="opacity-70" />
+          <span>{msg.text || "Figurinha"}</span>
+        </div>
+      )
+    }
+
     if (msg.type === "image") {
       if (msg.mediaUrl) {
         return (
-          <img
-            src={msg.mediaUrl}
-            alt="Imagem"
-            className="rounded-lg max-w-xs border border-black/5"
-          />
+          <div className="space-y-2">
+            <img
+              src={msg.mediaUrl}
+              alt="Imagem"
+              className="rounded-lg max-w-xs border border-black/5"
+            />
+            {!!msg.text && msg.text !== "📷 Imagem" && (
+              <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
+            )}
+          </div>
         )
       }
 
       return (
         <div className="flex items-center gap-2 text-sm text-gray-700">
           <ImageIcon size={16} className="opacity-70" />
-          <span>Imagem</span>
+          <span>{msg.text || "Imagem"}</span>
         </div>
       )
     }
 
-    if (msg.type === "audio") {
+    if (msg.type === "video") {
+      if (msg.mediaUrl) {
+        return (
+          <div className="space-y-2">
+            <video controls className="rounded-lg max-w-xs border border-black/5">
+              <source src={msg.mediaUrl} />
+            </video>
+            {!!msg.text && msg.text !== "🎥 Vídeo" && (
+              <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
+            )}
+          </div>
+        )
+      }
+
+      return (
+        <div className="flex items-center gap-2 text-sm text-gray-700">
+          <Video size={16} className="opacity-70" />
+          <span>{msg.text || "Vídeo"}</span>
+        </div>
+      )
+    }
+
+    if (msg.type === "audio" || msg.type === "ptt") {
       if (msg.mediaUrl) {
         return (
           <div className="flex items-center gap-2">
@@ -394,7 +530,7 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
       return (
         <div className="flex items-center gap-2 text-sm text-gray-700">
           <Mic size={16} className="opacity-70" />
-          <span>Áudio</span>
+          <span>{msg.type === "ptt" ? "Áudio" : msg.text || "Áudio"}</span>
         </div>
       )
     }
@@ -417,7 +553,50 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
       return (
         <div className="flex items-center gap-2 text-sm text-gray-700">
           <FileText size={16} className="opacity-70" />
-          <span>Documento</span>
+          <span>{msg.text || "Documento"}</span>
+        </div>
+      )
+    }
+
+    if (msg.type === "contact") {
+      return (
+        <div className="flex items-center gap-2 text-sm text-gray-700">
+          <UserRound size={16} className="opacity-70" />
+          <span>{msg.text || "Contato"}</span>
+        </div>
+      )
+    }
+
+    if (msg.type === "location") {
+      return (
+        <div className="flex items-center gap-2 text-sm text-gray-700">
+          <MapPin size={16} className="opacity-70" />
+          <span>{msg.text || "Localização"}</span>
+        </div>
+      )
+    }
+
+    if (
+      msg.type === "button_response" ||
+      msg.type === "list_response" ||
+      msg.type === "template_button_reply" ||
+      msg.type === "interactive_response"
+    ) {
+      return (
+        <div className="space-y-1">
+          <div className="text-[11px] uppercase tracking-wide text-gray-500">
+            Resposta interativa
+          </div>
+          <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
+        </div>
+      )
+    }
+
+    if (msg.type === "edited") {
+      return (
+        <div className="space-y-1">
+          <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
+          <div className="text-[11px] italic text-gray-500">editada</div>
         </div>
       )
     }
@@ -505,10 +684,12 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
                         outbound ? "bg-[#D9FDD3]" : "bg-white"
                       }`}
                     >
+                      {renderQuotedMessage(msg)}
                       {renderMessageContent(msg)}
 
-                      <div className="mt-1 text-[10px] text-gray-500 text-right leading-none">
-                        {formatTime(msg.createdAt)}
+                      <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-gray-500 leading-none">
+                        <span>{formatTime(msg.createdAt)}</span>
+                        {renderStatusIcon(msg)}
                       </div>
                     </div>
                   </div>
@@ -549,7 +730,9 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
                 className="w-full min-h-[40px] max-h-32 px-4 py-2 rounded-2xl bg-gray-100 border border-transparent focus:border-gray-200 focus:bg-white outline-none disabled:opacity-60 resize-none overflow-y-auto"
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                placeholder={selectedConversationId ? "Digite uma mensagem" : "Selecione uma conversa"}
+                placeholder={
+                  selectedConversationId ? "Digite uma mensagem" : "Selecione uma conversa"
+                }
                 disabled={!selectedConversationId || sendingMessage}
                 rows={1}
                 onKeyDown={(e) => {
@@ -694,7 +877,8 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
 
               {!!transferTo && (
                 <div className="text-xs text-gray-500">
-                  Selecionado: <span className="font-medium text-gray-700">{selectedAgentLabel}</span>
+                  Selecionado:{" "}
+                  <span className="font-medium text-gray-700">{selectedAgentLabel}</span>
                 </div>
               )}
 

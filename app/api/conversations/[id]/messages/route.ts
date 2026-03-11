@@ -31,7 +31,12 @@ export async function GET(_req: NextRequest, context: RouteContext) {
             type,
             media_url,
             agent_id,
-            agent_name
+            agent_name,
+            status,
+            raw_type,
+            quoted_message,
+            quoted_whatsapp_message_id,
+            whatsapp_message_id
           `)
           .eq("conversation_id", conversationId)
           .order("created_at", { ascending: true }),
@@ -73,7 +78,13 @@ export async function GET(_req: NextRequest, context: RouteContext) {
       created_at: msg.created_at,
       type: msg.type ?? "text",
       media_url: msg.media_url ?? null,
+      agent_id: msg.agent_id ?? null,
       agent_name: msg.agent_name ?? null,
+      status: msg.status ?? null,
+      raw_type: msg.raw_type ?? null,
+      quoted_message: msg.quoted_message ?? null,
+      quoted_whatsapp_message_id: msg.quoted_whatsapp_message_id ?? null,
+      whatsapp_message_id: msg.whatsapp_message_id ?? null,
       is_system: false
     }))
 
@@ -85,7 +96,13 @@ export async function GET(_req: NextRequest, context: RouteContext) {
       created_at: evt.created_at,
       type: "system",
       media_url: null,
+      agent_id: null,
       agent_name: null,
+      status: null,
+      raw_type: null,
+      quoted_message: null,
+      quoted_whatsapp_message_id: null,
+      whatsapp_message_id: null,
       is_system: true
     }))
 
@@ -115,6 +132,7 @@ export async function GET(_req: NextRequest, context: RouteContext) {
             (item.message ?? "").trim(),
             item.media_url ?? "",
             item.agent_name ?? "",
+            item.whatsapp_message_id ?? "",
             timestampBucket
           ].join("|")
 
