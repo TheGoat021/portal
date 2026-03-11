@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Users } from 'lucide-react'
 import { getLeads, updateLeadStatus } from '@/services/leads'
 import LeadCard from './LeadCard'
 import { Lead } from '@/types/lead'
@@ -14,10 +15,20 @@ const colunas = [
   { key: 'perdido', label: 'Perdido' }
 ] as const
 
+function normalizePhone(phone?: string | null) {
+  if (!phone) return ''
+  return String(phone).replace(/\D/g, '')
+}
+
+type LeadWithAgent = Lead & {
+  conversation_agent_name?: string | null
+}
+
 export default function LeadsPage() {
-  const [leads, setLeads] = useState<Lead[]>([])
+  const [leads, setLeads] = useState<LeadWithAgent[]>([])
   const [showNovoLead, setShowNovoLead] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [selectedAgent, setSelectedAgent] = useState('all')
 
   useEffect(() => {
     loadLeads()
@@ -42,6 +53,48 @@ export default function LeadsPage() {
     }
   }
 
+  async function enrichLeadsWithAssignedAgent(data: Lead[]) {
+    const uniquePhones = Array.from(
+      new Set(
+        data
+          .map((lead) => normalizePhone(lead.cliente?.telefone))
+          .filter(Boolean)
+      )
+    )
+
+    const agentMap = new Map<string, string | null>()
+
+    await Promise.all(
+      uniquePhones.map(async (phone) => {
+        try {
+          const res = await fetch(
+            `/api/whatsapp/assigned-agent-by-phone?phone=${encodeURIComponent(phone)}`,
+            { cache: 'no-store' }
+          )
+
+          if (!res.ok) {
+            agentMap.set(phone, null)
+            return
+          }
+
+          const json = await res.json()
+          agentMap.set(phone, json?.agent_name || null)
+        } catch {
+          agentMap.set(phone, null)
+        }
+      })
+    )
+
+    return data.map((lead) => {
+      const phone = normalizePhone(lead.cliente?.telefone)
+
+      return {
+        ...lead,
+        conversation_agent_name: phone ? agentMap.get(phone) || null : null
+      }
+    })
+  }
+
   async function loadLeads() {
     try {
       setLoading(true)
@@ -49,7 +102,8 @@ export default function LeadsPage() {
       await syncWhatsAppLeads()
 
       const data = await getLeads()
-      setLeads(data || [])
+      const enriched = await enrichLeadsWithAssignedAgent(data || [])
+      setLeads(enriched)
     } catch (error) {
       console.error('Erro ao carregar leads:', error)
       setLeads([])
@@ -67,9 +121,27 @@ export default function LeadsPage() {
     }
   }
 
+  const agentes = useMemo(() => {
+    return Array.from(
+      new Set(
+        leads
+          .map((lead) => lead.conversation_agent_name?.trim())
+          .filter((value): value is string => Boolean(value))
+      )
+    ).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  }, [leads])
+
+  const leadsFiltrados = useMemo(() => {
+    if (selectedAgent === 'all') return leads
+
+    return leads.filter(
+      (lead) => (lead.conversation_agent_name || '') === selectedAgent
+    )
+  }, [leads, selectedAgent])
+
   return (
     <div className="h-full bg-[#f8fafc] p-6">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">
             Pipeline de Leads
@@ -79,12 +151,31 @@ export default function LeadsPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => setShowNovoLead(true)}
-          className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
-        >
-          + Novo Lead
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
+            <Users size={16} className="text-gray-500" />
+
+            <select
+              value={selectedAgent}
+              onChange={(e) => setSelectedAgent(e.target.value)}
+              className="bg-transparent text-sm text-gray-700 outline-none"
+            >
+              <option value="all">Todos os colaboradores</option>
+              {agentes.map((agente) => (
+                <option key={agente} value={agente}>
+                  {agente}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            onClick={() => setShowNovoLead(true)}
+            className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
+          >
+            + Novo Lead
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -94,7 +185,9 @@ export default function LeadsPage() {
       ) : (
         <div className="grid h-[calc(100vh-180px)] grid-cols-5 gap-4">
           {colunas.map((coluna) => {
-            const leadsDaColuna = leads.filter((l) => l.status === coluna.key)
+            const leadsDaColuna = leadsFiltrados.filter(
+              (l) => l.status === coluna.key
+            )
 
             return (
               <div
