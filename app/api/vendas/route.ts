@@ -1,99 +1,162 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
-// ✅ UUID VÁLIDO DA ORIGEM MANUAL
+// UUID válido da origem manual
 const ORIGEM_MANUAL_ID = 'b908026c-d5ea-4fd5-9bc9-92ca9e8287ba'
 
 /**
  * LISTAR VENDAS
  */
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url)
+  try {
+    const { searchParams } = new URL(req.url)
 
-  const startDate = searchParams.get('startDate')
-  const endDate = searchParams.get('endDate')
-  const origemId = searchParams.get('origemId')
+    const startDate = searchParams.get('startDate')
+    const endDate = searchParams.get('endDate')
+    const origemId = searchParams.get('origemId')
 
-  let query = supabaseAdmin
-    .from('vendas')
-    .select(`
-      id,
-      valor,
-      produto,
-      created_at,
-      cliente:clientes (
-        nome
-      ),
-      origem:origens (
-        nome
+    let query = supabaseAdmin
+      .from('vendas')
+      .select(`
+        id,
+        valor,
+        produto,
+        created_at,
+        data_fechamento,
+        cliente_id,
+        cliente:clientes (
+          nome,
+          telefone,
+          email,
+          endereco,
+          cpf,
+          vendedor
+        ),
+        origem:origens (
+          id,
+          nome
+        )
+      `)
+      .order('data_fechamento', { ascending: false })
+
+    if (startDate) {
+      query = query.gte('data_fechamento', `${startDate}T00:00:00`)
+    }
+
+    if (endDate) {
+      query = query.lte('data_fechamento', `${endDate}T23:59:59`)
+    }
+
+    if (origemId) {
+      query = query.eq('origem_id', origemId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
       )
-    `)
-    .order('created_at', { ascending: false })
+    }
 
-  if (startDate) query = query.gte('created_at', startDate)
-  if (endDate) query = query.lte('created_at', endDate)
-  if (origemId) query = query.eq('origem_id', origemId)
+    const vendas = data ?? []
 
-  const { data, error } = await query
+    const total = vendas.reduce(
+      (sum, v: any) => sum + Number(v.valor ?? 0),
+      0
+    )
 
-  if (error) {
+    return NextResponse.json({
+      vendas,
+      total,
+      quantidade: vendas.length
+    })
+  } catch (error: any) {
     return NextResponse.json(
-      { error: error.message },
+      { error: error.message ?? 'Erro interno' },
       { status: 500 }
     )
   }
-
-  const vendas = data ?? []
-
-  const total = vendas.reduce(
-    (sum, v: any) => sum + Number(v.valor),
-    0
-  )
-
-  return NextResponse.json({
-    vendas,
-    total,
-    quantidade: vendas.length
-  })
 }
 
 /**
  * CRIAR VENDA MANUAL
  */
 export async function POST(req: Request) {
-  const body = await req.json()
-  const { cliente_id, valor, produto, origem_id } = body
+  try {
+    const body = await req.json()
 
-  if (!cliente_id) {
-    return NextResponse.json(
-      { error: 'cliente_id é obrigatório' },
-      { status: 400 }
-    )
-  }
-
-  if (!valor || Number(valor) <= 0) {
-    return NextResponse.json(
-      { error: 'valor inválido' },
-      { status: 400 }
-    )
-  }
-
-  const { error } = await supabaseAdmin
-    .from('vendas')
-    .insert({
+    const {
       cliente_id,
-      valor: Number(valor),
+      valor,
       produto,
-      origem_id: origem_id ?? ORIGEM_MANUAL_ID,
-      plataforma: 'manual'
-    })
+      origem_id,
+      endereco,
+      cpf,
+      telefone,
+      email,
+      vendedor
+    } = body
 
-  if (error) {
+    if (!cliente_id) {
+      return NextResponse.json(
+        { error: 'cliente_id é obrigatório' },
+        { status: 400 }
+      )
+    }
+
+    if (!valor || Number(valor) <= 0) {
+      return NextResponse.json(
+        { error: 'valor inválido' },
+        { status: 400 }
+      )
+    }
+
+    const clienteUpdates: Record<string, any> = {}
+
+    if (endereco !== undefined) clienteUpdates.endereco = endereco || null
+    if (cpf !== undefined) clienteUpdates.cpf = cpf || null
+    if (telefone !== undefined) clienteUpdates.telefone = telefone || null
+    if (email !== undefined) clienteUpdates.email = email || null
+    if (vendedor !== undefined) clienteUpdates.vendedor = vendedor || null
+
+    if (Object.keys(clienteUpdates).length > 0) {
+      const { error: clienteError } = await supabaseAdmin
+        .from('clientes')
+        .update(clienteUpdates)
+        .eq('id', cliente_id)
+
+      if (clienteError) {
+        return NextResponse.json(
+          { error: clienteError.message },
+          { status: 500 }
+        )
+      }
+    }
+
+    const { error: vendaError } = await supabaseAdmin
+      .from('vendas')
+      .insert({
+        cliente_id,
+        valor: Number(valor),
+        produto,
+        origem_id: origem_id ?? ORIGEM_MANUAL_ID,
+        plataforma: 'manual'
+      })
+
+    if (vendaError) {
+      return NextResponse.json(
+        { error: vendaError.message },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
     return NextResponse.json(
-      { error: error.message },
+      { error: error.message ?? 'Erro interno' },
       { status: 500 }
     )
   }
-
-  return NextResponse.json({ success: true })
 }

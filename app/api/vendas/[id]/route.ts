@@ -19,32 +19,83 @@ export async function PATCH(
     produto,
     valor,
     data_fechamento,
-    origem_id
+    origem_id,
+    telefone,
+    email,
+    endereco,
+    cpf,
+    vendedor
   } = body
 
-  const updateData: any = {}
+  /**
+   * 1️⃣ Buscar venda para pegar cliente_id
+   */
+  const { data: venda, error: vendaError } = await supabaseAdmin
+    .from('vendas')
+    .select('id, cliente_id')
+    .eq('id', id)
+    .single()
 
-  if (produto !== undefined) updateData.produto = produto
-  if (valor !== undefined) updateData.valor = Number(valor)
+  if (vendaError || !venda) {
+    return NextResponse.json(
+      { error: 'Venda não encontrada' },
+      { status: 404 }
+    )
+  }
+
+  /**
+   * 2️⃣ Atualizar venda
+   */
+  const updateVenda: any = {}
+
+  if (produto !== undefined) updateVenda.produto = produto
+  if (valor !== undefined) updateVenda.valor = Number(valor)
 
   if (data_fechamento) {
-    updateData.data_fechamento = new Date(data_fechamento)
+    updateVenda.data_fechamento = new Date(data_fechamento)
   }
 
   if (origem_id !== undefined) {
-    updateData.origem_id = origem_id
+    updateVenda.origem_id = origem_id
   }
 
-  const { error } = await supabaseAdmin
-    .from('vendas')
-    .update(updateData)
-    .eq('id', id)
+  if (Object.keys(updateVenda).length > 0) {
+    const { error: vendaUpdateError } = await supabaseAdmin
+      .from('vendas')
+      .update(updateVenda)
+      .eq('id', id)
 
-  if (error) {
-    return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    )
+    if (vendaUpdateError) {
+      return NextResponse.json(
+        { error: vendaUpdateError.message },
+        { status: 500 }
+      )
+    }
+  }
+
+  /**
+   * 3️⃣ Atualizar dados do cliente
+   */
+  const updateCliente: any = {}
+
+  if (telefone !== undefined) updateCliente.telefone = telefone
+  if (email !== undefined) updateCliente.email = email
+  if (endereco !== undefined) updateCliente.endereco = endereco
+  if (cpf !== undefined) updateCliente.cpf = cpf
+  if (vendedor !== undefined) updateCliente.vendedor = vendedor
+
+  if (Object.keys(updateCliente).length > 0) {
+    const { error: clienteError } = await supabaseAdmin
+      .from('clientes')
+      .update(updateCliente)
+      .eq('id', venda.cliente_id)
+
+    if (clienteError) {
+      return NextResponse.json(
+        { error: clienteError.message },
+        { status: 500 }
+      )
+    }
   }
 
   return NextResponse.json({ success: true })

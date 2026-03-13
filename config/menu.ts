@@ -282,6 +282,10 @@ export const menuConfig: MenuSection[] = [
     roles: ["DIRETORIA"],
     items: [
       {
+        label: "Relatório vendas",
+        href: "/portal/relatorios/consolidado",
+      },
+      {
         label: "Marketing",
         href: "/portal/diretoria/visao-geral",
       },
@@ -372,6 +376,11 @@ export const menuConfig: MenuSection[] = [
         label: "Conexão Whats",
         href: "/portal/whatsapp",
       },
+      {
+        label: "Importar",
+        href: "/portal/vendas/importar",
+      },
+      
     ],
   },
 ];

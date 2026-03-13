@@ -6,6 +6,11 @@ export async function createVenda(data: {
   valor: number
   produto?: string
   origem_id?: string
+  telefone?: string
+  email?: string
+  vendedor?: string
+  cpf?: string
+  endereco?: string
 }) {
   if (!data.cliente_id) {
     throw new Error('cliente_id é obrigatório')
@@ -38,6 +43,11 @@ export async function createVendaFromLead(data: {
   lead_id: string
   valor: number
   produto?: string
+  telefone?: string
+  email?: string
+  vendedor?: string
+  cpf?: string
+  endereco?: string
 }) {
   if (!data.lead_id) {
     throw new Error('lead_id é obrigatório')
@@ -95,6 +105,11 @@ export async function updateVenda(
     valor?: number
     data_fechamento?: string
     origem_id?: string
+    telefone?: string
+    email?: string
+    vendedor?: string
+    cpf?: string
+    endereco?: string
   }
 ) {
   if (!vendaId) {
