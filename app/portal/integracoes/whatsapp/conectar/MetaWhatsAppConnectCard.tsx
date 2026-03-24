@@ -200,76 +200,175 @@ export default function MetaWhatsAppConnectCard() {
   }, [config]);
 
   useEffect(() => {
-    function onMessage(event: MessageEvent) {
-      alert('Recebeu postMessage da Meta');
+  function tryParseMessageData(raw: any) {
+    if (!raw) return null;
 
-      let parsed: any = event.data;
-
-      try {
-        if (typeof event.data === 'string') {
-          parsed = JSON.parse(event.data);
-        }
-      } catch {
-        alert('PostMessage recebido, mas não foi possível converter para JSON');
-        return;
-      }
-
-      if (!parsed) {
-        alert('PostMessage vazio');
-        return;
-      }
-
-      alert(`Tipo recebido: ${parsed?.type || 'sem type'} | Evento: ${parsed?.event || 'sem event'}`);
-
-      if (parsed?.type !== 'WA_EMBEDDED_SIGNUP') {
-        alert('PostMessage recebido, mas não é WA_EMBEDDED_SIGNUP');
-        return;
-      }
-
-      if (parsed?.event === 'FINISH') {
-        signupDataRef.current.wabaId =
-          parsed?.data?.waba_id || parsed?.finish?.waba_id;
-        signupDataRef.current.phoneNumberId =
-          parsed?.data?.phone_number_id || parsed?.finish?.phone_number_id;
-        signupDataRef.current.businessId =
-          parsed?.data?.business_id || parsed?.finish?.business_id;
-        signupDataRef.current.rawEvent = parsed;
-
-        alert('FINISH recebido da Meta');
-
-        if (!signupDataRef.current.wabaId) {
-          alert('FINISH veio sem waba_id');
-        }
-
-        if (!signupDataRef.current.phoneNumberId) {
-          alert('FINISH veio sem phone_number_id');
-        }
-
-        if (signupDataRef.current.code) {
-          alert('Chamando finalizeConnection...');
-          void finalizeConnection();
-        } else {
-          alert('Recebeu FINISH, mas ainda não tem code');
-        }
-      }
-
-      if (parsed?.event === 'ERROR') {
-        alert('A Meta retornou event ERROR');
-        setBusy(false);
-        setStatus('error');
-        setError('A Meta retornou um erro durante a conexão.');
-      }
-
-      if (parsed?.event === 'CANCEL') {
-        alert('Fluxo cancelado');
-        setBusy(false);
-        setStatus('idle');
-      }
+    if (typeof raw === "object") {
+      return raw;
     }
 
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [finalizeConnection]);
+    if (typeof raw !== "string") {
+      return null;
+    }
+
+    const text = raw.trim();
+
+    if (!text) return null;
+
+    try {
+      return JSON.parse(text);
+    } catch {}
+
+    try {
+      const params = new URLSearchParams(text);
+
+      const event = params.get("event");
+      const wabaId = params.get("waba_id");
+      const phoneNumberId = params.get("phone_number_id");
+      const businessId = params.get("business_id");
+      const type = params.get("type");
+
+      if (event || wabaId || phoneNumberId || businessId || type) {
+        return {
+          type: type || "WA_EMBEDDED_SIGNUP",
+          event,
+          data: {
+            waba_id: wabaId,
+            phone_number_id: phoneNumberId,
+            business_id: businessId
+          }
+        };
+      }
+    } catch {}
+
+    return {
+      raw: text
+    };
+  }
+
+  function extractSignupPayload(parsed: any) {
+    const eventName =
+      parsed?.event ||
+      parsed?.data?.event ||
+      parsed?.finish?.event ||
+      null;
+
+    const wabaId =
+      parsed?.data?.waba_id ||
+      parsed?.data?.wabaId ||
+      parsed?.finish?.waba_id ||
+      parsed?.finish?.wabaId ||
+      parsed?.waba_id ||
+      parsed?.wabaId ||
+      null;
+
+    const phoneNumberId =
+      parsed?.data?.phone_number_id ||
+      parsed?.data?.phoneNumberId ||
+      parsed?.finish?.phone_number_id ||
+      parsed?.finish?.phoneNumberId ||
+      parsed?.phone_number_id ||
+      parsed?.phoneNumberId ||
+      null;
+
+    const businessId =
+      parsed?.data?.business_id ||
+      parsed?.data?.businessId ||
+      parsed?.finish?.business_id ||
+      parsed?.finish?.businessId ||
+      parsed?.business_id ||
+      parsed?.businessId ||
+      null;
+
+    const type =
+      parsed?.type ||
+      parsed?.data?.type ||
+      "WA_EMBEDDED_SIGNUP";
+
+    return {
+      type,
+      event: eventName,
+      wabaId,
+      phoneNumberId,
+      businessId
+    };
+  }
+
+  function maybeFinalize() {
+    if (
+      signupDataRef.current.code &&
+      signupDataRef.current.wabaId &&
+      signupDataRef.current.phoneNumberId
+    ) {
+      alert("Dados completos recebidos, chamando finalizeConnection...");
+      void finalizeConnection();
+    }
+  }
+
+  function onMessage(event: MessageEvent) {
+    alert("Recebeu postMessage da Meta");
+
+    const parsed = tryParseMessageData(event.data);
+
+    if (!parsed) {
+      alert("PostMessage vazio ou inválido");
+      return;
+    }
+
+    const extracted = extractSignupPayload(parsed);
+
+    alert(
+      `Tipo recebido: ${extracted.type || "sem type"} | Evento: ${extracted.event || "sem event"}`
+    );
+
+    if (
+      extracted.type !== "WA_EMBEDDED_SIGNUP" &&
+      extracted.event !== "FINISH" &&
+      extracted.event !== "ERROR" &&
+      extracted.event !== "CANCEL"
+    ) {
+      return;
+    }
+
+    if (extracted.event === "FINISH") {
+      signupDataRef.current.wabaId = extracted.wabaId || undefined;
+      signupDataRef.current.phoneNumberId = extracted.phoneNumberId || undefined;
+      signupDataRef.current.businessId = extracted.businessId || undefined;
+      signupDataRef.current.rawEvent = parsed;
+
+      alert("FINISH recebido da Meta");
+
+      if (!signupDataRef.current.wabaId) {
+        alert("FINISH veio sem waba_id");
+      }
+
+      if (!signupDataRef.current.phoneNumberId) {
+        alert("FINISH veio sem phone_number_id");
+      }
+
+      maybeFinalize();
+      return;
+    }
+
+    if (extracted.event === "ERROR") {
+      alert("A Meta retornou event ERROR");
+      setBusy(false);
+      setStatus("error");
+      setError("A Meta retornou um erro durante a conexão.");
+      return;
+    }
+
+    if (extracted.event === "CANCEL") {
+      alert("Fluxo cancelado");
+      setBusy(false);
+      setStatus("idle");
+      return;
+    }
+  }
+
+  window.addEventListener("message", onMessage);
+  return () => window.removeEventListener("message", onMessage);
+}, [finalizeConnection]);
 
   const openEmbeddedSignup = useCallback(() => {
     if (!window.FB || !config?.configId) return;
@@ -295,16 +394,17 @@ export default function MetaWhatsAppConnectCard() {
         alert('Code recebido com sucesso');
 
         if (
-          signupDataRef.current.wabaId &&
-          signupDataRef.current.phoneNumberId
-        ) {
-          alert('Já tinha WABA e Phone Number ID, finalizando...');
-          void finalizeConnection();
-          return;
-        }
+  signupDataRef.current.wabaId &&
+  signupDataRef.current.phoneNumberId
+) {
+  alert("Já tinha WABA e Phone Number ID, finalizando...");
+  void finalizeConnection();
+  return;
+}
 
-        setBusy(false);
-        setStatus('waiting-meta');
+alert("Code recebido, aguardando dados finais da Meta...");
+setBusy(false);
+setStatus("waiting-meta");
       },
       {
         config_id: config.configId,
