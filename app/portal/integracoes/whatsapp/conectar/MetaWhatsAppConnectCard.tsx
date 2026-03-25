@@ -220,11 +220,13 @@ export default function MetaWhatsAppConnectCard() {
         const phoneNumberId = params.get('phone_number_id');
         const businessId = params.get('business_id');
         const type = params.get('type');
+        const code = params.get('code');
 
-        if (event || wabaId || phoneNumberId || businessId || type) {
+        if (event || wabaId || phoneNumberId || businessId || type || code) {
           return {
             type: type || 'WA_EMBEDDED_SIGNUP',
             event,
+            code,
             data: {
               waba_id: wabaId,
               phone_number_id: phoneNumberId,
@@ -233,6 +235,31 @@ export default function MetaWhatsAppConnectCard() {
           };
         }
       } catch {}
+
+      const normalized = text.startsWith('?') ? text.slice(1) : text;
+
+      if (
+        normalized.includes('code=') ||
+        normalized.includes('waba_id=') ||
+        normalized.includes('phone_number_id=') ||
+        normalized.includes('business_id=')
+      ) {
+        try {
+          const params = new URLSearchParams(normalized);
+
+          return {
+            type: 'WA_EMBEDDED_SIGNUP',
+            event: params.get('event'),
+            code: params.get('code'),
+            data: {
+              waba_id: params.get('waba_id'),
+              phone_number_id: params.get('phone_number_id'),
+              business_id: params.get('business_id'),
+            },
+            raw: text,
+          };
+        } catch {}
+      }
 
       return {
         raw: text,
@@ -287,6 +314,13 @@ export default function MetaWhatsAppConnectCard() {
         parsed?.businessId ||
         null;
 
+      const oauthCode =
+        parsed?.code ||
+        parsed?.data?.code ||
+        parsed?.payload?.code ||
+        parsed?.message?.code ||
+        null;
+
       const type =
         parsed?.type ||
         parsed?.data?.type ||
@@ -300,6 +334,7 @@ export default function MetaWhatsAppConnectCard() {
         wabaId,
         phoneNumberId,
         businessId,
+        oauthCode,
       };
     }
 
@@ -330,6 +365,11 @@ export default function MetaWhatsAppConnectCard() {
         `Tipo recebido: ${extracted.type || 'sem type'} | Evento: ${extracted.event || 'sem event'}`
       );
 
+      if (extracted.oauthCode && !signupDataRef.current.code) {
+        signupDataRef.current.code = extracted.oauthCode;
+        alert('Code capturado via postMessage');
+      }
+
       if (extracted.wabaId) {
         signupDataRef.current.wabaId = extracted.wabaId;
       }
@@ -342,12 +382,14 @@ export default function MetaWhatsAppConnectCard() {
         signupDataRef.current.businessId = extracted.businessId;
       }
 
-      if (extracted.wabaId || extracted.phoneNumberId) {
+      if (extracted.wabaId || extracted.phoneNumberId || extracted.oauthCode) {
         signupDataRef.current.rawEvent = parsed;
         alert(
-          `Dados parciais recebidos:\nWABA: ${
-            signupDataRef.current.wabaId || 'não'
-          }\nPHONE_NUMBER_ID: ${signupDataRef.current.phoneNumberId || 'não'}`
+          `Dados parciais recebidos:\nCODE: ${
+            signupDataRef.current.code ? 'sim' : 'não'
+          }\nWABA: ${signupDataRef.current.wabaId || 'não'}\nPHONE_NUMBER_ID: ${
+            signupDataRef.current.phoneNumberId || 'não'
+          }`
         );
         maybeFinalize();
       }
