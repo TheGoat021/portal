@@ -35,22 +35,22 @@ type DebugTokenResponse = {
   }
 }
 
-type WabaPhoneNumbersResponse = {
+type WabaListResponse = {
   data?: Array<{
     id: string
-    verified_name?: string
-    display_phone_number?: string
-    quality_rating?: string
+    name?: string
   }>
   error?: {
     message?: string
   }
 }
 
-type OwnedWabasResponse = {
+type WabaPhoneNumbersResponse = {
   data?: Array<{
     id: string
-    name?: string
+    verified_name?: string
+    display_phone_number?: string
+    quality_rating?: string
   }>
   error?: {
     message?: string
@@ -149,8 +149,8 @@ function extractWabaIdFromDebug(debug: DebugTokenResponse) {
   return null
 }
 
-async function getOwnedWabas(token: string) {
-  const url = new URL(`${GRAPH_BASE}/me/owned_whatsapp_business_accounts`)
+async function getOwnedWabasFromBusiness(businessId: string, token: string) {
+  const url = new URL(`${GRAPH_BASE}/${businessId}/owned_whatsapp_business_accounts`)
 
   const res = await fetch(url.toString(), {
     method: 'GET',
@@ -160,10 +160,10 @@ async function getOwnedWabas(token: string) {
     cache: 'no-store',
   })
 
-  const data = (await res.json()) as OwnedWabasResponse
+  const data = (await res.json()) as WabaListResponse
 
   if (!res.ok) {
-    throw new Error(data?.error?.message || 'Erro ao buscar WABAs do usuário')
+    throw new Error(data?.error?.message || 'Erro ao buscar WABAs do Business')
   }
 
   return data?.data ?? []
@@ -305,12 +305,15 @@ export async function POST(req: NextRequest) {
       resolvedWabaId = extractWabaIdFromDebug(debug)
     }
 
-    if (!resolvedWabaId) {
-      const wabas = await getOwnedWabas(businessToken)
+    if (!resolvedWabaId && resolvedBusinessId) {
+      const wabas = await getOwnedWabasFromBusiness(resolvedBusinessId, businessToken)
 
       if (wabas.length > 0) {
         resolvedWabaId = wabas[0].id
-        console.log('WABA obtido via /me/owned_whatsapp_business_accounts:', resolvedWabaId)
+        console.log(
+          'WABA obtido via /{businessId}/owned_whatsapp_business_accounts:',
+          resolvedWabaId
+        )
       }
     }
 
@@ -318,7 +321,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           ok: false,
-          error: 'Não foi possível identificar o WABA ID',
+          error: 'Não foi possível identificar o WABA ID a partir do token retornado pela Meta',
           debug,
         },
         { status: 400 }
