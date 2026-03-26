@@ -68,6 +68,7 @@ export default function MetaWhatsAppConnectCard() {
     phoneNumberId?: string;
     businessId?: string;
     rawEvent?: unknown;
+    finalizeStarted?: boolean;
   }>({});
 
   const canConnect = useMemo(() => {
@@ -99,13 +100,17 @@ export default function MetaWhatsAppConnectCard() {
 
   const finalizeConnection = useCallback(async () => {
     const code = signupDataRef.current.code;
-    const wabaId = signupDataRef.current.wabaId;
-    const phoneNumberId = signupDataRef.current.phoneNumberId;
 
-    if (!code || !wabaId || !phoneNumberId) {
-      alert('Finalize bloqueado: faltam dados');
+    if (!code) {
+      alert('Finalize bloqueado: code não encontrado');
       return;
     }
+
+    if (signupDataRef.current.finalizeStarted) {
+      return;
+    }
+
+    signupDataRef.current.finalizeStarted = true;
 
     try {
       alert('Entrou no finalizeConnection');
@@ -120,8 +125,8 @@ export default function MetaWhatsAppConnectCard() {
         },
         body: JSON.stringify({
           code,
-          wabaId,
-          phoneNumberId,
+          wabaId: signupDataRef.current.wabaId,
+          phoneNumberId: signupDataRef.current.phoneNumberId,
           businessId: signupDataRef.current.businessId,
           pin: pin.trim() || undefined,
           rawEvent: signupDataRef.current.rawEvent,
@@ -139,6 +144,7 @@ export default function MetaWhatsAppConnectCard() {
       setConnection(data.connection);
       setStatus('success');
     } catch (err: any) {
+      signupDataRef.current.finalizeStarted = false;
       alert(`Erro no finalize: ${err?.message || 'erro desconhecido'}`);
       setStatus('error');
       setError(err?.message || 'Erro ao finalizar conexão');
@@ -205,15 +211,16 @@ export default function MetaWhatsAppConnectCard() {
       }
 
       const text = raw.trim();
-
       if (!text) return null;
 
       try {
         return JSON.parse(text);
       } catch {}
 
+      const normalized = text.startsWith('?') ? text.slice(1) : text;
+
       try {
-        const params = new URLSearchParams(text);
+        const params = new URLSearchParams(normalized);
 
         const event = params.get('event');
         const wabaId = params.get('waba_id');
@@ -232,38 +239,12 @@ export default function MetaWhatsAppConnectCard() {
               phone_number_id: phoneNumberId,
               business_id: businessId,
             },
+            raw: text,
           };
         }
       } catch {}
 
-      const normalized = text.startsWith('?') ? text.slice(1) : text;
-
-      if (
-        normalized.includes('code=') ||
-        normalized.includes('waba_id=') ||
-        normalized.includes('phone_number_id=') ||
-        normalized.includes('business_id=')
-      ) {
-        try {
-          const params = new URLSearchParams(normalized);
-
-          return {
-            type: 'WA_EMBEDDED_SIGNUP',
-            event: params.get('event'),
-            code: params.get('code'),
-            data: {
-              waba_id: params.get('waba_id'),
-              phone_number_id: params.get('phone_number_id'),
-              business_id: params.get('business_id'),
-            },
-            raw: text,
-          };
-        } catch {}
-      }
-
-      return {
-        raw: text,
-      };
+      return { raw: text };
     }
 
     function extractSignupPayload(parsed: any) {
@@ -338,13 +319,9 @@ export default function MetaWhatsAppConnectCard() {
       };
     }
 
-    function maybeFinalize() {
-      if (
-        signupDataRef.current.code &&
-        signupDataRef.current.wabaId &&
-        signupDataRef.current.phoneNumberId
-      ) {
-        alert('Dados completos recebidos, chamando finalizeConnection...');
+    function maybeFinalizeFromCode() {
+      if (signupDataRef.current.code && !signupDataRef.current.finalizeStarted) {
+        alert('Code disponível, chamando finalizeConnection...');
         void finalizeConnection();
       }
     }
@@ -382,7 +359,12 @@ export default function MetaWhatsAppConnectCard() {
         signupDataRef.current.businessId = extracted.businessId;
       }
 
-      if (extracted.wabaId || extracted.phoneNumberId || extracted.oauthCode) {
+      if (
+        extracted.oauthCode ||
+        extracted.wabaId ||
+        extracted.phoneNumberId ||
+        extracted.businessId
+      ) {
         signupDataRef.current.rawEvent = parsed;
         alert(
           `Dados parciais recebidos:\nCODE: ${
@@ -391,12 +373,14 @@ export default function MetaWhatsAppConnectCard() {
             signupDataRef.current.phoneNumberId || 'não'
           }`
         );
-        maybeFinalize();
       }
 
-      if (extracted.event === 'FINISH') {
-        alert('FINISH recebido da Meta');
-        maybeFinalize();
+      if (
+        extracted.event === 'FINISH' ||
+        extracted.oauthCode ||
+        (extracted.type === 'WA_EMBEDDED_SIGNUP' && signupDataRef.current.code)
+      ) {
+        maybeFinalizeFromCode();
         return;
       }
 
@@ -426,7 +410,9 @@ export default function MetaWhatsAppConnectCard() {
     setBusy(true);
     setStatus('waiting-meta');
     setError('');
-    signupDataRef.current = {};
+    signupDataRef.current = {
+      finalizeStarted: false,
+    };
 
     window.FB.login(
       (response: any) => {
@@ -443,29 +429,13 @@ export default function MetaWhatsAppConnectCard() {
         signupDataRef.current.code = response.authResponse.code;
         alert('Code recebido com sucesso');
 
-        if (
-          signupDataRef.current.wabaId &&
-          signupDataRef.current.phoneNumberId
-        ) {
-          alert('Já tinha WABA e Phone Number ID, finalizando...');
-          void finalizeConnection();
-          return;
-        }
-
-        alert('Code recebido, aguardando dados finais da Meta...');
+        alert('Code recebido, finalizando com backend...');
         setBusy(false);
         setStatus('waiting-meta');
 
-        setTimeout(() => {
-          if (
-            signupDataRef.current.code &&
-            signupDataRef.current.wabaId &&
-            signupDataRef.current.phoneNumberId
-          ) {
-            alert('Timeout: dados chegaram após o code, finalizando...');
-            void finalizeConnection();
-          }
-        }, 1200);
+        if (!signupDataRef.current.finalizeStarted) {
+          void finalizeConnection();
+        }
       },
       {
         config_id: config.configId,
