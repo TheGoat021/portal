@@ -47,6 +47,16 @@ type WabaPhoneNumbersResponse = {
   }
 }
 
+type OwnedWabasResponse = {
+  data?: Array<{
+    id: string
+    name?: string
+  }>
+  error?: {
+    message?: string
+  }
+}
+
 type PhoneInfoResponse = {
   id?: string
   display_phone_number?: string
@@ -60,7 +70,6 @@ type PhoneInfoResponse = {
 async function exchangeCode(code: string) {
   const clientId = process.env.META_APP_ID
   const clientSecret = process.env.META_APP_SECRET
-  const redirectUri = process.env.META_EMBEDDED_SIGNUP_REDIRECT_URI
 
   if (!clientId || !clientSecret) {
     throw new Error('META_APP_ID ou META_APP_SECRET não configurados')
@@ -116,6 +125,20 @@ async function debugToken(inputToken: string) {
 function extractWabaIdFromDebug(debug: DebugTokenResponse) {
   const granularScopes = debug?.data?.granular_scopes ?? []
 
+  console.log('GRANULAR SCOPES:', JSON.stringify(granularScopes, null, 2))
+
+  for (const scope of granularScopes) {
+    if (
+      scope?.scope === 'whatsapp_business_management' ||
+      scope?.scope === 'business_management'
+    ) {
+      const targets = scope?.target_ids ?? []
+      if (targets.length > 0) {
+        return targets[0]
+      }
+    }
+  }
+
   for (const scope of granularScopes) {
     const targets = scope?.target_ids ?? []
     if (targets.length > 0) {
@@ -124,6 +147,26 @@ function extractWabaIdFromDebug(debug: DebugTokenResponse) {
   }
 
   return null
+}
+
+async function getOwnedWabas(token: string) {
+  const url = new URL(`${GRAPH_BASE}/me/owned_whatsapp_business_accounts`)
+
+  const res = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    cache: 'no-store',
+  })
+
+  const data = (await res.json()) as OwnedWabasResponse
+
+  if (!res.ok) {
+    throw new Error(data?.error?.message || 'Erro ao buscar WABAs do usuário')
+  }
+
+  return data?.data ?? []
 }
 
 async function getWabaPhoneNumbers(wabaId: string, token: string) {
@@ -256,16 +299,26 @@ export async function POST(req: NextRequest) {
     const resolvedBusinessId = body.businessId ?? null
 
     const debug = await debugToken(businessToken)
+    console.log('DEBUG_TOKEN_META:', JSON.stringify(debug, null, 2))
 
     if (!resolvedWabaId) {
       resolvedWabaId = extractWabaIdFromDebug(debug)
     }
 
     if (!resolvedWabaId) {
+      const wabas = await getOwnedWabas(businessToken)
+
+      if (wabas.length > 0) {
+        resolvedWabaId = wabas[0].id
+        console.log('WABA obtido via /me/owned_whatsapp_business_accounts:', resolvedWabaId)
+      }
+    }
+
+    if (!resolvedWabaId) {
       return NextResponse.json(
         {
           ok: false,
-          error: 'Não foi possível identificar o WABA ID a partir do token retornado pela Meta',
+          error: 'Não foi possível identificar o WABA ID',
           debug,
         },
         { status: 400 }
