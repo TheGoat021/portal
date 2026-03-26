@@ -71,10 +71,6 @@ async function exchangeCode(code: string) {
   url.searchParams.set('client_secret', clientSecret)
   url.searchParams.set('code', code)
 
-  if (redirectUri) {
-    url.searchParams.set('redirect_uri', redirectUri)
-  }
-
   const res = await fetch(url.toString(), {
     method: 'GET',
     cache: 'no-store',
