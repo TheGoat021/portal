@@ -12,6 +12,7 @@ import {
   Building2,
   RefreshCcw,
   AlertCircle,
+  Clock3,
 } from 'lucide-react';
 
 declare global {
@@ -74,6 +75,9 @@ export default function MetaWhatsAppConnectCard() {
   const canConnect = useMemo(() => {
     return Boolean(config?.ok && sdkReady && !busy);
   }, [config, sdkReady, busy]);
+
+  const isPendingConnection = connection?.status === 'pending_waba';
+  const isConnected = connection?.status === 'connected';
 
   const loadConfig = useCallback(async () => {
     setLoadingConfig(true);
@@ -559,11 +563,38 @@ export default function MetaWhatsAppConnectCard() {
           )}
 
           {connection && status === 'success' && (
-            <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-              <div className="mb-4 flex items-center gap-2 text-emerald-700">
-                <CheckCircle2 className="h-5 w-5" />
-                <span className="text-sm font-semibold">Conexão concluída</span>
+            <div
+              className={cn(
+                'mt-6 rounded-2xl p-5',
+                isPendingConnection
+                  ? 'border border-amber-200 bg-amber-50'
+                  : 'border border-emerald-200 bg-emerald-50'
+              )}
+            >
+              <div
+                className={cn(
+                  'mb-4 flex items-center gap-2',
+                  isPendingConnection ? 'text-amber-700' : 'text-emerald-700'
+                )}
+              >
+                {isPendingConnection ? (
+                  <Clock3 className="h-5 w-5" />
+                ) : (
+                  <CheckCircle2 className="h-5 w-5" />
+                )}
+
+                <span className="text-sm font-semibold">
+                  {isPendingConnection ? 'Conexão iniciada' : 'Conexão concluída'}
+                </span>
               </div>
+
+              {isPendingConnection && (
+                <div className="mb-4 rounded-xl border border-amber-200 bg-white/70 px-4 py-3 text-sm text-amber-800">
+                  Aguardando confirmação da Meta para vincular o WABA e o número.
+                  Assim que o webhook <span className="font-medium">account_update</span> chegar,
+                  os dados serão preenchidos automaticamente.
+                </div>
+              )}
 
               <div className="grid gap-3 md:grid-cols-2">
                 <Info label="Número" value={connection.display_phone_number || '—'} />
@@ -584,7 +615,7 @@ export default function MetaWhatsAppConnectCard() {
             <ChecklistItem done={Boolean(config?.appId)}>META_APP_ID</ChecklistItem>
             <ChecklistItem done={Boolean(config?.configId)}>META_EMBEDDED_SIGNUP_CONFIG_ID</ChecklistItem>
             <ChecklistItem done={sdkReady}>Facebook SDK carregado</ChecklistItem>
-            <ChecklistItem done={status === 'success'}>Número conectado</ChecklistItem>
+            <ChecklistItem done={isConnected}>Número conectado</ChecklistItem>
           </div>
 
           <div className="mt-6 rounded-2xl border border-zinc-200 bg-white p-4">
@@ -595,7 +626,10 @@ export default function MetaWhatsAppConnectCard() {
               {status === 'idle' && 'Pronto para iniciar'}
               {status === 'waiting-meta' && 'Aguardando conclusão do Embedded Signup'}
               {status === 'saving' && 'Salvando dados da conexão'}
-              {status === 'success' && 'Conexão concluída com sucesso'}
+              {status === 'success' &&
+                (isPendingConnection
+                  ? 'Conexão iniciada, aguardando confirmação da Meta'
+                  : 'Conexão concluída com sucesso')}
               {status === 'error' && 'Erro na conexão'}
             </p>
           </div>
@@ -634,7 +668,7 @@ function Info({
   mono?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-emerald-200 bg-white p-4">
+    <div className="rounded-2xl border border-white/70 bg-white p-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</p>
       <p
         className={cn(
