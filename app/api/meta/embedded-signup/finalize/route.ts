@@ -318,14 +318,46 @@ export async function POST(req: NextRequest) {
     }
 
     if (!resolvedWabaId) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: 'Não foi possível identificar o WABA ID a partir do token retornado pela Meta',
-          debug,
+      const pendingPayload = {
+        company_id: body.companyId ?? null,
+        profile_id: body.profileId ?? null,
+        status: 'pending_waba',
+        provider: 'meta',
+        waba_id: null,
+        phone_number_id: null,
+        business_id: resolvedBusinessId,
+        display_phone_number: null,
+        verified_name: null,
+        quality_rating: null,
+        code: body.code,
+        business_token: businessToken,
+        webhook_verified: false,
+        metadata: {
+          rawEvent: body.rawEvent ?? null,
+          exchange: exchanged,
+          debug_token: debug,
         },
-        { status: 400 }
-      )
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('whatsapp_meta_connections')
+        .insert(pendingPayload)
+        .select('*')
+        .single()
+
+      if (error) {
+        return NextResponse.json(
+          { ok: false, error: error.message },
+          { status: 500 }
+        )
+      }
+
+      return NextResponse.json({
+        ok: true,
+        pending: true,
+        connection: data,
+        message: 'Conexão iniciada. Aguardando account_update webhook para resolver o WABA.',
+      })
     }
 
     const phoneNumbers = await getWabaPhoneNumbers(resolvedWabaId, businessToken)

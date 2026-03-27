@@ -1,6 +1,7 @@
 // app/api/meta/webhook/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
   ensureMetaConversation,
   getInboundTypeAndContent,
@@ -10,9 +11,169 @@ import {
   touchMetaConversation
 } from '@/lib/metaDb'
 import { uploadMetaInboundMedia } from '@/lib/metaStorage'
-import { downloadMediaFile, extractWebhookEntries, getMediaInfo, normalizePhone } from '@/lib/whatsappMeta'
+import {
+  downloadMediaFile,
+  extractWebhookEntries,
+  getMediaInfo,
+  normalizePhone
+} from '@/lib/whatsappMeta'
 
 export const runtime = 'nodejs'
+
+const GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v23.0'
+const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`
+
+async function getWabaPhoneNumbers(wabaId: string, token: string) {
+  const url = new URL(`${GRAPH_BASE}/${wabaId}/phone_numbers`)
+  url.searchParams.set('fields', 'id,display_phone_number,verified_name,quality_rating')
+
+  const res = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    cache: 'no-store'
+  })
+
+  const data = await res.json()
+
+  if (!res.ok) {
+    throw new Error(data?.error?.message || 'Erro ao buscar números do WABA')
+  }
+
+  const firstPhone = data?.data?.[0]
+  if (!firstPhone?.id) {
+    throw new Error('Nenhum número encontrado para este WABA')
+  }
+
+  return firstPhone
+}
+
+async function subscribeApp(wabaId: string, token: string) {
+  const res = await fetch(`${GRAPH_BASE}/${wabaId}/subscribed_apps`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    cache: 'no-store'
+  })
+
+  const data = await res.json()
+
+  if (!res.ok) {
+    throw new Error(data?.error?.message || 'Erro ao vincular app no WABA')
+  }
+
+  return data
+}
+
+async function registerPhone(phoneNumberId: string, token: string) {
+  const res = await fetch(`${GRAPH_BASE}/${phoneNumberId}/register`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp'
+    }),
+    cache: 'no-store'
+  })
+
+  const data = await res.json()
+
+  if (!res.ok) {
+    throw new Error(data?.error?.message || 'Erro ao registrar número')
+  }
+
+  return data
+}
+
+async function completePendingConnectionFromAccountUpdate(value: any) {
+  const eventName =
+    value?.event ||
+    value?.events?.[0]?.event ||
+    value?.status ||
+    null
+
+  const wabaId =
+    value?.waba_info?.waba_id ||
+    value?.waba_id ||
+    value?.id ||
+    value?.whatsapp_business_account?.id ||
+    null
+
+  if (!wabaId) {
+    return
+  }
+
+  const normalizedEvent = String(eventName || '').toUpperCase()
+
+  if (
+    normalizedEvent &&
+    normalizedEvent !== 'PARTNER_ADDED' &&
+    normalizedEvent !== 'PARTNER_APP_INSTALLED'
+  ) {
+    return
+  }
+
+  const { data: pendingConnections, error: pendingError } = await supabaseAdmin
+    .from('whatsapp_meta_connections')
+    .select('*')
+    .eq('status', 'pending_waba')
+    .order('created_at', { ascending: false })
+
+  if (pendingError) {
+    throw new Error(pendingError.message)
+  }
+
+  if (!pendingConnections?.length) {
+    return
+  }
+
+  for (const connection of pendingConnections) {
+    if (!connection.business_token) continue
+
+    try {
+      const phone = await getWabaPhoneNumbers(wabaId, connection.business_token)
+
+      await subscribeApp(wabaId, connection.business_token)
+      await registerPhone(phone.id, connection.business_token)
+
+      const { error: updateError } = await supabaseAdmin
+        .from('whatsapp_meta_connections')
+        .update({
+          status: 'connected',
+          waba_id: wabaId,
+          phone_number_id: phone.id,
+          display_phone_number: phone.display_phone_number ?? null,
+          verified_name: phone.verified_name ?? null,
+          quality_rating: phone.quality_rating ?? null,
+          webhook_verified: true,
+          metadata: {
+            ...(connection.metadata ?? {}),
+            account_update: value
+          }
+        })
+        .eq('id', connection.id)
+
+      if (updateError) {
+        throw new Error(updateError.message)
+      }
+
+      console.log('Conexão Meta pendente concluída via account_update:', {
+        connectionId: connection.id,
+        wabaId,
+        phoneNumberId: phone.id
+      })
+
+      return
+    } catch (err) {
+      console.error('Falha ao completar conexão pendente via account_update:', err)
+    }
+  }
+}
 
 async function handleInboundMessage({
   connection,
@@ -122,7 +283,14 @@ export async function POST(req: NextRequest) {
       const changes = Array.isArray(entry?.changes) ? entry.changes : []
 
       for (const change of changes) {
+        const field = change?.field
         const value = change?.value
+
+        if (field === 'account_update') {
+          await completePendingConnectionFromAccountUpdate(value)
+          continue
+        }
+
         const metadata = value?.metadata
         const phoneNumberId = metadata?.phone_number_id
 
@@ -137,7 +305,10 @@ export async function POST(req: NextRequest) {
 
         if (messages.length > 0) {
           for (const message of messages) {
-            const contact = contacts.find((c: any) => normalizePhone(c?.wa_id) === normalizePhone(message?.from))
+            const contact = contacts.find(
+              (c: any) => normalizePhone(c?.wa_id) === normalizePhone(message?.from)
+            )
+
             await handleInboundMessage({
               connection,
               value,
