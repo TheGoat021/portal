@@ -36,9 +36,6 @@ type DebugTokenResponse = {
 type BusinessResponse = {
   id?: string
   name?: string
-  error?: {
-    message?: string
-  }
 }
 
 type WabaListResponse = {
@@ -58,15 +55,6 @@ type WabaPhoneNumber = {
   quality_rating?: string
 }
 
-type PhoneCandidate = {
-  id: string
-  display_phone_number?: string | null
-  verified_name?: string | null
-  quality_rating?: string | null
-  waba_id: string
-  business_id: string | null
-}
-
 type WabaPhoneNumbersResponse = {
   data?: WabaPhoneNumber[]
   error?: {
@@ -82,6 +70,16 @@ type PhoneInfoResponse = {
   error?: {
     message?: string
   }
+}
+
+type PhoneCandidate = {
+  id: string
+  display_phone_number?: string | null
+  verified_name?: string | null
+  quality_rating?: string | null
+  waba_id: string
+  business_id: string | null
+  source: 'explicit' | 'debug_token' | 'business_lookup'
 }
 
 type Body = {
@@ -102,6 +100,10 @@ function firstNonEmpty<T>(...values: Array<T | null | undefined | ''>) {
     }
   }
   return null
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.filter(Boolean) as string[]))
 }
 
 async function exchangeCode(code: string) {
@@ -199,6 +201,19 @@ function extractPhoneNumberIdFromRawEvent(rawEvent: any) {
   )
 }
 
+function getDebugScopeTargetIds(
+  debug: DebugTokenResponse,
+  scopes: string[]
+) {
+  const granularScopes = debug?.data?.granular_scopes ?? []
+
+  return uniqueStrings(
+    granularScopes
+      .filter((item) => item?.scope && scopes.includes(item.scope))
+      .flatMap((item) => item?.target_ids ?? [])
+  )
+}
+
 async function getBusinesses(token: string) {
   const url = new URL(`${GRAPH_BASE}/me/businesses`)
 
@@ -236,7 +251,9 @@ async function getOwnedWabasFromBusiness(businessId: string, token: string) {
   const data = (await res.json()) as WabaListResponse
 
   if (!res.ok) {
-    throw new Error(data?.error?.message || 'Erro ao buscar WABAs do business')
+    throw new Error(
+      data?.error?.message || 'Erro ao buscar owned_whatsapp_business_accounts'
+    )
   }
 
   return data?.data ?? []
@@ -256,7 +273,9 @@ async function getClientWabasFromBusiness(businessId: string, token: string) {
   const data = (await res.json()) as WabaListResponse
 
   if (!res.ok) {
-    throw new Error(data?.error?.message || 'Erro ao buscar client WABAs do business')
+    throw new Error(
+      data?.error?.message || 'Erro ao buscar client_whatsapp_business_accounts'
+    )
   }
 
   return data?.data ?? []
@@ -284,53 +303,6 @@ async function getAllWabaPhoneNumbers(wabaId: string, token: string) {
   }
 
   return Array.isArray(data?.data) ? data.data : []
-}
-
-async function discoverPhoneCandidates(
-  token: string,
-  explicitBusinessId?: string | null,
-  explicitWabaId?: string | null
-) {
-  const businesses = await getBusinesses(token)
-
-  const businessList = explicitBusinessId
-    ? businesses.filter((b) => b.id === explicitBusinessId)
-    : businesses
-
-  const candidates: PhoneCandidate[] = []
-
-  for (const business of businessList) {
-    if (!business.id) continue
-
-    const owned = await getOwnedWabasFromBusiness(business.id, token).catch(() => [])
-    const client = await getClientWabasFromBusiness(business.id, token).catch(() => [])
-
-    const mergedWabas = [...owned, ...client]
-    const uniqueWabas = Array.from(
-      new Map(mergedWabas.map((w) => [w.id, w])).values()
-    )
-
-    const wabaList = explicitWabaId
-      ? uniqueWabas.filter((w) => w.id === explicitWabaId)
-      : uniqueWabas
-
-    for (const waba of wabaList) {
-      const phones = await getAllWabaPhoneNumbers(waba.id, token).catch(() => [])
-
-      for (const phone of phones) {
-        candidates.push({
-          id: phone.id,
-          display_phone_number: phone.display_phone_number ?? null,
-          verified_name: phone.verified_name ?? null,
-          quality_rating: phone.quality_rating ?? null,
-          waba_id: waba.id,
-          business_id: business.id
-        })
-      }
-    }
-  }
-
-  return candidates
 }
 
 async function subscribeApp(wabaId: string, token: string) {
@@ -401,6 +373,136 @@ async function getPhoneInfo(phoneNumberId: string, token: string) {
   return data
 }
 
+async function discoverCandidates(params: {
+  token: string
+  debug: DebugTokenResponse
+  explicitBusinessId: string | null
+  explicitWabaId: string | null
+}) {
+  const { token, debug, explicitBusinessId, explicitWabaId } = params
+
+  const candidates: PhoneCandidate[] = []
+  const discoveryLog: Record<string, any> = {
+    explicitBusinessId,
+    explicitWabaId,
+    businesses: [],
+    debugBusinessTargetIds: [],
+    debugWabaTargetIds: [],
+    triedWabas: [],
+    errors: []
+  }
+
+  const debugBusinessIds = getDebugScopeTargetIds(debug, ['business_management'])
+  const debugWabaIds = getDebugScopeTargetIds(debug, [
+    'whatsapp_business_management',
+    'whatsapp_business_messaging'
+  ])
+
+  discoveryLog.debugBusinessTargetIds = debugBusinessIds
+  discoveryLog.debugWabaTargetIds = debugWabaIds
+
+  const businesses = await getBusinesses(token).catch((error: any) => {
+    discoveryLog.errors.push({
+      step: 'getBusinesses',
+      message: error?.message || String(error)
+    })
+    return []
+  })
+
+  discoveryLog.businesses = businesses
+
+  const businessIdsToTry = uniqueStrings([
+    explicitBusinessId,
+    ...businesses.map((b) => b.id ?? null),
+    ...debugBusinessIds
+  ])
+
+  const wabaMap = new Map<string, { business_id: string | null; source: PhoneCandidate['source'] }>()
+
+  if (explicitWabaId) {
+    wabaMap.set(explicitWabaId, {
+      business_id: explicitBusinessId ?? null,
+      source: 'explicit'
+    })
+  }
+
+  for (const debugWabaId of debugWabaIds) {
+    if (!wabaMap.has(debugWabaId)) {
+      wabaMap.set(debugWabaId, {
+        business_id: explicitBusinessId ?? null,
+        source: 'debug_token'
+      })
+    }
+  }
+
+  for (const businessId of businessIdsToTry) {
+    const owned = await getOwnedWabasFromBusiness(businessId, token).catch((error: any) => {
+      discoveryLog.errors.push({
+        step: 'getOwnedWabasFromBusiness',
+        businessId,
+        message: error?.message || String(error)
+      })
+      return []
+    })
+
+    const client = await getClientWabasFromBusiness(businessId, token).catch((error: any) => {
+      discoveryLog.errors.push({
+        step: 'getClientWabasFromBusiness',
+        businessId,
+        message: error?.message || String(error)
+      })
+      return []
+    })
+
+    for (const waba of [...owned, ...client]) {
+      if (!wabaMap.has(waba.id)) {
+        wabaMap.set(waba.id, {
+          business_id: businessId,
+          source: 'business_lookup'
+        })
+      }
+    }
+  }
+
+  for (const [wabaId, meta] of wabaMap.entries()) {
+    discoveryLog.triedWabas.push({
+      wabaId,
+      businessId: meta.business_id,
+      source: meta.source
+    })
+
+    const phones = await getAllWabaPhoneNumbers(wabaId, token).catch((error: any) => {
+      discoveryLog.errors.push({
+        step: 'getAllWabaPhoneNumbers',
+        wabaId,
+        message: error?.message || String(error)
+      })
+      return []
+    })
+
+    for (const phone of phones) {
+      candidates.push({
+        id: phone.id,
+        display_phone_number: phone.display_phone_number ?? null,
+        verified_name: phone.verified_name ?? null,
+        quality_rating: phone.quality_rating ?? null,
+        waba_id: wabaId,
+        business_id: meta.business_id,
+        source: meta.source
+      })
+    }
+  }
+
+  const uniqueCandidates = Array.from(
+    new Map(candidates.map((item) => [item.id, item])).values()
+  )
+
+  return {
+    candidates: uniqueCandidates,
+    discoveryLog
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as Body
@@ -426,34 +528,39 @@ export async function POST(req: NextRequest) {
     const explicitPhoneNumberId =
       firstNonEmpty(body.phoneNumberId, extractPhoneNumberIdFromRawEvent(rawEvent)) ?? null
 
-    console.log('FINALIZE INPUT BODY:', JSON.stringify(body, null, 2))
-    console.log('DEBUG TOKEN:', JSON.stringify(debug, null, 2))
-    console.log('EXPLICIT IDS:', {
-      explicitBusinessId,
-      explicitWabaId,
-      explicitPhoneNumberId
-    })
-
-    const candidates = await discoverPhoneCandidates(
-      businessToken,
+    const { candidates, discoveryLog } = await discoverCandidates({
+      token: businessToken,
+      debug,
       explicitBusinessId,
       explicitWabaId
-    )
+    })
 
-    console.log('DISCOVERED PHONE CANDIDATES:', JSON.stringify(candidates, null, 2))
+    console.log('FINALIZE META DISCOVERY LOG:', JSON.stringify(discoveryLog, null, 2))
+    console.log('FINALIZE META CANDIDATES:', JSON.stringify(candidates, null, 2))
 
-    let selected: PhoneCandidate | null = null
+    let selected =
+      explicitPhoneNumberId
+        ? candidates.find((item) => item.id === explicitPhoneNumberId) ?? null
+        : null
 
-    if (explicitPhoneNumberId) {
-      selected = candidates.find((item) => item.id === explicitPhoneNumberId) ?? null
+    if (explicitPhoneNumberId && !selected) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Número selecionado não pertence aos ativos encontrados para este token',
+          debug: {
+            candidatesFound: candidates.length,
+            triedWabas: discoveryLog.triedWabas,
+            debugBusinessTargetIds: discoveryLog.debugBusinessTargetIds,
+            debugWabaTargetIds: discoveryLog.debugWabaTargetIds,
+            errors: discoveryLog.errors
+          }
+        },
+        { status: 400 }
+      )
+    }
 
-      if (!selected) {
-        return NextResponse.json(
-          { ok: false, error: 'Número selecionado não pertence aos ativos encontrados para este token' },
-          { status: 400 }
-        )
-      }
-    } else {
+    if (!selected) {
       if (candidates.length === 1) {
         selected = candidates[0]
       } else if (candidates.length > 1) {
@@ -470,7 +577,15 @@ export async function POST(req: NextRequest) {
         {
           ok: false,
           error:
-            'Não foi possível descobrir automaticamente o WABA e o número para este token. Verifique se o usuário concluiu o Embedded Signup na mesma Business e se o token tem acesso aos ativos.'
+            'Não foi possível descobrir automaticamente o WABA e o número para este token.',
+          debug: {
+            tokenScopes: debug?.data?.scopes ?? [],
+            debugBusinessTargetIds: discoveryLog.debugBusinessTargetIds,
+            debugWabaTargetIds: discoveryLog.debugWabaTargetIds,
+            businessesFound: discoveryLog.businesses,
+            triedWabas: discoveryLog.triedWabas,
+            errors: discoveryLog.errors
+          }
         },
         { status: 400 }
       )
@@ -489,7 +604,8 @@ export async function POST(req: NextRequest) {
       waba_id: selected.waba_id,
       phone_number_id: selected.id,
       business_id: selected.business_id,
-      display_phone_number: phone?.display_phone_number ?? selected.display_phone_number ?? null,
+      display_phone_number:
+        phone?.display_phone_number ?? selected.display_phone_number ?? null,
       verified_name: phone?.verified_name ?? selected.verified_name ?? null,
       quality_rating: phone?.quality_rating ?? selected.quality_rating ?? null,
       code: body.code,
@@ -500,6 +616,7 @@ export async function POST(req: NextRequest) {
         exchange: exchanged,
         debug_token: debug,
         discovered_candidates: candidates,
+        discovery_log: discoveryLog,
         finalize_received_at: new Date().toISOString(),
         connected_without_webhook_wait: true
       }
