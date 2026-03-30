@@ -62,6 +62,28 @@ async function getWabaPhoneNumbers(wabaId: string, token: string) {
   return firstPhone
 }
 
+async function getClientWabasFromBusiness(businessId: string, token: string) {
+  const url = new URL(`${GRAPH_BASE}/${businessId}/client_whatsapp_business_accounts`)
+
+  const res = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    cache: 'no-store'
+  })
+
+  const data = await res.json()
+
+  if (!res.ok) {
+    throw new Error(
+      data?.error?.message || 'Erro ao buscar client_whatsapp_business_accounts'
+    )
+  }
+
+  return Array.isArray(data?.data) ? data.data : []
+}
+
 async function subscribeApp(wabaId: string, token: string) {
   const res = await fetch(`${GRAPH_BASE}/${wabaId}/subscribed_apps`, {
     method: 'POST',
@@ -155,11 +177,6 @@ async function completePendingConnectionFromAccountUpdate(value: any) {
   console.log('ACCOUNT_UPDATE RAW:', JSON.stringify(value, null, 2))
   console.log('ACCOUNT_UPDATE EXTRACTED:', extracted)
 
-  if (!extracted.wabaId) {
-    console.log('account_update recebido sem wabaId, aguardando próximo evento...')
-    return
-  }
-
   const allowedEvents = new Set([
     '',
     'PARTNER_ADDED',
@@ -193,6 +210,33 @@ async function completePendingConnectionFromAccountUpdate(value: any) {
     if (!connection.business_token) continue
 
     try {
+      let resolvedWabaId = extracted.wabaId || connection.waba_id || null
+
+      if (!resolvedWabaId && connection.business_id) {
+        try {
+          const clientWabas = await getClientWabasFromBusiness(
+            connection.business_id,
+            connection.business_token
+          )
+
+          console.log(
+            'FALLBACK CLIENT_WABAS:',
+            JSON.stringify(clientWabas, null, 2)
+          )
+
+          if (clientWabas.length > 0) {
+            resolvedWabaId = clientWabas[0]?.id || null
+          }
+        } catch (fallbackError) {
+          console.error('Falha no fallback de WABA via business_id:', fallbackError)
+        }
+      }
+
+      if (!resolvedWabaId) {
+        console.log('Ainda sem wabaId, aguardando próximo webhook...')
+        continue
+      }
+
       const phone =
         extracted.phoneNumberId && extracted.displayPhoneNumber
           ? {
@@ -201,9 +245,9 @@ async function completePendingConnectionFromAccountUpdate(value: any) {
               verified_name: extracted.verifiedName ?? null,
               quality_rating: null
             }
-          : await getWabaPhoneNumbers(extracted.wabaId, connection.business_token)
+          : await getWabaPhoneNumbers(resolvedWabaId, connection.business_token)
 
-      await subscribeApp(extracted.wabaId, connection.business_token)
+      await subscribeApp(resolvedWabaId, connection.business_token)
       await registerPhone(phone.id, connection.business_token)
 
       const currentMetadata =
@@ -215,9 +259,10 @@ async function completePendingConnectionFromAccountUpdate(value: any) {
         .from('whatsapp_meta_connections')
         .update({
           status: 'connected',
-          waba_id: extracted.wabaId,
+          waba_id: resolvedWabaId,
           phone_number_id: phone.id,
-          display_phone_number: phone.display_phone_number ?? extracted.displayPhoneNumber ?? null,
+          display_phone_number:
+            phone.display_phone_number ?? extracted.displayPhoneNumber ?? null,
           verified_name: phone.verified_name ?? extracted.verifiedName ?? null,
           quality_rating: phone.quality_rating ?? null,
           webhook_verified: true,
@@ -236,7 +281,7 @@ async function completePendingConnectionFromAccountUpdate(value: any) {
 
       console.log('Conexão Meta pendente concluída via account_update:', {
         connectionId: connection.id,
-        wabaId: extracted.wabaId,
+        wabaId: resolvedWabaId,
         phoneNumberId: phone.id
       })
 
@@ -277,6 +322,7 @@ async function handleInboundMessage({
   if (parsed.mediaId) {
     const mediaInfo = await getMediaInfo(parsed.mediaId, connection.business_token)
     const buffer = await downloadMediaFile(mediaInfo.url, connection.business_token)
+
     const uploaded = await uploadMetaInboundMedia({
       fileBuffer: buffer,
       mimeType: parsed.mimeType || mediaInfo.mime_type || null,
