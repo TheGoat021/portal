@@ -106,6 +106,59 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.filter(Boolean) as string[]))
 }
 
+function getDebugScopeTargetIds(
+  debug: DebugTokenResponse,
+  scopes: string[]
+) {
+  const granularScopes = debug?.data?.granular_scopes ?? []
+
+  return uniqueStrings(
+    granularScopes
+      .filter((item) => item?.scope && scopes.includes(item.scope))
+      .flatMap((item) => item?.target_ids ?? [])
+  )
+}
+
+function extractBusinessIdFromRawEvent(rawEvent: any) {
+  return firstNonEmpty(
+    rawEvent?.businessId,
+    rawEvent?.business_id,
+    rawEvent?.data?.businessId,
+    rawEvent?.data?.business_id,
+    rawEvent?.sessionInfo?.businessId,
+    rawEvent?.sessionInfo?.business_id,
+    rawEvent?.extras?.businessId,
+    rawEvent?.extras?.business_id
+  )
+}
+
+function extractWabaIdFromRawEvent(rawEvent: any) {
+  return firstNonEmpty(
+    rawEvent?.wabaId,
+    rawEvent?.waba_id,
+    rawEvent?.data?.wabaId,
+    rawEvent?.data?.waba_id,
+    rawEvent?.sessionInfo?.wabaId,
+    rawEvent?.sessionInfo?.waba_id,
+    rawEvent?.extras?.wabaId,
+    rawEvent?.extras?.waba_id,
+    rawEvent?.whatsapp_business_account?.id
+  )
+}
+
+function extractPhoneNumberIdFromRawEvent(rawEvent: any) {
+  return firstNonEmpty(
+    rawEvent?.phoneNumberId,
+    rawEvent?.phone_number_id,
+    rawEvent?.data?.phoneNumberId,
+    rawEvent?.data?.phone_number_id,
+    rawEvent?.sessionInfo?.phoneNumberId,
+    rawEvent?.sessionInfo?.phone_number_id,
+    rawEvent?.extras?.phoneNumberId,
+    rawEvent?.extras?.phone_number_id
+  )
+}
+
 async function exchangeCode(code: string) {
   const clientId = process.env.META_APP_ID
   const clientSecret = process.env.META_APP_SECRET
@@ -159,59 +212,6 @@ async function debugToken(inputToken: string) {
   }
 
   return data
-}
-
-function extractBusinessIdFromRawEvent(rawEvent: any) {
-  return firstNonEmpty(
-    rawEvent?.businessId,
-    rawEvent?.business_id,
-    rawEvent?.data?.businessId,
-    rawEvent?.data?.business_id,
-    rawEvent?.sessionInfo?.businessId,
-    rawEvent?.sessionInfo?.business_id,
-    rawEvent?.extras?.businessId,
-    rawEvent?.extras?.business_id
-  )
-}
-
-function extractWabaIdFromRawEvent(rawEvent: any) {
-  return firstNonEmpty(
-    rawEvent?.wabaId,
-    rawEvent?.waba_id,
-    rawEvent?.data?.wabaId,
-    rawEvent?.data?.waba_id,
-    rawEvent?.sessionInfo?.wabaId,
-    rawEvent?.sessionInfo?.waba_id,
-    rawEvent?.extras?.wabaId,
-    rawEvent?.extras?.waba_id,
-    rawEvent?.whatsapp_business_account?.id
-  )
-}
-
-function extractPhoneNumberIdFromRawEvent(rawEvent: any) {
-  return firstNonEmpty(
-    rawEvent?.phoneNumberId,
-    rawEvent?.phone_number_id,
-    rawEvent?.data?.phoneNumberId,
-    rawEvent?.data?.phone_number_id,
-    rawEvent?.sessionInfo?.phoneNumberId,
-    rawEvent?.sessionInfo?.phone_number_id,
-    rawEvent?.extras?.phoneNumberId,
-    rawEvent?.extras?.phone_number_id
-  )
-}
-
-function getDebugScopeTargetIds(
-  debug: DebugTokenResponse,
-  scopes: string[]
-) {
-  const granularScopes = debug?.data?.granular_scopes ?? []
-
-  return uniqueStrings(
-    granularScopes
-      .filter((item) => item?.scope && scopes.includes(item.scope))
-      .flatMap((item) => item?.target_ids ?? [])
-  )
 }
 
 async function getBusinesses(token: string) {
@@ -417,7 +417,10 @@ async function discoverCandidates(params: {
     ...debugBusinessIds
   ])
 
-  const wabaMap = new Map<string, { business_id: string | null; source: PhoneCandidate['source'] }>()
+  const wabaMap = new Map<
+    string,
+    { business_id: string | null; source: PhoneCandidate['source'] }
+  >()
 
   if (explicitWabaId) {
     wabaMap.set(explicitWabaId, {
@@ -549,11 +552,13 @@ export async function POST(req: NextRequest) {
           ok: false,
           error: 'Número selecionado não pertence aos ativos encontrados para este token',
           debug: {
-            candidatesFound: candidates.length,
-            triedWabas: discoveryLog.triedWabas,
+            tokenScopes: debug?.data?.scopes ?? [],
             debugBusinessTargetIds: discoveryLog.debugBusinessTargetIds,
             debugWabaTargetIds: discoveryLog.debugWabaTargetIds,
-            errors: discoveryLog.errors
+            businessesFound: discoveryLog.businesses,
+            triedWabas: discoveryLog.triedWabas,
+            errors: discoveryLog.errors,
+            candidatesFound: candidates.length
           }
         },
         { status: 400 }
@@ -573,22 +578,72 @@ export async function POST(req: NextRequest) {
     }
 
     if (!selected) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error:
-            'Não foi possível descobrir automaticamente o WABA e o número para este token.',
-          debug: {
-            tokenScopes: debug?.data?.scopes ?? [],
-            debugBusinessTargetIds: discoveryLog.debugBusinessTargetIds,
-            debugWabaTargetIds: discoveryLog.debugWabaTargetIds,
-            businessesFound: discoveryLog.businesses,
-            triedWabas: discoveryLog.triedWabas,
-            errors: discoveryLog.errors
-          }
-        },
-        { status: 400 }
-      )
+      const pendingPayload = {
+        company_id: body.companyId ?? null,
+        profile_id: body.profileId ?? null,
+        status: 'pending_waba',
+        provider: 'meta',
+        waba_id: explicitWabaId,
+        phone_number_id: explicitPhoneNumberId,
+        business_id: explicitBusinessId,
+        display_phone_number: null,
+        verified_name: null,
+        quality_rating: null,
+        code: body.code,
+        business_token: businessToken,
+        webhook_verified: false,
+        metadata: {
+          rawEvent,
+          exchange: exchanged,
+          debug_token: debug,
+          discovery_log: discoveryLog,
+          finalize_received_at: new Date().toISOString(),
+          pending_reason: 'assets_not_discoverable_from_token_yet'
+        }
+      }
+
+      const { data: pendingData, error: pendingError } = await supabaseAdmin
+        .from('whatsapp_meta_connections')
+        .insert(pendingPayload)
+        .select('*')
+        .single()
+
+      if (pendingError) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: 'Não foi possível descobrir automaticamente o WABA e o número para este token.',
+            debug: {
+              tokenScopes: debug?.data?.scopes ?? [],
+              debugBusinessTargetIds: discoveryLog.debugBusinessTargetIds,
+              debugWabaTargetIds: discoveryLog.debugWabaTargetIds,
+              businessesFound: discoveryLog.businesses,
+              triedWabas: discoveryLog.triedWabas,
+              errors: discoveryLog.errors,
+              candidatesFound: candidates.length,
+              pendingInsertError: pendingError.message
+            }
+          },
+          { status: 400 }
+        )
+      }
+
+      return NextResponse.json({
+        ok: true,
+        pending: true,
+        connection: pendingData,
+        message:
+          'A Meta autorizou o token, mas ainda não expôs Business/WABA/número para descoberta automática. A conexão foi salva como pendente para conclusão via webhook/account_update.',
+        debug: {
+          tokenScopes: debug?.data?.scopes ?? [],
+          debugBusinessTargetIds: discoveryLog.debugBusinessTargetIds,
+          debugWabaTargetIds: discoveryLog.debugWabaTargetIds,
+          businessesFound: discoveryLog.businesses,
+          triedWabas: discoveryLog.triedWabas,
+          errors: discoveryLog.errors,
+          candidatesFound: candidates.length
+        }
+      })
     }
 
     await subscribeApp(selected.waba_id, businessToken)
@@ -606,8 +661,10 @@ export async function POST(req: NextRequest) {
       business_id: selected.business_id,
       display_phone_number:
         phone?.display_phone_number ?? selected.display_phone_number ?? null,
-      verified_name: phone?.verified_name ?? selected.verified_name ?? null,
-      quality_rating: phone?.quality_rating ?? selected.quality_rating ?? null,
+      verified_name:
+        phone?.verified_name ?? selected.verified_name ?? null,
+      quality_rating:
+        phone?.quality_rating ?? selected.quality_rating ?? null,
       code: body.code,
       business_token: businessToken,
       webhook_verified: true,
