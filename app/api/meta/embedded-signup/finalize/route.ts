@@ -1,5 +1,3 @@
-// app/api/meta/embedded-signup/finalize/route.ts
-
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
@@ -82,7 +80,7 @@ async function exchangeCode(code: string) {
 
   const res = await fetch(url.toString(), {
     method: 'GET',
-    cache: 'no-store',
+    cache: 'no-store'
   })
 
   const data = (await res.json()) as ExchangeCodeResponse
@@ -110,7 +108,7 @@ async function debugToken(inputToken: string) {
 
   const res = await fetch(url.toString(), {
     method: 'GET',
-    cache: 'no-store',
+    cache: 'no-store'
   })
 
   const data = (await res.json()) as DebugTokenResponse
@@ -155,9 +153,9 @@ async function getOwnedWabasFromBusiness(businessId: string, token: string) {
   const res = await fetch(url.toString(), {
     method: 'GET',
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${token}`
     },
-    cache: 'no-store',
+    cache: 'no-store'
   })
 
   const data = (await res.json()) as WabaListResponse
@@ -176,9 +174,9 @@ async function getWabaPhoneNumbers(wabaId: string, token: string) {
   const res = await fetch(url.toString(), {
     method: 'GET',
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${token}`
     },
-    cache: 'no-store',
+    cache: 'no-store'
   })
 
   const data = (await res.json()) as WabaPhoneNumbersResponse
@@ -197,7 +195,7 @@ async function getWabaPhoneNumbers(wabaId: string, token: string) {
     phoneNumberId: firstPhone.id,
     displayPhoneNumber: firstPhone.display_phone_number ?? null,
     verifiedName: firstPhone.verified_name ?? null,
-    qualityRating: firstPhone.quality_rating ?? null,
+    qualityRating: firstPhone.quality_rating ?? null
   }
 }
 
@@ -206,9 +204,9 @@ async function subscribeApp(wabaId: string, token: string) {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json'
     },
-    cache: 'no-store',
+    cache: 'no-store'
   })
 
   const data = await res.json()
@@ -222,7 +220,7 @@ async function subscribeApp(wabaId: string, token: string) {
 
 async function registerPhone(phoneNumberId: string, token: string, pin?: string | null) {
   const body: Record<string, string> = {
-    messaging_product: 'whatsapp',
+    messaging_product: 'whatsapp'
   }
 
   if (pin?.trim()) {
@@ -233,10 +231,10 @@ async function registerPhone(phoneNumberId: string, token: string, pin?: string 
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify(body),
-    cache: 'no-store',
+    cache: 'no-store'
   })
 
   const data = await res.json()
@@ -255,9 +253,9 @@ async function getPhoneInfo(phoneNumberId: string, token: string) {
   const res = await fetch(url.toString(), {
     method: 'GET',
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${token}`
     },
-    cache: 'no-store',
+    cache: 'no-store'
   })
 
   const data = (await res.json()) as PhoneInfoResponse
@@ -336,7 +334,9 @@ export async function POST(req: NextRequest) {
           rawEvent: body.rawEvent ?? null,
           exchange: exchanged,
           debug_token: debug,
-        },
+          pending_reason: 'waba_not_available_yet',
+          finalize_received_at: new Date().toISOString()
+        }
       }
 
       const { data, error } = await supabaseAdmin
@@ -356,7 +356,7 @@ export async function POST(req: NextRequest) {
         ok: true,
         pending: true,
         connection: data,
-        message: 'Conexão iniciada. Aguardando account_update webhook para resolver o WABA.',
+        message: 'Conexão iniciada. Aguardando account_update webhook para resolver o WABA.'
       })
     }
 
@@ -370,7 +370,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           ok: false,
-          error: 'Não foi possível identificar o phone_number_id do WABA',
+          error: 'Não foi possível identificar o phone_number_id do WABA'
         },
         { status: 400 }
       )
@@ -409,7 +409,8 @@ export async function POST(req: NextRequest) {
         exchange: exchanged,
         debug_token: debug,
         phone_numbers: phoneNumbers.list,
-      },
+        finalize_received_at: new Date().toISOString()
+      }
     }
 
     const { data, error } = await supabaseAdmin
@@ -427,12 +428,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
+      pending: false,
       connection: data,
       resolved: {
         wabaId: resolvedWabaId,
         phoneNumberId: resolvedPhoneNumberId,
-        businessId: resolvedBusinessId,
-      },
+        businessId: resolvedBusinessId
+      }
     })
   } catch (error: any) {
     return NextResponse.json(

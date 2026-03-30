@@ -1,5 +1,3 @@
-// app/api/meta/webhook/route.ts
-
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
@@ -22,6 +20,21 @@ export const runtime = 'nodejs'
 
 const GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v23.0'
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`
+
+function getFirstNonEmpty<T = any>(...values: T[]) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && value !== '') {
+      return value
+    }
+  }
+  return null
+}
+
+function normalizeDigits(value?: string | null) {
+  if (!value) return null
+  const digits = String(value).replace(/\D/g, '')
+  return digits || null
+}
 
 async function getWabaPhoneNumbers(wabaId: string, token: string) {
   const url = new URL(`${GRAPH_BASE}/${wabaId}/phone_numbers`)
@@ -90,31 +103,72 @@ async function registerPhone(phoneNumberId: string, token: string) {
   return data
 }
 
+function extractAccountUpdateInfo(value: any) {
+  const eventName = getFirstNonEmpty(
+    value?.event,
+    value?.events?.[0]?.event,
+    value?.status,
+    value?.account_update?.event
+  )
+
+  const wabaId = getFirstNonEmpty(
+    value?.waba_info?.waba_id,
+    value?.waba_id,
+    value?.whatsapp_business_account?.id,
+    value?.whatsapp_business_account_id,
+    value?.account_update?.waba_id,
+    value?.id
+  )
+
+  const phoneNumberId = getFirstNonEmpty(
+    value?.phone_number_id,
+    value?.phone?.id,
+    value?.phone_number?.id,
+    value?.metadata?.phone_number_id
+  )
+
+  const displayPhoneNumber = getFirstNonEmpty(
+    value?.display_phone_number,
+    value?.phone?.display_phone_number,
+    value?.phone_number?.display_phone_number,
+    value?.metadata?.display_phone_number
+  )
+
+  const verifiedName = getFirstNonEmpty(
+    value?.verified_name,
+    value?.phone?.verified_name,
+    value?.phone_number?.verified_name
+  )
+
+  return {
+    eventName: eventName ? String(eventName).toUpperCase() : null,
+    wabaId: wabaId ? String(wabaId) : null,
+    phoneNumberId: phoneNumberId ? String(phoneNumberId) : null,
+    displayPhoneNumber: displayPhoneNumber ? String(displayPhoneNumber) : null,
+    verifiedName: verifiedName ? String(verifiedName) : null
+  }
+}
+
 async function completePendingConnectionFromAccountUpdate(value: any) {
-  const eventName =
-    value?.event ||
-    value?.events?.[0]?.event ||
-    value?.status ||
-    null
+  const extracted = extractAccountUpdateInfo(value)
 
-  const wabaId =
-    value?.waba_info?.waba_id ||
-    value?.waba_id ||
-    value?.id ||
-    value?.whatsapp_business_account?.id ||
-    null
+  console.log('ACCOUNT_UPDATE RAW:', JSON.stringify(value, null, 2))
+  console.log('ACCOUNT_UPDATE EXTRACTED:', extracted)
 
-  if (!wabaId) {
+  if (!extracted.wabaId) {
+    console.log('account_update recebido sem wabaId, aguardando próximo evento...')
     return
   }
 
-  const normalizedEvent = String(eventName || '').toUpperCase()
+  const allowedEvents = new Set([
+    '',
+    'PARTNER_ADDED',
+    'PARTNER_APP_INSTALLED',
+    'ACCOUNT_UPDATE'
+  ])
 
-  if (
-    normalizedEvent &&
-    normalizedEvent !== 'PARTNER_ADDED' &&
-    normalizedEvent !== 'PARTNER_APP_INSTALLED'
-  ) {
+  if (extracted.eventName && !allowedEvents.has(extracted.eventName)) {
+    console.log('account_update ignorado por tipo de evento:', extracted.eventName)
     return
   }
 
@@ -129,31 +183,49 @@ async function completePendingConnectionFromAccountUpdate(value: any) {
   }
 
   if (!pendingConnections?.length) {
+    console.log('Nenhuma conexão pending_waba encontrada')
     return
   }
+
+  const normalizedDisplayNumber = normalizeDigits(extracted.displayPhoneNumber)
 
   for (const connection of pendingConnections) {
     if (!connection.business_token) continue
 
     try {
-      const phone = await getWabaPhoneNumbers(wabaId, connection.business_token)
+      const phone =
+        extracted.phoneNumberId && extracted.displayPhoneNumber
+          ? {
+              id: extracted.phoneNumberId,
+              display_phone_number: extracted.displayPhoneNumber,
+              verified_name: extracted.verifiedName ?? null,
+              quality_rating: null
+            }
+          : await getWabaPhoneNumbers(extracted.wabaId, connection.business_token)
 
-      await subscribeApp(wabaId, connection.business_token)
+      await subscribeApp(extracted.wabaId, connection.business_token)
       await registerPhone(phone.id, connection.business_token)
+
+      const currentMetadata =
+        connection.metadata && typeof connection.metadata === 'object'
+          ? connection.metadata
+          : {}
 
       const { error: updateError } = await supabaseAdmin
         .from('whatsapp_meta_connections')
         .update({
           status: 'connected',
-          waba_id: wabaId,
+          waba_id: extracted.wabaId,
           phone_number_id: phone.id,
-          display_phone_number: phone.display_phone_number ?? null,
-          verified_name: phone.verified_name ?? null,
+          display_phone_number: phone.display_phone_number ?? extracted.displayPhoneNumber ?? null,
+          verified_name: phone.verified_name ?? extracted.verifiedName ?? null,
           quality_rating: phone.quality_rating ?? null,
           webhook_verified: true,
           metadata: {
-            ...(connection.metadata ?? {}),
-            account_update: value
+            ...currentMetadata,
+            account_update: value,
+            account_update_processed_at: new Date().toISOString(),
+            account_update_display_phone_number_normalized: normalizedDisplayNumber
           }
         })
         .eq('id', connection.id)
@@ -164,7 +236,7 @@ async function completePendingConnectionFromAccountUpdate(value: any) {
 
       console.log('Conexão Meta pendente concluída via account_update:', {
         connectionId: connection.id,
-        wabaId,
+        wabaId: extracted.wabaId,
         phoneNumberId: phone.id
       })
 
@@ -277,6 +349,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
+
+    console.log('META WEBHOOK BODY:', JSON.stringify(body, null, 2))
+
     const entries = extractWebhookEntries(body)
 
     for (const entry of entries) {
