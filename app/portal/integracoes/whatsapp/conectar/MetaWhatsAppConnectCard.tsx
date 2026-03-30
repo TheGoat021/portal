@@ -128,19 +128,28 @@ export default function MetaWhatsAppConnectCard() {
   }, [])
 
   const fetchConnectionById = useCallback(async (id: string) => {
-    const res = await fetch(`/api/meta/connections/${id}`, {
-      method: 'GET',
-      cache: 'no-store',
-    })
+  const res = await fetch(`/api/meta/connections/${id}`, {
+    method: 'GET',
+    cache: 'no-store',
+  })
 
-    const data = (await res.json()) as ConnectionStatusResponse
+  const contentType = res.headers.get('content-type') || ''
+  const rawText = await res.text()
 
-    if (!res.ok || !data.ok || !data.connection) {
-      throw new Error(data.error || 'Erro ao consultar conexão')
-    }
+  if (!contentType.includes('application/json')) {
+    throw new Error(
+      `A rota /api/meta/connections/${id} não retornou JSON. Resposta recebida: ${rawText.slice(0, 120)}`
+    )
+  }
 
-    return data.connection
-  }, [])
+  const data = JSON.parse(rawText) as ConnectionStatusResponse
+
+  if (!res.ok || !data.ok || !data.connection) {
+    throw new Error(data.error || 'Erro ao consultar conexão')
+  }
+
+  return data.connection
+}, [])
 
   const startPollingConnection = useCallback(
     (connectionId: string) => {
