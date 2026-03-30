@@ -128,28 +128,28 @@ export default function MetaWhatsAppConnectCard() {
   }, [])
 
   const fetchConnectionById = useCallback(async (id: string) => {
-  const res = await fetch(`/api/meta/connections/${id}`, {
-    method: 'GET',
-    cache: 'no-store',
-  })
+    const res = await fetch(`/api/meta/connections/${id}`, {
+      method: 'GET',
+      cache: 'no-store',
+    })
 
-  const contentType = res.headers.get('content-type') || ''
-  const rawText = await res.text()
+    const contentType = res.headers.get('content-type') || ''
+    const rawText = await res.text()
 
-  if (!contentType.includes('application/json')) {
-    throw new Error(
-      `A rota /api/meta/connections/${id} não retornou JSON. Resposta recebida: ${rawText.slice(0, 120)}`
-    )
-  }
+    if (!contentType.includes('application/json')) {
+      throw new Error(
+        `A rota /api/meta/connections/${id} não retornou JSON. Resposta recebida: ${rawText.slice(0, 120)}`
+      )
+    }
 
-  const data = JSON.parse(rawText) as ConnectionStatusResponse
+    const data = JSON.parse(rawText) as ConnectionStatusResponse
 
-  if (!res.ok || !data.ok || !data.connection) {
-    throw new Error(data.error || 'Erro ao consultar conexão')
-  }
+    if (!res.ok || !data.ok || !data.connection) {
+      throw new Error(data.error || 'Erro ao consultar conexão')
+    }
 
-  return data.connection
-}, [])
+    return data.connection
+  }, [])
 
   const startPollingConnection = useCallback(
     (connectionId: string) => {
@@ -434,12 +434,6 @@ export default function MetaWhatsAppConnectCard() {
       }
     }
 
-    function maybeFinalizeFromCode() {
-      if (signupDataRef.current.code && !signupDataRef.current.finalizeStarted) {
-        void finalizeConnection()
-      }
-    }
-
     function onMessage(event: MessageEvent) {
       const parsed = tryParseMessageData(event.data)
       if (!parsed) return
@@ -449,6 +443,10 @@ export default function MetaWhatsAppConnectCard() {
       console.log(
         `Tipo recebido: ${extracted.type || 'sem type'} | Evento: ${extracted.event || 'sem event'}`
       )
+
+      if (extracted.type !== 'WA_EMBEDDED_SIGNUP') {
+        return
+      }
 
       if (extracted.oauthCode && !signupDataRef.current.code) {
         signupDataRef.current.code = extracted.oauthCode
@@ -483,15 +481,6 @@ export default function MetaWhatsAppConnectCard() {
         })
       }
 
-      if (
-        extracted.event === 'FINISH' ||
-        extracted.oauthCode ||
-        (extracted.type === 'WA_EMBEDDED_SIGNUP' && signupDataRef.current.code)
-      ) {
-        maybeFinalizeFromCode()
-        return
-      }
-
       if (extracted.event === 'ERROR') {
         setBusy(false)
         setStatus('error')
@@ -509,7 +498,7 @@ export default function MetaWhatsAppConnectCard() {
 
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
-  }, [finalizeConnection])
+  }, [])
 
   useEffect(() => {
     return () => {
