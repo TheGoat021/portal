@@ -58,6 +58,15 @@ type WabaPhoneNumber = {
   quality_rating?: string
 }
 
+type PhoneCandidate = {
+  id: string
+  display_phone_number?: string | null
+  verified_name?: string | null
+  quality_rating?: string | null
+  waba_id: string
+  business_id: string | null
+}
+
 type WabaPhoneNumbersResponse = {
   data?: WabaPhoneNumber[]
   error?: {
@@ -93,10 +102,6 @@ function firstNonEmpty<T>(...values: Array<T | null | undefined | ''>) {
     }
   }
   return null
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 async function exchangeCode(code: string) {
@@ -154,42 +159,17 @@ async function debugToken(inputToken: string) {
   return data
 }
 
-function extractBusinessIdFromDebug(debug: DebugTokenResponse) {
-  const granularScopes = debug?.data?.granular_scopes ?? []
-
-  for (const scope of granularScopes) {
-    if (scope?.scope === 'business_management') {
-      const targets = scope?.target_ids ?? []
-      if (targets.length > 0) return targets[0]
-    }
-  }
-
-  return null
-}
-
-function extractWabaIdFromDebug(debug: DebugTokenResponse) {
-  const granularScopes = debug?.data?.granular_scopes ?? []
-
-  for (const scope of granularScopes) {
-    if (
-      scope?.scope === 'whatsapp_business_management' ||
-      scope?.scope === 'business_management'
-    ) {
-      const targets = scope?.target_ids ?? []
-      if (targets.length > 0) {
-        return targets[0]
-      }
-    }
-  }
-
-  for (const scope of granularScopes) {
-    const targets = scope?.target_ids ?? []
-    if (targets.length > 0) {
-      return targets[0]
-    }
-  }
-
-  return null
+function extractBusinessIdFromRawEvent(rawEvent: any) {
+  return firstNonEmpty(
+    rawEvent?.businessId,
+    rawEvent?.business_id,
+    rawEvent?.data?.businessId,
+    rawEvent?.data?.business_id,
+    rawEvent?.sessionInfo?.businessId,
+    rawEvent?.sessionInfo?.business_id,
+    rawEvent?.extras?.businessId,
+    rawEvent?.extras?.business_id
+  )
 }
 
 function extractWabaIdFromRawEvent(rawEvent: any) {
@@ -203,19 +183,6 @@ function extractWabaIdFromRawEvent(rawEvent: any) {
     rawEvent?.extras?.wabaId,
     rawEvent?.extras?.waba_id,
     rawEvent?.whatsapp_business_account?.id
-  )
-}
-
-function extractBusinessIdFromRawEvent(rawEvent: any) {
-  return firstNonEmpty(
-    rawEvent?.businessId,
-    rawEvent?.business_id,
-    rawEvent?.data?.businessId,
-    rawEvent?.data?.business_id,
-    rawEvent?.sessionInfo?.businessId,
-    rawEvent?.sessionInfo?.business_id,
-    rawEvent?.extras?.businessId,
-    rawEvent?.extras?.business_id
   )
 }
 
@@ -269,7 +236,7 @@ async function getOwnedWabasFromBusiness(businessId: string, token: string) {
   const data = (await res.json()) as WabaListResponse
 
   if (!res.ok) {
-    throw new Error(data?.error?.message || 'Erro ao buscar WABAs do Business')
+    throw new Error(data?.error?.message || 'Erro ao buscar WABAs do business')
   }
 
   return data?.data ?? []
@@ -289,7 +256,7 @@ async function getClientWabasFromBusiness(businessId: string, token: string) {
   const data = (await res.json()) as WabaListResponse
 
   if (!res.ok) {
-    throw new Error(data?.error?.message || 'Erro ao buscar client WABAs do Business')
+    throw new Error(data?.error?.message || 'Erro ao buscar client WABAs do business')
   }
 
   return data?.data ?? []
@@ -319,6 +286,53 @@ async function getAllWabaPhoneNumbers(wabaId: string, token: string) {
   return Array.isArray(data?.data) ? data.data : []
 }
 
+async function discoverPhoneCandidates(
+  token: string,
+  explicitBusinessId?: string | null,
+  explicitWabaId?: string | null
+) {
+  const businesses = await getBusinesses(token)
+
+  const businessList = explicitBusinessId
+    ? businesses.filter((b) => b.id === explicitBusinessId)
+    : businesses
+
+  const candidates: PhoneCandidate[] = []
+
+  for (const business of businessList) {
+    if (!business.id) continue
+
+    const owned = await getOwnedWabasFromBusiness(business.id, token).catch(() => [])
+    const client = await getClientWabasFromBusiness(business.id, token).catch(() => [])
+
+    const mergedWabas = [...owned, ...client]
+    const uniqueWabas = Array.from(
+      new Map(mergedWabas.map((w) => [w.id, w])).values()
+    )
+
+    const wabaList = explicitWabaId
+      ? uniqueWabas.filter((w) => w.id === explicitWabaId)
+      : uniqueWabas
+
+    for (const waba of wabaList) {
+      const phones = await getAllWabaPhoneNumbers(waba.id, token).catch(() => [])
+
+      for (const phone of phones) {
+        candidates.push({
+          id: phone.id,
+          display_phone_number: phone.display_phone_number ?? null,
+          verified_name: phone.verified_name ?? null,
+          quality_rating: phone.quality_rating ?? null,
+          waba_id: waba.id,
+          business_id: business.id
+        })
+      }
+    }
+  }
+
+  return candidates
+}
+
 async function subscribeApp(wabaId: string, token: string) {
   const res = await fetch(`${GRAPH_BASE}/${wabaId}/subscribed_apps`, {
     method: 'POST',
@@ -338,11 +352,7 @@ async function subscribeApp(wabaId: string, token: string) {
   return data
 }
 
-async function registerPhone(
-  phoneNumberId: string,
-  token: string,
-  pin?: string | null
-) {
+async function registerPhone(phoneNumberId: string, token: string, pin?: string | null) {
   const body: Record<string, string> = {
     messaging_product: 'whatsapp'
   }
@@ -391,80 +401,6 @@ async function getPhoneInfo(phoneNumberId: string, token: string) {
   return data
 }
 
-async function resolveBusinessId(
-  explicitBusinessId: string | null,
-  rawEvent: any,
-  debug: DebugTokenResponse,
-  token: string
-) {
-  let businessId =
-    firstNonEmpty(
-      explicitBusinessId,
-      extractBusinessIdFromRawEvent(rawEvent),
-      extractBusinessIdFromDebug(debug)
-    ) ?? null
-
-  if (businessId) return businessId
-
-  try {
-    const businesses = await getBusinesses(token)
-    console.log('META BUSINESSES:', JSON.stringify(businesses, null, 2))
-
-    if (businesses.length > 0) {
-      businessId = businesses[0]?.id ?? null
-    }
-  } catch (error) {
-    console.error('Erro ao buscar businesses via /me/businesses:', error)
-  }
-
-  return businessId
-}
-
-async function resolveWabaId(
-  explicitWabaId: string | null,
-  rawEvent: any,
-  debug: DebugTokenResponse,
-  token: string,
-  businessId: string | null
-) {
-  let wabaId =
-    firstNonEmpty(
-      explicitWabaId,
-      extractWabaIdFromRawEvent(rawEvent),
-      extractWabaIdFromDebug(debug)
-    ) ?? null
-
-  if (wabaId) return wabaId
-
-  if (businessId) {
-    try {
-      const ownedWabas = await getOwnedWabasFromBusiness(businessId, token)
-      console.log('OWNED_WABAS:', JSON.stringify(ownedWabas, null, 2))
-
-      if (ownedWabas.length > 0) {
-        wabaId = ownedWabas[0].id
-        return wabaId
-      }
-    } catch (error) {
-      console.error('Erro ao buscar owned_whatsapp_business_accounts:', error)
-    }
-
-    try {
-      const clientWabas = await getClientWabasFromBusiness(businessId, token)
-      console.log('CLIENT_WABAS:', JSON.stringify(clientWabas, null, 2))
-
-      if (clientWabas.length > 0) {
-        wabaId = clientWabas[0].id
-        return wabaId
-      }
-    } catch (error) {
-      console.error('Erro ao buscar client_whatsapp_business_accounts:', error)
-    }
-  }
-
-  return null
-}
-
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as Body
@@ -481,191 +417,81 @@ export async function POST(req: NextRequest) {
     const debug = await debugToken(businessToken)
     const rawEvent = body.rawEvent ?? null
 
+    const explicitBusinessId =
+      firstNonEmpty(body.businessId, extractBusinessIdFromRawEvent(rawEvent)) ?? null
+
+    const explicitWabaId =
+      firstNonEmpty(body.wabaId, extractWabaIdFromRawEvent(rawEvent)) ?? null
+
+    const explicitPhoneNumberId =
+      firstNonEmpty(body.phoneNumberId, extractPhoneNumberIdFromRawEvent(rawEvent)) ?? null
+
     console.log('FINALIZE INPUT BODY:', JSON.stringify(body, null, 2))
-    console.log('DEBUG_TOKEN_META:', JSON.stringify(debug, null, 2))
+    console.log('DEBUG TOKEN:', JSON.stringify(debug, null, 2))
+    console.log('EXPLICIT IDS:', {
+      explicitBusinessId,
+      explicitWabaId,
+      explicitPhoneNumberId
+    })
 
-    const resolvedBusinessId = await resolveBusinessId(
-      body.businessId ?? null,
-      rawEvent,
-      debug,
-      businessToken
-    )
-
-    let resolvedWabaId = await resolveWabaId(
-      body.wabaId ?? null,
-      rawEvent,
-      debug,
+    const candidates = await discoverPhoneCandidates(
       businessToken,
-      resolvedBusinessId
+      explicitBusinessId,
+      explicitWabaId
     )
 
-    let resolvedPhoneNumberId =
-      firstNonEmpty(
-        body.phoneNumberId,
-        extractPhoneNumberIdFromRawEvent(rawEvent)
-      ) ?? null
+    console.log('DISCOVERED PHONE CANDIDATES:', JSON.stringify(candidates, null, 2))
 
-    console.log('FINALIZE RESOLVED BUSINESS ID:', resolvedBusinessId)
-    console.log('FINALIZE RESOLVED WABA ID BEFORE RETRIES:', resolvedWabaId)
-    console.log(
-      'FINALIZE RESOLVED PHONE NUMBER ID BEFORE LOOKUPS:',
-      resolvedPhoneNumberId
-    )
+    let selected: PhoneCandidate | null = null
 
-    let phoneNumbers: WabaPhoneNumber[] = []
+    if (explicitPhoneNumberId) {
+      selected = candidates.find((item) => item.id === explicitPhoneNumberId) ?? null
 
-    if (!resolvedWabaId && resolvedBusinessId) {
-      for (let attempt = 1; attempt <= 4; attempt++) {
-        console.log(`Tentativa ${attempt} de resolver WABA sem webhook...`)
-
-        await sleep(attempt === 1 ? 0 : 2500)
-
-        resolvedWabaId = await resolveWabaId(
-          body.wabaId ?? null,
-          rawEvent,
-          debug,
-          businessToken,
-          resolvedBusinessId
+      if (!selected) {
+        return NextResponse.json(
+          { ok: false, error: 'Número selecionado não pertence aos ativos encontrados para este token' },
+          { status: 400 }
         )
-
-        if (resolvedWabaId) {
-          break
-        }
       }
-    }
-
-    if (resolvedWabaId) {
-      for (let attempt = 1; attempt <= 4; attempt++) {
-        try {
-          console.log(
-            `Tentativa ${attempt} de buscar phone_numbers do WABA ${resolvedWabaId}`
-          )
-
-          phoneNumbers = await getAllWabaPhoneNumbers(resolvedWabaId, businessToken)
-          break
-        } catch (error) {
-          console.error(
-            `Erro ao buscar phone_numbers na tentativa ${attempt}:`,
-            error
-          )
-
-          if (attempt < 4) {
-            await sleep(2500)
-          }
-        }
-      }
-    }
-
-    if (resolvedWabaId && !resolvedPhoneNumberId) {
-      if (phoneNumbers.length === 1) {
-        resolvedPhoneNumberId = phoneNumbers[0].id
-      } else if (phoneNumbers.length > 1) {
+    } else {
+      if (candidates.length === 1) {
+        selected = candidates[0]
+      } else if (candidates.length > 1) {
         return NextResponse.json({
           ok: true,
           needs_phone_selection: true,
-          wabaId: resolvedWabaId,
-          businessId: resolvedBusinessId,
-          phoneNumbers
+          phoneNumbers: candidates
         })
       }
     }
 
-    console.log('FINALIZE RESOLVED WABA ID AFTER RETRIES:', resolvedWabaId)
-    console.log(
-      'FINALIZE RESOLVED PHONE NUMBER ID AFTER LOOKUPS:',
-      resolvedPhoneNumberId
-    )
-
-    if (resolvedWabaId && resolvedPhoneNumberId) {
-      const selectedPhone = phoneNumbers.find(
-        (phone) => phone.id === resolvedPhoneNumberId
+    if (!selected) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            'Não foi possível descobrir automaticamente o WABA e o número para este token. Verifique se o usuário concluiu o Embedded Signup na mesma Business e se o token tem acesso aos ativos.'
+        },
+        { status: 400 }
       )
-
-      if (phoneNumbers.length > 0 && !selectedPhone) {
-        return NextResponse.json(
-          { ok: false, error: 'Número selecionado não pertence ao WABA' },
-          { status: 400 }
-        )
-      }
     }
 
-    const selectedPhone =
-      phoneNumbers.find((phone) => phone.id === resolvedPhoneNumberId) ?? null
+    await subscribeApp(selected.waba_id, businessToken)
+    await registerPhone(selected.id, businessToken, body.pin ?? null)
 
-    if (!resolvedWabaId || !resolvedPhoneNumberId) {
-      const pendingPayload = {
-        company_id: body.companyId ?? null,
-        profile_id: body.profileId ?? null,
-        status: 'pending_waba',
-        provider: 'meta',
-        waba_id: resolvedWabaId,
-        phone_number_id: resolvedPhoneNumberId,
-        business_id: resolvedBusinessId,
-        display_phone_number: selectedPhone?.display_phone_number ?? null,
-        verified_name: selectedPhone?.verified_name ?? null,
-        quality_rating: selectedPhone?.quality_rating ?? null,
-        code: body.code,
-        business_token: businessToken,
-        webhook_verified: false,
-        metadata: {
-          rawEvent,
-          exchange: exchanged,
-          debug_token: debug,
-          phone_numbers: phoneNumbers,
-          pending_reason: !resolvedWabaId
-            ? 'waba_not_available_yet'
-            : 'phone_number_not_available_yet',
-          finalize_received_at: new Date().toISOString()
-        }
-      }
-
-      const { data, error } = await supabaseAdmin
-        .from('whatsapp_meta_connections')
-        .insert(pendingPayload)
-        .select('*')
-        .single()
-
-      if (error) {
-        return NextResponse.json(
-          { ok: false, error: error.message },
-          { status: 500 }
-        )
-      }
-
-      return NextResponse.json({
-        ok: true,
-        pending: true,
-        connection: data,
-        message:
-          'Aguardando confirmação da Meta para vincular o WABA e o número. Assim que os dados estiverem disponíveis, a conexão será concluída.'
-      })
-    }
-
-    await subscribeApp(resolvedWabaId, businessToken)
-    await registerPhone(resolvedPhoneNumberId, businessToken, body.pin ?? null)
-
-    const phone = await getPhoneInfo(resolvedPhoneNumberId, businessToken)
+    const phone = await getPhoneInfo(selected.id, businessToken)
 
     const payload = {
       company_id: body.companyId ?? null,
       profile_id: body.profileId ?? null,
       status: 'connected',
       provider: 'meta',
-      waba_id: resolvedWabaId,
-      phone_number_id: resolvedPhoneNumberId,
-      business_id: resolvedBusinessId,
-      display_phone_number:
-        phone?.display_phone_number ??
-        selectedPhone?.display_phone_number ??
-        null,
-      verified_name:
-        phone?.verified_name ??
-        selectedPhone?.verified_name ??
-        null,
-      quality_rating:
-        phone?.quality_rating ??
-        selectedPhone?.quality_rating ??
-        null,
+      waba_id: selected.waba_id,
+      phone_number_id: selected.id,
+      business_id: selected.business_id,
+      display_phone_number: phone?.display_phone_number ?? selected.display_phone_number ?? null,
+      verified_name: phone?.verified_name ?? selected.verified_name ?? null,
+      quality_rating: phone?.quality_rating ?? selected.quality_rating ?? null,
       code: body.code,
       business_token: businessToken,
       webhook_verified: true,
@@ -673,9 +499,9 @@ export async function POST(req: NextRequest) {
         rawEvent,
         exchange: exchanged,
         debug_token: debug,
-        phone_numbers: phoneNumbers,
+        discovered_candidates: candidates,
         finalize_received_at: new Date().toISOString(),
-        resolved_without_waiting_webhook: true
+        connected_without_webhook_wait: true
       }
     }
 
@@ -697,9 +523,9 @@ export async function POST(req: NextRequest) {
       pending: false,
       connection: data,
       resolved: {
-        wabaId: resolvedWabaId,
-        phoneNumberId: resolvedPhoneNumberId,
-        businessId: resolvedBusinessId
+        wabaId: selected.waba_id,
+        phoneNumberId: selected.id,
+        businessId: selected.business_id
       }
     })
   } catch (error: any) {

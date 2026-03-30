@@ -53,6 +53,8 @@ type AvailablePhone = {
   display_phone_number?: string | null
   verified_name?: string | null
   quality_rating?: string | null
+  waba_id: string
+  business_id: string | null
 }
 
 type FinalizeResponse = {
@@ -62,8 +64,6 @@ type FinalizeResponse = {
   message?: string
   error?: string
   connection?: Connection
-  wabaId?: string | null
-  businessId?: string | null
   phoneNumbers?: AvailablePhone[]
 }
 
@@ -92,8 +92,6 @@ export default function MetaWhatsAppConnectCard() {
 
   const [availablePhones, setAvailablePhones] = useState<AvailablePhone[]>([])
   const [selectedPhoneId, setSelectedPhoneId] = useState('')
-  const [resolvedWabaId, setResolvedWabaId] = useState<string | null>(null)
-  const [resolvedBusinessId, setResolvedBusinessId] = useState<string | null>(null)
 
   const signupDataRef = useRef<{
     code?: string
@@ -243,8 +241,6 @@ export default function MetaWhatsAppConnectCard() {
       if (data.needs_phone_selection) {
         setAvailablePhones(data.phoneNumbers || [])
         setSelectedPhoneId('')
-        setResolvedWabaId(data.wabaId || null)
-        setResolvedBusinessId(data.businessId || null)
         setBusy(false)
         setStatus('idle')
         setStatusMessage('Escolha o número que deseja conectar.')
@@ -270,8 +266,6 @@ export default function MetaWhatsAppConnectCard() {
       if (data.connection?.status === 'connected') {
         setAvailablePhones([])
         setSelectedPhoneId('')
-        setResolvedWabaId(null)
-        setResolvedBusinessId(null)
         setStatus('success')
         setStatusMessage('Conexão concluída com sucesso.')
         return
@@ -292,6 +286,14 @@ export default function MetaWhatsAppConnectCard() {
   const submitSelectedPhone = useCallback(async () => {
     if (!selectedPhoneId) return
 
+    const selectedPhone = availablePhones.find((item) => item.id === selectedPhoneId)
+
+    if (!selectedPhone) {
+      setStatus('error')
+      setError('Número selecionado inválido')
+      return
+    }
+
     try {
       setBusy(true)
       setStatus('saving')
@@ -305,9 +307,9 @@ export default function MetaWhatsAppConnectCard() {
         },
         body: JSON.stringify({
           code: signupDataRef.current.code,
-          wabaId: resolvedWabaId,
-          businessId: resolvedBusinessId,
-          phoneNumberId: selectedPhoneId,
+          wabaId: selectedPhone.waba_id,
+          businessId: selectedPhone.business_id,
+          phoneNumberId: selectedPhone.id,
           pin: pin.trim() || undefined,
           rawEvent: signupDataRef.current.rawEvent,
         }),
@@ -326,8 +328,6 @@ export default function MetaWhatsAppConnectCard() {
       if (data.pending && data.connection?.id) {
         setAvailablePhones([])
         setSelectedPhoneId('')
-        setResolvedWabaId(null)
-        setResolvedBusinessId(null)
         setBusy(false)
         setStatus('success')
         setStatusMessage(
@@ -340,8 +340,6 @@ export default function MetaWhatsAppConnectCard() {
 
       setAvailablePhones([])
       setSelectedPhoneId('')
-      setResolvedWabaId(null)
-      setResolvedBusinessId(null)
       setBusy(false)
       setStatus('success')
       setStatusMessage('Número conectado com sucesso.')
@@ -351,7 +349,7 @@ export default function MetaWhatsAppConnectCard() {
       setError(err?.message || 'Erro ao conectar número')
       setStatusMessage('')
     }
-  }, [pin, resolvedBusinessId, resolvedWabaId, selectedPhoneId, startPollingConnection])
+  }, [availablePhones, pin, selectedPhoneId, startPollingConnection])
 
   useEffect(() => {
     loadConfig()
@@ -613,8 +611,6 @@ export default function MetaWhatsAppConnectCard() {
     setConnection(null)
     setAvailablePhones([])
     setSelectedPhoneId('')
-    setResolvedWabaId(null)
-    setResolvedBusinessId(null)
 
     signupDataRef.current = {
       finalizeStarted: false,
