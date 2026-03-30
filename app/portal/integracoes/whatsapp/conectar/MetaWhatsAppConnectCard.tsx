@@ -55,6 +55,26 @@ type AvailablePhone = {
   quality_rating?: string | null
   waba_id: string
   business_id: string | null
+  source?: 'explicit' | 'debug_token' | 'business_lookup'
+}
+
+type FinalizeDebug = {
+  tokenScopes?: string[]
+  debugBusinessTargetIds?: string[]
+  debugWabaTargetIds?: string[]
+  businessesFound?: Array<{ id?: string; name?: string }>
+  triedWabas?: Array<{
+    wabaId?: string
+    businessId?: string | null
+    source?: string
+  }>
+  errors?: Array<{
+    step?: string
+    businessId?: string
+    wabaId?: string
+    message?: string
+  }>
+  candidatesFound?: number
 }
 
 type FinalizeResponse = {
@@ -65,6 +85,7 @@ type FinalizeResponse = {
   error?: string
   connection?: Connection
   phoneNumbers?: AvailablePhone[]
+  debug?: FinalizeDebug
 }
 
 type ConnectionStatusResponse = {
@@ -75,6 +96,69 @@ type ConnectionStatusResponse = {
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(' ')
+}
+
+async function parseJsonResponse<T>(res: Response): Promise<T> {
+  const contentType = res.headers.get('content-type') || ''
+  const rawText = await res.text()
+
+  if (!contentType.includes('application/json')) {
+    throw new Error(
+      `A rota retornou resposta não JSON. Conteúdo recebido: ${rawText.slice(0, 300)}`
+    )
+  }
+
+  return JSON.parse(rawText) as T
+}
+
+function buildDebugMessage(debug?: FinalizeDebug) {
+  if (!debug) return ''
+
+  const lines: string[] = []
+
+  if (debug.tokenScopes?.length) {
+    lines.push(`Scopes: ${debug.tokenScopes.join(', ')}`)
+  }
+
+  if (debug.debugBusinessTargetIds?.length) {
+    lines.push(`Business target_ids: ${debug.debugBusinessTargetIds.join(', ')}`)
+  }
+
+  if (debug.debugWabaTargetIds?.length) {
+    lines.push(`WABA target_ids: ${debug.debugWabaTargetIds.join(', ')}`)
+  }
+
+  if (debug.businessesFound?.length) {
+    lines.push(
+      `Businesses encontradas: ${debug.businessesFound
+        .map((b) => `${b.name || '(sem nome)'} (${b.id || 'sem id'})`)
+        .join(' | ')}`
+    )
+  }
+
+  if (debug.triedWabas?.length) {
+    lines.push(
+      `WABAs testados: ${debug.triedWabas
+        .map(
+          (w) =>
+            `${w.wabaId || 'sem waba'} / business ${w.businessId || 'sem business'} / ${w.source || 'sem source'}`
+        )
+        .join(' | ')}`
+    )
+  }
+
+  if (debug.errors?.length) {
+    lines.push(
+      `Erros: ${debug.errors
+        .map(
+          (e) =>
+            `${e.step || 'step'}${e.businessId ? ` [business ${e.businessId}]` : ''}${e.wabaId ? ` [waba ${e.wabaId}]` : ''}: ${e.message || 'sem mensagem'}`
+        )
+        .join(' | ')}`
+    )
+  }
+
+  return lines.join('\n')
 }
 
 export default function MetaWhatsAppConnectCard() {
@@ -89,6 +173,7 @@ export default function MetaWhatsAppConnectCard() {
   const [error, setError] = useState('')
   const [connection, setConnection] = useState<Connection | null>(null)
   const [statusMessage, setStatusMessage] = useState('')
+  const [debugMessage, setDebugMessage] = useState('')
 
   const [availablePhones, setAvailablePhones] = useState<AvailablePhone[]>([])
   const [selectedPhoneId, setSelectedPhoneId] = useState('')
@@ -121,13 +206,14 @@ export default function MetaWhatsAppConnectCard() {
   const loadConfig = useCallback(async () => {
     setLoadingConfig(true)
     setError('')
+    setDebugMessage('')
 
     try {
       const res = await fetch('/api/meta/embedded-signup/config', {
         cache: 'no-store',
       })
 
-      const data = (await res.json()) as ConfigResponse
+      const data = await parseJsonResponse<ConfigResponse>(res)
 
       if (!res.ok || !data.ok) {
         throw new Error(data.error || 'Erro ao carregar configuração')
@@ -147,16 +233,7 @@ export default function MetaWhatsAppConnectCard() {
       cache: 'no-store',
     })
 
-    const contentType = res.headers.get('content-type') || ''
-    const rawText = await res.text()
-
-    if (!contentType.includes('application/json')) {
-      throw new Error(
-        `A rota /api/meta/connections/${id} não retornou JSON. Resposta recebida: ${rawText.slice(0, 120)}`
-      )
-    }
-
-    const data = JSON.parse(rawText) as ConnectionStatusResponse
+    const data = await parseJsonResponse<ConnectionStatusResponse>(res)
 
     if (!res.ok || !data.ok || !data.connection) {
       throw new Error(data.error || 'Erro ao consultar conexão')
@@ -180,6 +257,7 @@ export default function MetaWhatsAppConnectCard() {
             setStatus('success')
             setStatusMessage('Conexão concluída com sucesso.')
             setError('')
+            setDebugMessage('')
           } else if (latest.status === 'pending_waba') {
             setStatus('success')
             setStatusMessage(
@@ -215,6 +293,7 @@ export default function MetaWhatsAppConnectCard() {
       setBusy(true)
       setStatus('saving')
       setError('')
+      setDebugMessage('')
       setStatusMessage('Finalizando conexão com a Meta...')
 
       const res = await fetch('/api/meta/embedded-signup/finalize', {
@@ -232,10 +311,19 @@ export default function MetaWhatsAppConnectCard() {
         }),
       })
 
-      const data = (await res.json()) as FinalizeResponse
+      const data = await parseJsonResponse<FinalizeResponse>(res)
+
+      console.log('FINALIZE RESPONSE:', data)
 
       if (!res.ok || !data.ok) {
-        throw new Error(data.error || 'Erro ao finalizar conexão')
+        console.error('FINALIZE ERROR RESPONSE:', data)
+
+        const extraDebug = buildDebugMessage(data.debug)
+        if (extraDebug) {
+          setDebugMessage(extraDebug)
+        }
+
+        throw new Error(data.error || `Erro ao finalizar conexão (HTTP ${res.status})`)
       }
 
       if (data.needs_phone_selection) {
@@ -244,6 +332,7 @@ export default function MetaWhatsAppConnectCard() {
         setBusy(false)
         setStatus('idle')
         setStatusMessage('Escolha o número que deseja conectar.')
+        setDebugMessage('')
         signupDataRef.current.finalizeStarted = false
         return
       }
@@ -268,6 +357,7 @@ export default function MetaWhatsAppConnectCard() {
         setSelectedPhoneId('')
         setStatus('success')
         setStatusMessage('Conexão concluída com sucesso.')
+        setDebugMessage('')
         return
       }
 
@@ -298,6 +388,7 @@ export default function MetaWhatsAppConnectCard() {
       setBusy(true)
       setStatus('saving')
       setError('')
+      setDebugMessage('')
       setStatusMessage('Conectando número selecionado...')
 
       const res = await fetch('/api/meta/embedded-signup/finalize', {
@@ -315,10 +406,19 @@ export default function MetaWhatsAppConnectCard() {
         }),
       })
 
-      const data = (await res.json()) as FinalizeResponse
+      const data = await parseJsonResponse<FinalizeResponse>(res)
+
+      console.log('FINALIZE RESPONSE (SELECTED PHONE):', data)
 
       if (!res.ok || !data.ok) {
-        throw new Error(data.error || 'Erro ao conectar número')
+        console.error('FINALIZE ERROR RESPONSE (SELECTED PHONE):', data)
+
+        const extraDebug = buildDebugMessage(data.debug)
+        if (extraDebug) {
+          setDebugMessage(extraDebug)
+        }
+
+        throw new Error(data.error || `Erro ao conectar número (HTTP ${res.status})`)
       }
 
       if (data.connection) {
@@ -343,6 +443,7 @@ export default function MetaWhatsAppConnectCard() {
       setBusy(false)
       setStatus('success')
       setStatusMessage('Número conectado com sucesso.')
+      setDebugMessage('')
     } catch (err: any) {
       setBusy(false)
       setStatus('error')
@@ -607,6 +708,7 @@ export default function MetaWhatsAppConnectCard() {
     setBusy(true)
     setStatus('waiting-meta')
     setError('')
+    setDebugMessage('')
     setStatusMessage('Aguardando conclusão do Embedded Signup...')
     setConnection(null)
     setAvailablePhones([])
@@ -802,6 +904,12 @@ export default function MetaWhatsAppConnectCard() {
             <div className="mt-6 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {!!debugMessage && (
+            <div className="mt-4 whitespace-pre-wrap rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
+              {debugMessage}
             </div>
           )}
 
