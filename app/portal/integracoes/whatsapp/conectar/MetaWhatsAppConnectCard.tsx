@@ -48,12 +48,23 @@ type Connection = {
   updated_at?: string | null
 }
 
+type AvailablePhone = {
+  id: string
+  display_phone_number?: string | null
+  verified_name?: string | null
+  quality_rating?: string | null
+}
+
 type FinalizeResponse = {
   ok: boolean
   pending?: boolean
+  needs_phone_selection?: boolean
   message?: string
   error?: string
   connection?: Connection
+  wabaId?: string | null
+  businessId?: string | null
+  phoneNumbers?: AvailablePhone[]
 }
 
 type ConnectionStatusResponse = {
@@ -78,6 +89,11 @@ export default function MetaWhatsAppConnectCard() {
   const [error, setError] = useState('')
   const [connection, setConnection] = useState<Connection | null>(null)
   const [statusMessage, setStatusMessage] = useState('')
+
+  const [availablePhones, setAvailablePhones] = useState<AvailablePhone[]>([])
+  const [selectedPhoneId, setSelectedPhoneId] = useState('')
+  const [resolvedWabaId, setResolvedWabaId] = useState<string | null>(null)
+  const [resolvedBusinessId, setResolvedBusinessId] = useState<string | null>(null)
 
   const signupDataRef = useRef<{
     code?: string
@@ -224,6 +240,18 @@ export default function MetaWhatsAppConnectCard() {
         throw new Error(data.error || 'Erro ao finalizar conexão')
       }
 
+      if (data.needs_phone_selection) {
+        setAvailablePhones(data.phoneNumbers || [])
+        setSelectedPhoneId('')
+        setResolvedWabaId(data.wabaId || null)
+        setResolvedBusinessId(data.businessId || null)
+        setBusy(false)
+        setStatus('idle')
+        setStatusMessage('Escolha o número que deseja conectar.')
+        signupDataRef.current.finalizeStarted = false
+        return
+      }
+
       if (data.connection) {
         setConnection(data.connection)
       }
@@ -240,6 +268,10 @@ export default function MetaWhatsAppConnectCard() {
       }
 
       if (data.connection?.status === 'connected') {
+        setAvailablePhones([])
+        setSelectedPhoneId('')
+        setResolvedWabaId(null)
+        setResolvedBusinessId(null)
         setStatus('success')
         setStatusMessage('Conexão concluída com sucesso.')
         return
@@ -256,6 +288,70 @@ export default function MetaWhatsAppConnectCard() {
       setBusy(false)
     }
   }, [pin, startPollingConnection])
+
+  const submitSelectedPhone = useCallback(async () => {
+    if (!selectedPhoneId) return
+
+    try {
+      setBusy(true)
+      setStatus('saving')
+      setError('')
+      setStatusMessage('Conectando número selecionado...')
+
+      const res = await fetch('/api/meta/embedded-signup/finalize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          code: signupDataRef.current.code,
+          wabaId: resolvedWabaId,
+          businessId: resolvedBusinessId,
+          phoneNumberId: selectedPhoneId,
+          pin: pin.trim() || undefined,
+          rawEvent: signupDataRef.current.rawEvent,
+        }),
+      })
+
+      const data = (await res.json()) as FinalizeResponse
+
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || 'Erro ao conectar número')
+      }
+
+      if (data.connection) {
+        setConnection(data.connection)
+      }
+
+      if (data.pending && data.connection?.id) {
+        setAvailablePhones([])
+        setSelectedPhoneId('')
+        setResolvedWabaId(null)
+        setResolvedBusinessId(null)
+        setBusy(false)
+        setStatus('success')
+        setStatusMessage(
+          data.message ||
+            'Conectando... aguardando confirmação da Meta para vincular o WABA e o número.'
+        )
+        startPollingConnection(data.connection.id)
+        return
+      }
+
+      setAvailablePhones([])
+      setSelectedPhoneId('')
+      setResolvedWabaId(null)
+      setResolvedBusinessId(null)
+      setBusy(false)
+      setStatus('success')
+      setStatusMessage('Número conectado com sucesso.')
+    } catch (err: any) {
+      setBusy(false)
+      setStatus('error')
+      setError(err?.message || 'Erro ao conectar número')
+      setStatusMessage('')
+    }
+  }, [pin, resolvedBusinessId, resolvedWabaId, selectedPhoneId, startPollingConnection])
 
   useEffect(() => {
     loadConfig()
@@ -515,6 +611,10 @@ export default function MetaWhatsAppConnectCard() {
     setError('')
     setStatusMessage('Aguardando conclusão do Embedded Signup...')
     setConnection(null)
+    setAvailablePhones([])
+    setSelectedPhoneId('')
+    setResolvedWabaId(null)
+    setResolvedBusinessId(null)
 
     signupDataRef.current = {
       finalizeStarted: false,
@@ -621,6 +721,49 @@ export default function MetaWhatsAppConnectCard() {
               className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-emerald-500"
             />
           </div>
+
+          {availablePhones.length > 0 && (
+            <div className="mt-6 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+              <label className="mb-2 block text-sm font-medium text-zinc-800">
+                Escolha o número para conectar
+              </label>
+
+              <select
+                value={selectedPhoneId}
+                onChange={(e) => setSelectedPhoneId(e.target.value)}
+                className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-emerald-500"
+              >
+                <option value="">Selecione um número</option>
+                {availablePhones.map((phone) => (
+                  <option key={phone.id} value={phone.id}>
+                    {phone.display_phone_number || phone.id}
+                    {phone.verified_name ? ` — ${phone.verified_name}` : ''}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={submitSelectedPhone}
+                disabled={busy || !selectedPhoneId}
+                className={cn(
+                  'mt-3 inline-flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition',
+                  !busy && selectedPhoneId
+                    ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                    : 'cursor-not-allowed bg-zinc-200 text-zinc-500'
+                )}
+              >
+                {busy && status === 'saving' ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Conectando...
+                  </>
+                ) : (
+                  'Conectar número selecionado'
+                )}
+              </button>
+            </div>
+          )}
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <button
