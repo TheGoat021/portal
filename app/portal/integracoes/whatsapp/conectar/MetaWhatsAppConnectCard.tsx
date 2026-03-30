@@ -113,52 +113,7 @@ async function parseJsonResponse<T>(res: Response): Promise<T> {
 
 function buildDebugMessage(debug?: FinalizeDebug) {
   if (!debug) return ''
-
-  const lines: string[] = []
-
-  if (debug.tokenScopes?.length) {
-    lines.push(`Scopes: ${debug.tokenScopes.join(', ')}`)
-  }
-
-  if (debug.debugBusinessTargetIds?.length) {
-    lines.push(`Business target_ids: ${debug.debugBusinessTargetIds.join(', ')}`)
-  }
-
-  if (debug.debugWabaTargetIds?.length) {
-    lines.push(`WABA target_ids: ${debug.debugWabaTargetIds.join(', ')}`)
-  }
-
-  if (debug.businessesFound?.length) {
-    lines.push(
-      `Businesses encontradas: ${debug.businessesFound
-        .map((b) => `${b.name || '(sem nome)'} (${b.id || 'sem id'})`)
-        .join(' | ')}`
-    )
-  }
-
-  if (debug.triedWabas?.length) {
-    lines.push(
-      `WABAs testados: ${debug.triedWabas
-        .map(
-          (w) =>
-            `${w.wabaId || 'sem waba'} / business ${w.businessId || 'sem business'} / ${w.source || 'sem source'}`
-        )
-        .join(' | ')}`
-    )
-  }
-
-  if (debug.errors?.length) {
-    lines.push(
-      `Erros: ${debug.errors
-        .map(
-          (e) =>
-            `${e.step || 'step'}${e.businessId ? ` [business ${e.businessId}]` : ''}${e.wabaId ? ` [waba ${e.wabaId}]` : ''}: ${e.message || 'sem mensagem'}`
-        )
-        .join(' | ')}`
-    )
-  }
-
-  return lines.join('\n')
+  return JSON.stringify(debug, null, 2)
 }
 
 export default function MetaWhatsAppConnectCard() {
@@ -313,14 +268,16 @@ export default function MetaWhatsAppConnectCard() {
 
       const data = await parseJsonResponse<FinalizeResponse>(res)
 
-      console.log('FINALIZE RESPONSE:', data)
+      console.log('FINALIZE RESPONSE FULL:\n', JSON.stringify(data, null, 2))
 
       if (!res.ok || !data.ok) {
-        console.error('FINALIZE ERROR RESPONSE:', data)
+        console.error(
+          'FINALIZE ERROR RESPONSE FULL:\n',
+          JSON.stringify(data, null, 2)
+        )
 
-        const extraDebug = buildDebugMessage(data.debug)
-        if (extraDebug) {
-          setDebugMessage(extraDebug)
+        if (data.debug) {
+          setDebugMessage(buildDebugMessage(data.debug))
         }
 
         throw new Error(data.error || `Erro ao finalizar conexão (HTTP ${res.status})`)
@@ -408,14 +365,19 @@ export default function MetaWhatsAppConnectCard() {
 
       const data = await parseJsonResponse<FinalizeResponse>(res)
 
-      console.log('FINALIZE RESPONSE (SELECTED PHONE):', data)
+      console.log(
+        'FINALIZE RESPONSE (SELECTED PHONE) FULL:\n',
+        JSON.stringify(data, null, 2)
+      )
 
       if (!res.ok || !data.ok) {
-        console.error('FINALIZE ERROR RESPONSE (SELECTED PHONE):', data)
+        console.error(
+          'FINALIZE ERROR RESPONSE (SELECTED PHONE) FULL:\n',
+          JSON.stringify(data, null, 2)
+        )
 
-        const extraDebug = buildDebugMessage(data.debug)
-        if (extraDebug) {
-          setDebugMessage(extraDebug)
+        if (data.debug) {
+          setDebugMessage(buildDebugMessage(data.debug))
         }
 
         throw new Error(data.error || `Erro ao conectar número (HTTP ${res.status})`)
@@ -908,8 +870,10 @@ export default function MetaWhatsAppConnectCard() {
           )}
 
           {!!debugMessage && (
-            <div className="mt-4 whitespace-pre-wrap rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
-              {debugMessage}
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
+              <pre className="whitespace-pre-wrap break-words font-mono">
+                {debugMessage}
+              </pre>
             </div>
           )}
 
