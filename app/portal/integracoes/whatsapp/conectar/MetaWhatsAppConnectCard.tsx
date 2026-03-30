@@ -1,8 +1,6 @@
-// app/portal/integracoes/whatsapp/conectar/MetaWhatsAppConnectCard.tsx
+'use client'
 
-'use client';
-
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   CheckCircle2,
   Loader2,
@@ -13,114 +11,188 @@ import {
   RefreshCcw,
   AlertCircle,
   Clock3,
-} from 'lucide-react';
+} from 'lucide-react'
 
 declare global {
   interface Window {
-    fbAsyncInit?: () => void;
+    fbAsyncInit?: () => void
     FB?: {
-      init: (params: Record<string, any>) => void;
+      init: (params: Record<string, any>) => void
       login: (
         callback: (response: any) => void,
         params: Record<string, any>
-      ) => void;
-    };
+      ) => void
+    }
   }
 }
 
 type ConfigResponse = {
-  ok: boolean;
-  appId: string;
-  configId: string;
-  apiVersion: string;
-  error?: string;
-};
+  ok: boolean
+  appId: string
+  configId: string
+  apiVersion: string
+  error?: string
+}
 
 type Connection = {
-  id: string;
-  display_phone_number: string | null;
-  verified_name: string | null;
-  quality_rating: string | null;
-  waba_id: string | null;
-  phone_number_id: string | null;
-  status: string;
-  created_at: string;
-};
+  id: string
+  display_phone_number: string | null
+  verified_name: string | null
+  quality_rating: string | null
+  waba_id: string | null
+  phone_number_id: string | null
+  business_id?: string | null
+  webhook_verified?: boolean | null
+  status: string
+  created_at: string
+  updated_at?: string | null
+}
+
+type FinalizeResponse = {
+  ok: boolean
+  pending?: boolean
+  message?: string
+  error?: string
+  connection?: Connection
+}
+
+type ConnectionStatusResponse = {
+  ok: boolean
+  error?: string
+  connection?: Connection
+}
 
 function cn(...classes: Array<string | false | null | undefined>) {
-  return classes.filter(Boolean).join(' ');
+  return classes.filter(Boolean).join(' ')
 }
 
 export default function MetaWhatsAppConnectCard() {
-  const [config, setConfig] = useState<ConfigResponse | null>(null);
-  const [loadingConfig, setLoadingConfig] = useState(true);
-  const [sdkReady, setSdkReady] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [pin, setPin] = useState('');
-  const [status, setStatus] = useState<'idle' | 'waiting-meta' | 'saving' | 'success' | 'error'>(
-    'idle'
-  );
-  const [error, setError] = useState('');
-  const [connection, setConnection] = useState<Connection | null>(null);
+  const [config, setConfig] = useState<ConfigResponse | null>(null)
+  const [loadingConfig, setLoadingConfig] = useState(true)
+  const [sdkReady, setSdkReady] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [pin, setPin] = useState('')
+  const [status, setStatus] = useState<
+    'idle' | 'waiting-meta' | 'saving' | 'success' | 'error'
+  >('idle')
+  const [error, setError] = useState('')
+  const [connection, setConnection] = useState<Connection | null>(null)
+  const [statusMessage, setStatusMessage] = useState('')
 
   const signupDataRef = useRef<{
-    code?: string;
-    wabaId?: string;
-    phoneNumberId?: string;
-    businessId?: string;
-    rawEvent?: unknown;
-    finalizeStarted?: boolean;
-  }>({});
+    code?: string
+    wabaId?: string
+    phoneNumberId?: string
+    businessId?: string
+    rawEvent?: unknown
+    finalizeStarted?: boolean
+  }>({})
+
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const canConnect = useMemo(() => {
-    return Boolean(config?.ok && sdkReady && !busy);
-  }, [config, sdkReady, busy]);
+    return Boolean(config?.ok && sdkReady && !busy)
+  }, [config, sdkReady, busy])
 
-  const isPendingConnection = connection?.status === 'pending_waba';
-  const isConnected = connection?.status === 'connected';
+  const isPendingConnection = connection?.status === 'pending_waba'
+  const isConnected = connection?.status === 'connected'
+
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
+  }, [])
 
   const loadConfig = useCallback(async () => {
-    setLoadingConfig(true);
-    setError('');
+    setLoadingConfig(true)
+    setError('')
 
     try {
       const res = await fetch('/api/meta/embedded-signup/config', {
         cache: 'no-store',
-      });
+      })
 
-      const data = (await res.json()) as ConfigResponse;
+      const data = (await res.json()) as ConfigResponse
 
       if (!res.ok || !data.ok) {
-        throw new Error(data.error || 'Erro ao carregar configuração');
+        throw new Error(data.error || 'Erro ao carregar configuração')
       }
 
-      setConfig(data);
+      setConfig(data)
     } catch (err: any) {
-      setError(err?.message || 'Erro ao carregar configuração');
+      setError(err?.message || 'Erro ao carregar configuração')
     } finally {
-      setLoadingConfig(false);
+      setLoadingConfig(false)
     }
-  }, []);
+  }, [])
+
+  const fetchConnectionById = useCallback(async (id: string) => {
+    const res = await fetch(`/api/meta/connections/${id}`, {
+      method: 'GET',
+      cache: 'no-store',
+    })
+
+    const data = (await res.json()) as ConnectionStatusResponse
+
+    if (!res.ok || !data.ok || !data.connection) {
+      throw new Error(data.error || 'Erro ao consultar conexão')
+    }
+
+    return data.connection
+  }, [])
+
+  const startPollingConnection = useCallback(
+    (connectionId: string) => {
+      stopPolling()
+
+      pollingRef.current = setInterval(async () => {
+        try {
+          const latest = await fetchConnectionById(connectionId)
+          setConnection(latest)
+
+          if (latest.status === 'connected') {
+            stopPolling()
+            setBusy(false)
+            setStatus('success')
+            setStatusMessage('Conexão concluída com sucesso.')
+            setError('')
+          } else if (latest.status === 'pending_waba') {
+            setStatus('success')
+            setStatusMessage(
+              'Conectando... aguardando confirmação da Meta para vincular o WABA e o número.'
+            )
+          } else {
+            setStatusMessage(`Status atual: ${latest.status}`)
+          }
+        } catch (err: any) {
+          console.error('Erro ao consultar status da conexão Meta:', err)
+        }
+      }, 3000)
+    },
+    [fetchConnectionById, stopPolling]
+  )
 
   const finalizeConnection = useCallback(async () => {
-    const code = signupDataRef.current.code;
+    const code = signupDataRef.current.code
 
     if (!code) {
-      alert('Finalize bloqueado: code não encontrado');
-      return;
+      setStatus('error')
+      setError('Finalize bloqueado: code não encontrado')
+      return
     }
 
     if (signupDataRef.current.finalizeStarted) {
-      return;
+      return
     }
 
-    signupDataRef.current.finalizeStarted = true;
+    signupDataRef.current.finalizeStarted = true
 
     try {
-      alert('Entrou no finalizeConnection');
-      setBusy(true);
-      setStatus('saving');
-      setError('');
+      setBusy(true)
+      setStatus('saving')
+      setError('')
+      setStatusMessage('Finalizando conexão com a Meta...')
 
       const res = await fetch('/api/meta/embedded-signup/finalize', {
         method: 'POST',
@@ -135,39 +207,58 @@ export default function MetaWhatsAppConnectCard() {
           pin: pin.trim() || undefined,
           rawEvent: signupDataRef.current.rawEvent,
         }),
-      });
+      })
 
-      const data = await res.json();
+      const data = (await res.json()) as FinalizeResponse
 
       if (!res.ok || !data.ok) {
-        alert(`Finalize falhou: ${data.error || 'erro desconhecido'}`);
-        throw new Error(data.error || 'Erro ao finalizar conexão');
+        throw new Error(data.error || 'Erro ao finalizar conexão')
       }
 
-      alert('Finalize deu certo');
-      setConnection(data.connection);
-      setStatus('success');
+      if (data.connection) {
+        setConnection(data.connection)
+      }
+
+      if (data.pending && data.connection?.id) {
+        setStatus('success')
+        setStatusMessage(
+          data.message ||
+            'Conectando... aguardando confirmação da Meta para vincular o WABA e o número.'
+        )
+
+        startPollingConnection(data.connection.id)
+        return
+      }
+
+      if (data.connection?.status === 'connected') {
+        setStatus('success')
+        setStatusMessage('Conexão concluída com sucesso.')
+        return
+      }
+
+      setStatus('success')
+      setStatusMessage(data.message || 'Conexão processada.')
     } catch (err: any) {
-      signupDataRef.current.finalizeStarted = false;
-      alert(`Erro no finalize: ${err?.message || 'erro desconhecido'}`);
-      setStatus('error');
-      setError(err?.message || 'Erro ao finalizar conexão');
+      signupDataRef.current.finalizeStarted = false
+      setStatus('error')
+      setError(err?.message || 'Erro ao finalizar conexão')
+      setStatusMessage('')
     } finally {
-      setBusy(false);
+      setBusy(false)
     }
-  }, [pin]);
+  }, [pin, startPollingConnection])
 
   useEffect(() => {
-    loadConfig();
-  }, [loadConfig]);
+    loadConfig()
+  }, [loadConfig])
 
   useEffect(() => {
-    if (!config?.appId) return;
+    if (!config?.appId) return
 
-    const existingScript = document.getElementById('facebook-jssdk');
+    const existingScript = document.getElementById('facebook-jssdk')
     if (existingScript) {
-      setSdkReady(true);
-      return;
+      setSdkReady(true)
+      return
     }
 
     window.fbAsyncInit = function () {
@@ -176,62 +267,54 @@ export default function MetaWhatsAppConnectCard() {
         autoLogAppEvents: true,
         xfbml: false,
         version: config.apiVersion,
-      });
-      setSdkReady(true);
-    };
-
-    const script = document.createElement('script');
-    script.id = 'facebook-jssdk';
-    script.async = true;
-    script.defer = true;
-    script.crossOrigin = 'anonymous';
-    script.src = 'https://connect.facebook.net/pt_BR/sdk.js';
-
-    document.body.appendChild(script);
-
-    return () => {
-      window.fbAsyncInit = undefined;
-    };
-  }, [config]);
-
-  useEffect(() => {
-    function safeStringify(value: any) {
-      try {
-        return JSON.stringify(value, null, 2);
-      } catch {
-        return String(value);
-      }
+      })
+      setSdkReady(true)
     }
 
+    const script = document.createElement('script')
+    script.id = 'facebook-jssdk'
+    script.async = true
+    script.defer = true
+    script.crossOrigin = 'anonymous'
+    script.src = 'https://connect.facebook.net/pt_BR/sdk.js'
+
+    document.body.appendChild(script)
+
+    return () => {
+      window.fbAsyncInit = undefined
+    }
+  }, [config])
+
+  useEffect(() => {
     function tryParseMessageData(raw: any) {
-      if (!raw) return null;
+      if (!raw) return null
 
       if (typeof raw === 'object') {
-        return raw;
+        return raw
       }
 
       if (typeof raw !== 'string') {
-        return null;
+        return null
       }
 
-      const text = raw.trim();
-      if (!text) return null;
+      const text = raw.trim()
+      if (!text) return null
 
       try {
-        return JSON.parse(text);
+        return JSON.parse(text)
       } catch {}
 
-      const normalized = text.startsWith('?') ? text.slice(1) : text;
+      const normalized = text.startsWith('?') ? text.slice(1) : text
 
       try {
-        const params = new URLSearchParams(normalized);
+        const params = new URLSearchParams(normalized)
 
-        const event = params.get('event');
-        const wabaId = params.get('waba_id');
-        const phoneNumberId = params.get('phone_number_id');
-        const businessId = params.get('business_id');
-        const type = params.get('type');
-        const code = params.get('code');
+        const event = params.get('event')
+        const wabaId = params.get('waba_id')
+        const phoneNumberId = params.get('phone_number_id')
+        const businessId = params.get('business_id')
+        const type = params.get('type')
+        const code = params.get('code')
 
         if (event || wabaId || phoneNumberId || businessId || type || code) {
           return {
@@ -244,11 +327,30 @@ export default function MetaWhatsAppConnectCard() {
               business_id: businessId,
             },
             raw: text,
-          };
+          }
         }
       } catch {}
 
-      return { raw: text };
+      try {
+        const url = new URL(text)
+        const code = url.searchParams.get('code')
+
+        if (code) {
+          return {
+            type: 'WA_EMBEDDED_SIGNUP',
+            event: null,
+            code,
+            data: {
+              waba_id: null,
+              phone_number_id: null,
+              business_id: null,
+            },
+            raw: text,
+          }
+        }
+      } catch {}
+
+      return { raw: text }
     }
 
     function extractSignupPayload(parsed: any) {
@@ -258,7 +360,7 @@ export default function MetaWhatsAppConnectCard() {
         parsed?.finish?.event ||
         parsed?.payload?.event ||
         parsed?.message?.event ||
-        null;
+        null
 
       const wabaId =
         parsed?.data?.waba_id ||
@@ -271,7 +373,7 @@ export default function MetaWhatsAppConnectCard() {
         parsed?.message?.wabaId ||
         parsed?.waba_id ||
         parsed?.wabaId ||
-        null;
+        null
 
       const phoneNumberId =
         parsed?.data?.phone_number_id ||
@@ -284,7 +386,7 @@ export default function MetaWhatsAppConnectCard() {
         parsed?.message?.phoneNumberId ||
         parsed?.phone_number_id ||
         parsed?.phoneNumberId ||
-        null;
+        null
 
       const businessId =
         parsed?.data?.business_id ||
@@ -297,21 +399,21 @@ export default function MetaWhatsAppConnectCard() {
         parsed?.message?.businessId ||
         parsed?.business_id ||
         parsed?.businessId ||
-        null;
+        null
 
       const oauthCode =
         parsed?.code ||
         parsed?.data?.code ||
         parsed?.payload?.code ||
         parsed?.message?.code ||
-        null;
+        null
 
       const type =
         parsed?.type ||
         parsed?.data?.type ||
         parsed?.payload?.type ||
         parsed?.message?.type ||
-        'WA_EMBEDDED_SIGNUP';
+        'WA_EMBEDDED_SIGNUP'
 
       return {
         type,
@@ -320,47 +422,40 @@ export default function MetaWhatsAppConnectCard() {
         phoneNumberId,
         businessId,
         oauthCode,
-      };
+      }
     }
 
     function maybeFinalizeFromCode() {
       if (signupDataRef.current.code && !signupDataRef.current.finalizeStarted) {
-        alert('Code disponível, chamando finalizeConnection...');
-        void finalizeConnection();
+        void finalizeConnection()
       }
     }
 
     function onMessage(event: MessageEvent) {
-      const parsed = tryParseMessageData(event.data);
+      const parsed = tryParseMessageData(event.data)
+      if (!parsed) return
 
-      alert('POSTMESSAGE BRUTO:\n\n' + safeStringify(parsed).slice(0, 1800));
+      const extracted = extractSignupPayload(parsed)
 
-      if (!parsed) {
-        alert('PostMessage vazio ou inválido');
-        return;
-      }
-
-      const extracted = extractSignupPayload(parsed);
-
-      alert(
+      console.log(
         `Tipo recebido: ${extracted.type || 'sem type'} | Evento: ${extracted.event || 'sem event'}`
-      );
+      )
 
       if (extracted.oauthCode && !signupDataRef.current.code) {
-        signupDataRef.current.code = extracted.oauthCode;
-        alert('Code capturado via postMessage');
+        signupDataRef.current.code = extracted.oauthCode
+        console.log('Code capturado via postMessage')
       }
 
       if (extracted.wabaId) {
-        signupDataRef.current.wabaId = extracted.wabaId;
+        signupDataRef.current.wabaId = extracted.wabaId
       }
 
       if (extracted.phoneNumberId) {
-        signupDataRef.current.phoneNumberId = extracted.phoneNumberId;
+        signupDataRef.current.phoneNumberId = extracted.phoneNumberId
       }
 
       if (extracted.businessId) {
-        signupDataRef.current.businessId = extracted.businessId;
+        signupDataRef.current.businessId = extracted.businessId
       }
 
       if (
@@ -369,14 +464,14 @@ export default function MetaWhatsAppConnectCard() {
         extracted.phoneNumberId ||
         extracted.businessId
       ) {
-        signupDataRef.current.rawEvent = parsed;
-        alert(
-          `Dados parciais recebidos:\nCODE: ${
-            signupDataRef.current.code ? 'sim' : 'não'
-          }\nWABA: ${signupDataRef.current.wabaId || 'não'}\nPHONE_NUMBER_ID: ${
-            signupDataRef.current.phoneNumberId || 'não'
-          }`
-        );
+        signupDataRef.current.rawEvent = parsed
+
+        console.log('Dados parciais recebidos:', {
+          code: signupDataRef.current.code ? 'sim' : 'não',
+          wabaId: signupDataRef.current.wabaId || null,
+          phoneNumberId: signupDataRef.current.phoneNumberId || null,
+          businessId: signupDataRef.current.businessId || null,
+        })
       }
 
       if (
@@ -384,61 +479,70 @@ export default function MetaWhatsAppConnectCard() {
         extracted.oauthCode ||
         (extracted.type === 'WA_EMBEDDED_SIGNUP' && signupDataRef.current.code)
       ) {
-        maybeFinalizeFromCode();
-        return;
+        maybeFinalizeFromCode()
+        return
       }
 
       if (extracted.event === 'ERROR') {
-        alert('A Meta retornou event ERROR');
-        setBusy(false);
-        setStatus('error');
-        setError('A Meta retornou um erro durante a conexão.');
-        return;
+        setBusy(false)
+        setStatus('error')
+        setError('A Meta retornou um erro durante a conexão.')
+        setStatusMessage('')
+        return
       }
 
       if (extracted.event === 'CANCEL') {
-        alert('Fluxo cancelado');
-        setBusy(false);
-        setStatus('idle');
-        return;
+        setBusy(false)
+        setStatus('idle')
+        setStatusMessage('')
       }
     }
 
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [finalizeConnection]);
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [finalizeConnection])
+
+  useEffect(() => {
+    return () => {
+      stopPolling()
+    }
+  }, [stopPolling])
 
   const openEmbeddedSignup = useCallback(() => {
-    if (!window.FB || !config?.configId) return;
+    if (!window.FB || !config?.configId) return
 
-    setBusy(true);
-    setStatus('waiting-meta');
-    setError('');
+    stopPolling()
+    setBusy(true)
+    setStatus('waiting-meta')
+    setError('')
+    setStatusMessage('Aguardando conclusão do Embedded Signup...')
+    setConnection(null)
+
     signupDataRef.current = {
       finalizeStarted: false,
-    };
+    }
 
     window.FB.login(
       (response: any) => {
-        alert('FB.login retornou');
+        console.log('FB.login retornou')
 
         if (!response?.authResponse?.code) {
-          alert('A Meta não retornou o code');
-          setBusy(false);
-          setStatus('error');
-          setError('A Meta não retornou o code do Embedded Signup.');
-          return;
+          setBusy(false)
+          setStatus('error')
+          setError('A Meta não retornou o code do Embedded Signup.')
+          setStatusMessage('')
+          return
         }
 
-        signupDataRef.current.code = response.authResponse.code;
-        alert('Code recebido com sucesso');
+        signupDataRef.current.code = response.authResponse.code
+        console.log('Code recebido com sucesso')
 
-        alert('Code recebido, finalizando com backend...');
-        setBusy(false);
-        setStatus('waiting-meta');
+        setBusy(false)
+        setStatus('waiting-meta')
+        setStatusMessage('Code recebido. Finalizando com o backend...')
 
         if (!signupDataRef.current.finalizeStarted) {
-          void finalizeConnection();
+          void finalizeConnection()
         }
       },
       {
@@ -451,8 +555,8 @@ export default function MetaWhatsAppConnectCard() {
           },
         },
       }
-    );
-  }, [config, finalizeConnection]);
+    )
+  }, [config, finalizeConnection, stopPolling])
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -460,7 +564,9 @@ export default function MetaWhatsAppConnectCard() {
         <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
           <div className="mb-6 flex items-start justify-between gap-4">
             <div>
-              <p className="mb-2 text-sm font-medium text-emerald-600">WhatsApp Oficial</p>
+              <p className="mb-2 text-sm font-medium text-emerald-600">
+                WhatsApp Oficial
+              </p>
               <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
                 Conectar número pela API oficial da Meta
               </h1>
@@ -562,6 +668,12 @@ export default function MetaWhatsAppConnectCard() {
             </div>
           )}
 
+          {statusMessage && !error && (
+            <div className="mt-6 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-700">
+              {statusMessage}
+            </div>
+          )}
+
           {connection && status === 'success' && (
             <div
               className={cn(
@@ -599,7 +711,11 @@ export default function MetaWhatsAppConnectCard() {
               <div className="grid gap-3 md:grid-cols-2">
                 <Info label="Número" value={connection.display_phone_number || '—'} />
                 <Info label="Nome verificado" value={connection.verified_name || '—'} />
-                <Info label="Phone Number ID" value={connection.phone_number_id || '—'} mono />
+                <Info
+                  label="Phone Number ID"
+                  value={connection.phone_number_id || '—'}
+                  mono
+                />
                 <Info label="WABA ID" value={connection.waba_id || '—'} mono />
                 <Info label="Qualidade" value={connection.quality_rating || '—'} />
                 <Info label="Status" value={connection.status || '—'} />
@@ -613,7 +729,9 @@ export default function MetaWhatsAppConnectCard() {
 
           <div className="space-y-3">
             <ChecklistItem done={Boolean(config?.appId)}>META_APP_ID</ChecklistItem>
-            <ChecklistItem done={Boolean(config?.configId)}>META_EMBEDDED_SIGNUP_CONFIG_ID</ChecklistItem>
+            <ChecklistItem done={Boolean(config?.configId)}>
+              META_EMBEDDED_SIGNUP_CONFIG_ID
+            </ChecklistItem>
             <ChecklistItem done={sdkReady}>Facebook SDK carregado</ChecklistItem>
             <ChecklistItem done={isConnected}>Número conectado</ChecklistItem>
           </div>
@@ -655,7 +773,7 @@ export default function MetaWhatsAppConnectCard() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 function Info({
@@ -663,13 +781,15 @@ function Info({
   value,
   mono,
 }: {
-  label: string;
-  value: string;
-  mono?: boolean;
+  label: string
+  value: string
+  mono?: boolean
 }) {
   return (
     <div className="rounded-2xl border border-white/70 bg-white p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+        {label}
+      </p>
       <p
         className={cn(
           'mt-2 text-sm text-zinc-900',
@@ -679,15 +799,15 @@ function Info({
         {value}
       </p>
     </div>
-  );
+  )
 }
 
 function ChecklistItem({
   children,
   done,
 }: {
-  children: React.ReactNode;
-  done: boolean;
+  children: React.ReactNode
+  done: boolean
 }) {
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-zinc-200 bg-white p-4">
@@ -701,5 +821,5 @@ function ChecklistItem({
       </div>
       <span className="text-sm text-zinc-800">{children}</span>
     </div>
-  );
+  )
 }
