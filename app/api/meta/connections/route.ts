@@ -1,23 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
-type RouteContext = {
-  params: Promise<{
-    id: string
-  }>
-}
-
-export async function GET(_req: NextRequest, context: RouteContext) {
+export async function GET() {
   try {
-    const { id } = await context.params
-
-    if (!id) {
-      return NextResponse.json(
-        { ok: false, error: 'id é obrigatório' },
-        { status: 400 }
-      )
-    }
-
     const { data, error } = await supabaseAdmin
       .from('whatsapp_meta_connections')
       .select(`
@@ -36,9 +21,8 @@ export async function GET(_req: NextRequest, context: RouteContext) {
         created_at,
         updated_at
       `)
-      .eq('id', id)
       .eq('provider', 'meta')
-      .maybeSingle()
+      .order('created_at', { ascending: false })
 
     if (error) {
       return NextResponse.json(
@@ -47,20 +31,13 @@ export async function GET(_req: NextRequest, context: RouteContext) {
       )
     }
 
-    if (!data) {
-      return NextResponse.json(
-        { ok: false, error: 'Conexão não encontrada' },
-        { status: 404 }
-      )
-    }
-
     return NextResponse.json({
       ok: true,
-      connection: data
+      data: data ?? []
     })
   } catch (error: any) {
     return NextResponse.json(
-      { ok: false, error: error?.message || 'Erro ao buscar conexão' },
+      { ok: false, error: error?.message || 'Erro ao listar conexões Meta' },
       { status: 500 }
     )
   }
