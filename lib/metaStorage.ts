@@ -3,7 +3,15 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import crypto from 'crypto'
 
+const DEFAULT_MEDIA_BUCKET = 'whatsapp-media'
+
+function getMediaBucketName() {
+  return process.env.WHATSAPP_MEDIA_BUCKET || DEFAULT_MEDIA_BUCKET
+}
+
 export function extensionFromMime(mimeType?: string | null) {
+  const normalized = (mimeType || '').toLowerCase().split(';')[0].trim()
+
   const map: Record<string, string> = {
     'image/jpeg': 'jpg',
     'image/png': 'png',
@@ -19,7 +27,7 @@ export function extensionFromMime(mimeType?: string | null) {
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx'
   }
 
-  return map[mimeType || ''] || 'bin'
+  return map[normalized] || 'bin'
 }
 
 export async function uploadMetaInboundMedia({
@@ -35,23 +43,41 @@ export async function uploadMetaInboundMedia({
   waId: string
   mediaId: string
 }) {
+  const bucketName = getMediaBucketName()
   const ext = extensionFromMime(mimeType)
   const hash = crypto.createHash('sha256').update(fileBuffer).digest('hex')
   const filePath = `meta/${connectionId}/${waId}/${mediaId}-${hash.slice(0, 12)}.${ext}`
 
-  const { error } = await supabaseAdmin.storage
-    .from('whatsapp-media')
+  let { error } = await supabaseAdmin.storage
+    .from(bucketName)
     .upload(filePath, fileBuffer, {
       contentType: mimeType || 'application/octet-stream',
       upsert: true
     })
+
+  if (error && /bucket not found/i.test(error.message)) {
+    const { error: createError } = await supabaseAdmin.storage.createBucket(bucketName, {
+      public: true
+    })
+
+    if (!createError) {
+      const retry = await supabaseAdmin.storage
+        .from(bucketName)
+        .upload(filePath, fileBuffer, {
+          contentType: mimeType || 'application/octet-stream',
+          upsert: true
+        })
+
+      error = retry.error
+    }
+  }
 
   if (error) {
     throw new Error(error.message)
   }
 
   const { data } = supabaseAdmin.storage
-    .from('whatsapp-media')
+    .from(bucketName)
     .getPublicUrl(filePath)
 
   return {

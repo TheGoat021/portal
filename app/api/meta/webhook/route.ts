@@ -18,16 +18,58 @@ import {
 
 export const runtime = 'nodejs'
 
+type WebhookContact = {
+  wa_id?: string
+  profile?: {
+    name?: string
+  }
+}
+
+type WebhookMessage = {
+  id?: string
+  from?: string
+  [key: string]: unknown
+}
+
+type WebhookStatus = {
+  id?: string
+  status?: string
+  [key: string]: unknown
+}
+
+type WebhookValue = {
+  metadata?: {
+    display_phone_number?: string
+    phone_number_id?: string
+  }
+  contacts?: WebhookContact[]
+  messages?: WebhookMessage[]
+  statuses?: WebhookStatus[]
+  [key: string]: unknown
+}
+
+type WebhookChange = {
+  value?: WebhookValue
+}
+
+type WebhookEntry = {
+  changes?: WebhookChange[]
+}
+
 async function handleInboundMessage({
   connection,
   value,
   message,
   contact
 }: {
-  connection: any
-  value: any
-  message: any
-  contact?: any
+  connection: {
+    id: string
+    company_id?: string | null
+    business_token: string
+  }
+  value: WebhookValue
+  message: WebhookMessage
+  contact?: WebhookContact
 }) {
   
   const fromPhone = normalizePhone(message?.from)
@@ -48,19 +90,23 @@ async function handleInboundMessage({
   let sha256: string | null = null
 
   if (parsed.mediaId) {
-    const mediaInfo = await getMediaInfo(parsed.mediaId, connection.business_token)
-    const buffer = await downloadMediaFile(mediaInfo.url, connection.business_token)
+    try {
+      const mediaInfo = await getMediaInfo(parsed.mediaId, connection.business_token)
+      const buffer = await downloadMediaFile(mediaInfo.url, connection.business_token)
 
-    const uploaded = await uploadMetaInboundMedia({
-      fileBuffer: buffer,
-      mimeType: parsed.mimeType || mediaInfo.mime_type || null,
-      connectionId: connection.id,
-      waId: fromPhone,
-      mediaId: parsed.mediaId
-    })
+      const uploaded = await uploadMetaInboundMedia({
+        fileBuffer: buffer,
+        mimeType: parsed.mimeType || mediaInfo.mime_type || null,
+        connectionId: connection.id,
+        waId: fromPhone,
+        mediaId: parsed.mediaId
+      })
 
-    mediaUrl = uploaded.publicUrl
-    sha256 = uploaded.sha256
+      mediaUrl = uploaded.publicUrl
+      sha256 = uploaded.sha256
+    } catch (mediaError) {
+      console.error('Falha ao processar mídia inbound da Meta:', mediaError)
+    }
   }
 
   const saved = await insertMetaMessage({
@@ -92,12 +138,25 @@ async function handleInboundMessage({
   })
 }
 
-async function handleStatuses(statuses: any[]) {
+async function handleStatuses(statuses: WebhookStatus[]) {
   for (const status of statuses) {
     const metaMessageId = status?.id
     const state = status?.status
 
     if (!metaMessageId || !state) continue
+
+    console.log('META STATUS UPDATE:', {
+      metaMessageId,
+      state,
+      hasError: Boolean((status as { errors?: unknown[] }).errors?.length)
+    })
+
+    if (state === 'failed') {
+      console.error('META STATUS FAILED:', {
+        metaMessageId,
+        status
+      })
+    }
 
     await insertMetaStatus({
       metaMessageId,
@@ -124,7 +183,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
 
-    const entries = extractWebhookEntries(body)
+    const entries = extractWebhookEntries(body) as WebhookEntry[]
+    console.log('META WEBHOOK RECEIVED:', { entries: entries.length })
 
     for (const entry of entries) {
       const changes = Array.isArray(entry?.changes) ? entry.changes : []
@@ -154,9 +214,7 @@ export async function POST(req: NextRequest) {
 
         if (messages.length > 0) {
           for (const message of messages) {
-            const contact = contacts.find(
-              (c: any) => normalizePhone(c?.wa_id) === normalizePhone(message?.from)
-            )
+            const contact = contacts.find((c) => normalizePhone(c?.wa_id) === normalizePhone(message?.from))
 
             await handleInboundMessage({
               connection,
@@ -174,11 +232,12 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ ok: true })
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Erro no webhook da Meta'
     console.error('META WEBHOOK ERROR:', error)
 
     return NextResponse.json(
-      { ok: false, error: error?.message || 'Erro no webhook da Meta' },
+      { ok: false, error: message },
       { status: 500 }
     )
   }

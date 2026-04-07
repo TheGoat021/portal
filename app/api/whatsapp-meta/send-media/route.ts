@@ -1,10 +1,45 @@
 // app/api/whatsapp-meta/send-media/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
+import ffmpeg from 'fluent-ffmpeg'
+import fs from 'fs/promises'
+import os from 'os'
+import path from 'path'
 import { getMetaConnectionById, insertMetaMessage, touchMetaConversation } from '@/lib/metaDb'
+import { uploadMetaInboundMedia } from '@/lib/metaStorage'
 import { guessMessageText, normalizePhone, sendMediaMessage, uploadMedia } from '@/lib/whatsappMeta'
 
 export const runtime = 'nodejs'
+
+async function convertAudioToOggOpus(fileBuffer: Buffer, originalName: string) {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'meta-audio-'))
+  const inputPath = path.join(tmpDir, originalName || `audio-${Date.now()}.tmp`)
+  const outputPath = path.join(tmpDir, `${Date.now()}-audio.ogg`)
+
+  await fs.writeFile(inputPath, fileBuffer)
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg(inputPath)
+        .audioCodec('libopus')
+        .audioChannels(1)
+        .audioFrequency(48000)
+        .format('ogg')
+        .save(outputPath)
+        .on('end', () => resolve())
+        .on('error', (err: Error) => reject(err))
+    })
+
+    const convertedBuffer = await fs.readFile(outputPath)
+    return {
+      buffer: convertedBuffer,
+      mimeType: 'audio/ogg; codecs=opus',
+      fileName: `audio_${Date.now()}.ogg`
+    }
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true })
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -44,14 +79,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Conexão Meta inválida' }, { status: 400 })
     }
 
-    const fileBuffer = Buffer.from(await file.arrayBuffer())
+    const inputBuffer = Buffer.from(await file.arrayBuffer())
+    let fileBuffer = inputBuffer
+    let fileMimeType = file.type || 'application/octet-stream'
+    let fileName = file.name || 'arquivo'
+
+    if (type === 'audio') {
+      const converted = await convertAudioToOggOpus(fileBuffer, fileName)
+      fileBuffer = converted.buffer
+      fileMimeType = converted.mimeType
+      fileName = converted.fileName
+    }
 
     const upload = await uploadMedia({
       phoneNumberId: connection.phone_number_id,
       token: connection.business_token,
       file: fileBuffer,
-      fileName: file.name || 'arquivo',
-      mimeType: file.type || 'application/octet-stream'
+      fileName,
+      mimeType: fileMimeType
     })
 
     const mediaId = upload?.id
@@ -67,12 +112,33 @@ export async function POST(req: NextRequest) {
       mediaId,
       type,
       caption: caption || null,
-      fileName: file.name || null,
+      fileName,
       replyToMessageId: replyToMessageId || null
     })
 
     const metaMessageId = result?.messages?.[0]?.id || null
+    if (!metaMessageId) {
+      throw new Error(`Meta não retornou message id para envio de mídia: ${JSON.stringify(result)}`)
+    }
     const previewText = guessMessageText(type, null, caption || null)
+
+    let mediaUrl: string | null = null
+    let sha256: string | null = null
+
+    try {
+      const uploaded = await uploadMetaInboundMedia({
+        fileBuffer,
+        mimeType: fileMimeType || null,
+        connectionId: connection.id,
+        waId: normalizePhone(to),
+        mediaId
+      })
+
+      mediaUrl = uploaded.publicUrl
+      sha256 = uploaded.sha256
+    } catch (storageError) {
+      console.error('Erro ao persistir mídia outbound no storage:', storageError)
+    }
 
     const saved = await insertMetaMessage({
       conversationId,
@@ -87,8 +153,10 @@ export async function POST(req: NextRequest) {
       message: previewText,
       caption: caption || null,
       mediaId,
-      mimeType: file.type || null,
-      fileName: file.name || null,
+      mimeType: fileMimeType || null,
+      mediaUrl,
+      fileName,
+      sha256,
       rawPayload: {
         upload,
         send: result
@@ -107,10 +175,12 @@ export async function POST(req: NextRequest) {
       message: saved,
       meta: result
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Erro ao enviar mídia'
     return NextResponse.json(
-      { ok: false, error: error?.message || 'Erro ao enviar mídia' },
+      { ok: false, error: message },
       { status: 500 }
     )
   }
 }
+

@@ -100,9 +100,16 @@ export default function ChatWindow({ selectedConversationId }: Props) {
   const [recordTime, setRecordTime] = useState(0)
   const [loading, setLoading] = useState(false)
   const [sendingMessage, setSendingMessage] = useState(false)
+  const [sendingMedia, setSendingMedia] = useState(false)
 
   const recordIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const imageInputRef = useRef<HTMLInputElement | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const streamRef = useRef<MediaStream | null>(null)
+  const recordMimeTypeRef = useRef<string>("audio/ogg")
 
   function formatTime(dateString: string) {
     const date = new Date(dateString)
@@ -213,6 +220,15 @@ export default function ChatWindow({ selectedConversationId }: Props) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages.length])
 
+  useEffect(() => {
+    return () => {
+      if (recordIntervalRef.current) clearInterval(recordIntervalRef.current)
+      try {
+        streamRef.current?.getTracks().forEach((track) => track.stop())
+      } catch {}
+    }
+  }, [])
+
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedConversationId || !conversation || sendingMessage) return
 
@@ -250,13 +266,166 @@ export default function ChatWindow({ selectedConversationId }: Props) {
     }
   }
 
+  function inferMediaType(file: File): "image" | "video" | "audio" | "document" {
+    const mime = (file.type || "").toLowerCase()
+    if (mime.startsWith("image/")) return "image"
+    if (mime.startsWith("video/")) return "video"
+    if (mime.startsWith("audio/")) return "audio"
+    return "document"
+  }
+
+  const sendMedia = async (file: File) => {
+    if (!selectedConversationId || !conversation || sendingMedia) return
+
+    const caption = newMessage.trim()
+    const formData = new FormData()
+    formData.append("connectionId", conversation.connection_id)
+    formData.append("conversationId", selectedConversationId)
+    formData.append("to", conversation.wa_id)
+    formData.append("type", inferMediaType(file))
+    formData.append("caption", caption)
+    formData.append("file", file)
+
+    try {
+      setSendingMedia(true)
+      setNewMessage("")
+
+      const res = await fetch("/api/whatsapp-meta/send-media", {
+        method: "POST",
+        body: formData
+      })
+
+      if (!res.ok) {
+        console.error("Erro ao enviar mídia meta:", await res.text())
+        if (caption) setNewMessage(caption)
+        return
+      }
+
+      await fetchMessages(selectedConversationId)
+    } catch (error) {
+      console.error("Erro ao enviar mídia meta:", error)
+      if (caption) setNewMessage(caption)
+    } finally {
+      setSendingMedia(false)
+    }
+  }
+
+  const stopStreamTracks = () => {
+    try {
+      streamRef.current?.getTracks().forEach((track) => track.stop())
+    } catch {}
+    streamRef.current = null
+  }
+
+  function resolveMediaUrl(msg: Message) {
+    if (msg.mediaUrl) return msg.mediaUrl
+
+    const hasMediaType =
+      msg.type === "image" ||
+      msg.type === "video" ||
+      msg.type === "audio" ||
+      msg.type === "ptt" ||
+      msg.type === "document"
+
+    if (!hasMediaType) return null
+    return `/api/whatsapp-meta/messages/${msg.id}/media`
+  }
+
+  function pickRecordingMimeType() {
+    if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
+      return ""
+    }
+
+    const candidates = [
+      "audio/ogg;codecs=opus",
+      "audio/ogg",
+      "audio/mp4",
+      "audio/aac",
+      "audio/mpeg"
+    ]
+
+    for (const candidate of candidates) {
+      if (MediaRecorder.isTypeSupported(candidate)) {
+        return candidate
+      }
+    }
+
+    return ""
+  }
+
+  function fileNameForRecordedAudio(mimeType: string) {
+    const ts = Date.now()
+    if (mimeType.includes("mp4")) return `audio_${ts}.m4a`
+    if (mimeType.includes("mpeg")) return `audio_${ts}.mp3`
+    if (mimeType.includes("aac")) return `audio_${ts}.aac`
+    return `audio_${ts}.ogg`
+  }
+
+  const startRecording = async () => {
+    if (!selectedConversationId || !conversation || sendingMedia || sendingMessage) return
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
+
+      const selectedMimeType = pickRecordingMimeType()
+      const mediaRecorder = selectedMimeType
+        ? new MediaRecorder(stream, { mimeType: selectedMimeType })
+        : new MediaRecorder(stream)
+      recordMimeTypeRef.current = selectedMimeType || "audio/ogg"
+      mediaRecorderRef.current = mediaRecorder
+      audioChunksRef.current = []
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data)
+        }
+      }
+
+      mediaRecorder.onstop = async () => {
+        try {
+          if (audioChunksRef.current.length === 0) return
+
+          const mimeType = recordMimeTypeRef.current || "audio/ogg"
+          const audioBlob = new Blob(audioChunksRef.current, { type: mimeType })
+          const file = new File([audioBlob], fileNameForRecordedAudio(mimeType), {
+            type: mimeType
+          })
+
+          await sendMedia(file)
+        } finally {
+          setRecordTime(0)
+          audioChunksRef.current = []
+          stopStreamTracks()
+        }
+      }
+
+      mediaRecorder.start()
+      setIsRecording(true)
+
+      if (recordIntervalRef.current) clearInterval(recordIntervalRef.current)
+      recordIntervalRef.current = setInterval(() => {
+        setRecordTime((prev) => prev + 1)
+      }, 1000)
+    } catch (error) {
+      console.error("Erro ao iniciar gravação:", error)
+      stopStreamTracks()
+      setIsRecording(false)
+      setRecordTime(0)
+      if (recordIntervalRef.current) clearInterval(recordIntervalRef.current)
+    }
+  }
+
   const stopRecording = () => {
+    mediaRecorderRef.current?.stop()
     setIsRecording(false)
-    setRecordTime(0)
     if (recordIntervalRef.current) clearInterval(recordIntervalRef.current)
   }
 
   const cancelRecording = () => {
+    audioChunksRef.current = []
+    mediaRecorderRef.current?.stop()
+    stopStreamTracks()
     setIsRecording(false)
     setRecordTime(0)
     if (recordIntervalRef.current) clearInterval(recordIntervalRef.current)
@@ -297,6 +466,8 @@ export default function ChatWindow({ selectedConversationId }: Props) {
   }
 
   function renderMessageContent(msg: Message) {
+    const mediaUrl = resolveMediaUrl(msg)
+
     if (msg.type === "sticker") {
       return (
         <div className="flex items-center gap-2 text-sm text-gray-700">
@@ -307,11 +478,11 @@ export default function ChatWindow({ selectedConversationId }: Props) {
     }
 
     if (msg.type === "image") {
-      if (msg.mediaUrl) {
+      if (mediaUrl) {
         return (
           <div className="space-y-2">
             <img
-              src={msg.mediaUrl}
+              src={mediaUrl}
               alt="Imagem"
               className="rounded-lg max-w-xs border border-black/5"
             />
@@ -331,11 +502,11 @@ export default function ChatWindow({ selectedConversationId }: Props) {
     }
 
     if (msg.type === "video") {
-      if (msg.mediaUrl) {
+      if (mediaUrl) {
         return (
           <div className="space-y-2">
             <video controls className="rounded-lg max-w-xs border border-black/5">
-              <source src={msg.mediaUrl} />
+              <source src={mediaUrl} />
             </video>
             {!!msg.caption && (
               <p className="text-sm whitespace-pre-wrap break-words">{msg.caption}</p>
@@ -353,12 +524,12 @@ export default function ChatWindow({ selectedConversationId }: Props) {
     }
 
     if (msg.type === "audio" || msg.type === "ptt") {
-      if (msg.mediaUrl) {
+      if (mediaUrl) {
         return (
           <div className="flex items-center gap-2">
             <Mic size={16} className="opacity-70" />
             <audio controls className="w-64">
-              <source src={msg.mediaUrl} />
+              <source src={mediaUrl} />
             </audio>
           </div>
         )
@@ -373,10 +544,10 @@ export default function ChatWindow({ selectedConversationId }: Props) {
     }
 
     if (msg.type === "document") {
-      if (msg.mediaUrl) {
+      if (mediaUrl) {
         return (
           <a
-            href={msg.mediaUrl}
+            href={mediaUrl}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-2 text-sm text-blue-700 hover:underline"
@@ -483,18 +654,20 @@ export default function ChatWindow({ selectedConversationId }: Props) {
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={() => fileInputRef.current?.click()}
               className={iconBtn}
               title="Anexar"
-              disabled
+              disabled={!selectedConversationId || !conversation || sendingMedia || sendingMessage}
             >
               <Paperclip size={20} />
             </button>
 
             <button
               type="button"
+              onClick={() => imageInputRef.current?.click()}
               className={iconBtn}
               title="Imagem"
-              disabled
+              disabled={!selectedConversationId || !conversation || sendingMedia || sendingMessage}
             >
               <ImageIcon size={20} />
             </button>
@@ -507,12 +680,12 @@ export default function ChatWindow({ selectedConversationId }: Props) {
                 placeholder={
                   selectedConversationId ? "Digite uma mensagem" : "Selecione uma conversa"
                 }
-                disabled={!selectedConversationId || !conversation || sendingMessage}
+                disabled={!selectedConversationId || !conversation || sendingMessage || sendingMedia}
                 rows={1}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault()
-                    if (!sendingMessage) {
+                    if (!sendingMessage && !sendingMedia) {
                       sendMessage()
                     }
                   }
@@ -523,16 +696,10 @@ export default function ChatWindow({ selectedConversationId }: Props) {
             {newMessage.trim().length === 0 ? (
               <button
                 type="button"
-                onClick={() => {
-                  setIsRecording(true)
-                  if (recordIntervalRef.current) clearInterval(recordIntervalRef.current)
-                  recordIntervalRef.current = setInterval(() => {
-                    setRecordTime((prev) => prev + 1)
-                  }, 1000)
-                }}
+                onClick={startRecording}
                 className={iconBtn}
                 title="Gravar áudio"
-                disabled
+                disabled={!selectedConversationId || !conversation || sendingMedia || sendingMessage}
               >
                 <Mic size={20} />
               </button>
@@ -542,11 +709,34 @@ export default function ChatWindow({ selectedConversationId }: Props) {
                 onClick={sendMessage}
                 className="h-10 w-10 rounded-full flex items-center justify-center bg-green-500 text-white hover:bg-green-600 active:bg-green-700 transition disabled:opacity-60"
                 title="Enviar"
-                disabled={!selectedConversationId || !conversation || sendingMessage}
+                disabled={!selectedConversationId || !conversation || sendingMessage || sendingMedia}
               >
                 <Send size={18} />
               </button>
             )}
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) sendMedia(file)
+                e.currentTarget.value = ""
+              }}
+            />
+
+            <input
+              type="file"
+              accept="image/*"
+              ref={imageInputRef}
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) sendMedia(file)
+                e.currentTarget.value = ""
+              }}
+            />
           </div>
         ) : (
           <div className="flex items-center gap-3">
@@ -555,6 +745,7 @@ export default function ChatWindow({ selectedConversationId }: Props) {
               onClick={cancelRecording}
               className={iconBtn}
               title="Cancelar"
+              disabled={sendingMedia}
             >
               <Trash2 size={20} className="text-red-500" />
             </button>
@@ -579,7 +770,7 @@ export default function ChatWindow({ selectedConversationId }: Props) {
               onClick={stopRecording}
               className="h-10 w-10 rounded-full flex items-center justify-center bg-green-500 text-white hover:bg-green-600 active:bg-green-700 transition disabled:opacity-60"
               title="Enviar áudio"
-              disabled
+              disabled={sendingMedia}
             >
               <Send size={18} />
             </button>
@@ -589,3 +780,4 @@ export default function ChatWindow({ selectedConversationId }: Props) {
     </div>
   )
 }
+
