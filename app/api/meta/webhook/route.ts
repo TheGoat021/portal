@@ -191,6 +191,8 @@ export async function POST(req: NextRequest) {
 
       for (const change of changes) {
         const value = change?.value
+        if (!value) continue
+
         const metadata = value?.metadata
         const phoneNumberId = metadata?.phone_number_id
 
