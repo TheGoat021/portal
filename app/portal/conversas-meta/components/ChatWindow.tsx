@@ -92,13 +92,6 @@ type MetaConversation = {
   last_message_at?: string | null
 }
 
-function detectMediaType(file: File): "image" | "video" | "audio" | "document" {
-  if (file.type.startsWith("image/")) return "image"
-  if (file.type.startsWith("video/")) return "video"
-  if (file.type.startsWith("audio/")) return "audio"
-  return "document"
-}
-
 export default function ChatWindow({ selectedConversationId }: Props) {
   const [messages, setMessages] = useState<Message[]>([])
   const [conversation, setConversation] = useState<MetaConversation | null>(null)
@@ -107,17 +100,9 @@ export default function ChatWindow({ selectedConversationId }: Props) {
   const [recordTime, setRecordTime] = useState(0)
   const [loading, setLoading] = useState(false)
   const [sendingMessage, setSendingMessage] = useState(false)
-  const [sendingMedia, setSendingMedia] = useState(false)
 
   const recordIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
-
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const imageInputRef = useRef<HTMLInputElement | null>(null)
-
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const audioChunksRef = useRef<Blob[]>([])
-  const streamRef = useRef<MediaStream | null>(null)
 
   function formatTime(dateString: string) {
     const date = new Date(dateString)
@@ -231,25 +216,27 @@ export default function ChatWindow({ selectedConversationId }: Props) {
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedConversationId || !conversation || sendingMessage) return
 
-    const messageToSend = newMessage
+    const messageToSend = newMessage.trim()
 
     try {
       setSendingMessage(true)
       setNewMessage("")
 
-      const res = await fetch(`/api/whatsapp-meta/send-text`, {
+      const res = await fetch(`/api/meta/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           connectionId: conversation.connection_id,
           conversationId: selectedConversationId,
           to: conversation.wa_id,
-          text: messageToSend
+          message: messageToSend
         })
       })
 
-      if (!res.ok) {
-        console.error("Erro ao enviar mensagem meta:", await res.text())
+      const payload = await res.json().catch(() => null)
+
+      if (!res.ok || !payload?.ok) {
+        console.error("Erro ao enviar mensagem meta:", payload || (await res.text()))
         setNewMessage(messageToSend)
         return
       }
@@ -263,103 +250,13 @@ export default function ChatWindow({ selectedConversationId }: Props) {
     }
   }
 
-  const sendMedia = async (file: File) => {
-    if (!selectedConversationId || !conversation || sendingMedia) return
-
-    const formData = new FormData()
-    formData.append("file", file)
-    formData.append("connectionId", conversation.connection_id)
-    formData.append("conversationId", selectedConversationId)
-    formData.append("to", conversation.wa_id)
-    formData.append("type", detectMediaType(file))
-
-    try {
-      setSendingMedia(true)
-
-      const res = await fetch(`/api/whatsapp-meta/send-media`, {
-        method: "POST",
-        body: formData
-      })
-
-      if (!res.ok) {
-        console.error("Erro ao enviar mídia meta:", await res.text())
-        return
-      }
-
-      await fetchMessages(selectedConversationId)
-    } catch (error) {
-      console.error("Erro ao enviar mídia meta:", error)
-    } finally {
-      setSendingMedia(false)
-    }
-  }
-
-  const stopStreamTracks = () => {
-    try {
-      streamRef.current?.getTracks().forEach((track) => track.stop())
-    } catch {}
-    streamRef.current = null
-  }
-
-  const startRecording = async () => {
-    if (!selectedConversationId || !conversation || sendingMedia || sendingMessage) return
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      streamRef.current = stream
-
-      const mediaRecorder = new MediaRecorder(stream)
-      mediaRecorderRef.current = mediaRecorder
-      audioChunksRef.current = []
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) {
-          audioChunksRef.current.push(event.data)
-        }
-      }
-
-      mediaRecorder.onstop = async () => {
-        try {
-          if (audioChunksRef.current.length === 0) return
-
-          const audioBlob = new Blob(audioChunksRef.current, { type: "audio/ogg" })
-          const file = new File([audioBlob], `audio_${Date.now()}.ogg`, {
-            type: "audio/ogg"
-          })
-
-          await sendMedia(file)
-        } finally {
-          setRecordTime(0)
-          audioChunksRef.current = []
-          stopStreamTracks()
-        }
-      }
-
-      mediaRecorder.start()
-      setIsRecording(true)
-
-      if (recordIntervalRef.current) clearInterval(recordIntervalRef.current)
-      recordIntervalRef.current = setInterval(() => {
-        setRecordTime((prev) => prev + 1)
-      }, 1000)
-    } catch (error) {
-      console.error("Erro ao iniciar gravação:", error)
-      stopStreamTracks()
-      setIsRecording(false)
-      setRecordTime(0)
-      if (recordIntervalRef.current) clearInterval(recordIntervalRef.current)
-    }
-  }
-
   const stopRecording = () => {
-    mediaRecorderRef.current?.stop()
     setIsRecording(false)
+    setRecordTime(0)
     if (recordIntervalRef.current) clearInterval(recordIntervalRef.current)
   }
 
   const cancelRecording = () => {
-    audioChunksRef.current = []
-    mediaRecorderRef.current?.stop()
     setIsRecording(false)
     setRecordTime(0)
     if (recordIntervalRef.current) clearInterval(recordIntervalRef.current)
@@ -586,20 +483,18 @@ export default function ChatWindow({ selectedConversationId }: Props) {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => fileInputRef.current?.click()}
               className={iconBtn}
               title="Anexar"
-              disabled={!selectedConversationId || !conversation || sendingMedia || sendingMessage}
+              disabled
             >
               <Paperclip size={20} />
             </button>
 
             <button
               type="button"
-              onClick={() => imageInputRef.current?.click()}
               className={iconBtn}
               title="Imagem"
-              disabled={!selectedConversationId || !conversation || sendingMedia || sendingMessage}
+              disabled
             >
               <ImageIcon size={20} />
             </button>
@@ -628,10 +523,16 @@ export default function ChatWindow({ selectedConversationId }: Props) {
             {newMessage.trim().length === 0 ? (
               <button
                 type="button"
-                onClick={startRecording}
+                onClick={() => {
+                  setIsRecording(true)
+                  if (recordIntervalRef.current) clearInterval(recordIntervalRef.current)
+                  recordIntervalRef.current = setInterval(() => {
+                    setRecordTime((prev) => prev + 1)
+                  }, 1000)
+                }}
                 className={iconBtn}
                 title="Gravar áudio"
-                disabled={!selectedConversationId || !conversation || sendingMedia || sendingMessage}
+                disabled
               >
                 <Mic size={20} />
               </button>
@@ -646,29 +547,6 @@ export default function ChatWindow({ selectedConversationId }: Props) {
                 <Send size={18} />
               </button>
             )}
-
-            <input
-              type="file"
-              ref={fileInputRef}
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (file) sendMedia(file)
-                e.currentTarget.value = ""
-              }}
-            />
-
-            <input
-              type="file"
-              accept="image/*"
-              ref={imageInputRef}
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (file) sendMedia(file)
-                e.currentTarget.value = ""
-              }}
-            />
           </div>
         ) : (
           <div className="flex items-center gap-3">
@@ -677,7 +555,6 @@ export default function ChatWindow({ selectedConversationId }: Props) {
               onClick={cancelRecording}
               className={iconBtn}
               title="Cancelar"
-              disabled={sendingMedia}
             >
               <Trash2 size={20} className="text-red-500" />
             </button>
@@ -702,7 +579,7 @@ export default function ChatWindow({ selectedConversationId }: Props) {
               onClick={stopRecording}
               className="h-10 w-10 rounded-full flex items-center justify-center bg-green-500 text-white hover:bg-green-600 active:bg-green-700 transition disabled:opacity-60"
               title="Enviar áudio"
-              disabled={sendingMedia}
+              disabled
             >
               <Send size={18} />
             </button>

@@ -29,6 +29,7 @@ async function handleInboundMessage({
   message: any
   contact?: any
 }) {
+  
   const fromPhone = normalizePhone(message?.from)
   if (!fromPhone) return
 
@@ -39,6 +40,7 @@ async function handleInboundMessage({
     contactName: contact?.profile?.name || null,
     profileName: value?.metadata?.display_phone_number || null
   })
+
 
   const parsed = getInboundTypeAndContent(message)
 
