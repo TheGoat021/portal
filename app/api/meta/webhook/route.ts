@@ -10,6 +10,7 @@ import {
 } from '@/lib/metaDb'
 import { uploadMetaInboundMedia } from '@/lib/metaStorage'
 import { runMetaChatbotForInbound } from '@/lib/metaChatbot'
+import { getMetaConversationManagement } from '@/lib/metaConversationManagement'
 import {
   downloadMediaFile,
   extractWebhookEntries,
@@ -138,19 +139,29 @@ async function handleInboundMessage({
     incrementUnread: true
   })
 
-  const { error: reopenError } = await supabaseAdmin
-    .from("meta_conversation_management")
-    .update({
-      status: "open",
-      closed_at: null,
-      closed_by_user_id: null,
-      updated_at: new Date().toISOString()
-    })
-    .eq("conversation_id", conversation.id)
-    .eq("status", "closed")
+  let reopenedFromClosed = false
+  try {
+    const management = await getMetaConversationManagement(conversation.id)
+    reopenedFromClosed = management?.status === "closed"
 
-  if (reopenError) {
-    console.error("Erro ao reabrir conversa Meta arquivada:", reopenError)
+    if (reopenedFromClosed) {
+      const { error: reopenError } = await supabaseAdmin
+        .from("meta_conversation_management")
+        .update({
+          status: "open",
+          closed_at: null,
+          closed_by_user_id: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq("conversation_id", conversation.id)
+        .eq("status", "closed")
+
+      if (reopenError) {
+        console.error("Erro ao reabrir conversa Meta arquivada:", reopenError)
+      }
+    }
+  } catch (managementError) {
+    console.error("Erro ao consultar gestão da conversa Meta:", managementError)
   }
 
   if (parsed.type === "text" && (parsed.text || "").trim()) {
@@ -159,7 +170,8 @@ async function handleInboundMessage({
         connectionId: connection.id,
         conversationId: conversation.id,
         to: fromPhone,
-        inboundText: parsed.text || ""
+        inboundText: parsed.text || "",
+        restartSession: reopenedFromClosed
       })
     } catch (chatbotError) {
       console.error("Erro ao executar fluxo do chatbot Meta:", chatbotError)

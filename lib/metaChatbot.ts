@@ -273,18 +273,37 @@ export async function runMetaChatbotForInbound({
   connectionId,
   conversationId,
   to,
-  inboundText
+  inboundText,
+  restartSession = false
 }: {
   connectionId: string
   conversationId: string
   to: string
   inboundText: string
+  restartSession?: boolean
 }) {
   const flow = await getAvailableFlow(connectionId)
   if (!flow) return
 
-  const session = await getOrCreateSession({ connectionId, conversationId })
-  if (session.state === "disabled" || session.state === "completed") return
+  let session = await getOrCreateSession({ connectionId, conversationId })
+  if (session.state === "disabled") return
+
+  if (session.state === "completed") {
+    if (!restartSession) return
+
+    await updateSession(session.id, {
+      state: "active",
+      current_node_id: null,
+      context: {}
+    })
+
+    session = {
+      ...session,
+      state: "active",
+      current_node_id: null,
+      context: {}
+    }
+  }
 
   const isFirstInboundForSession = !session.current_node_id
   let currentNodeId = session.current_node_id
