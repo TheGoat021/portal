@@ -154,7 +154,8 @@ async function handleStatuses(statuses: WebhookStatus[]) {
     if (state === 'failed') {
       console.error('META STATUS FAILED:', {
         metaMessageId,
-        status
+        status,
+        errors: JSON.stringify((status as { errors?: unknown }).errors ?? null, null, 2)
       })
     }
 

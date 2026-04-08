@@ -338,7 +338,6 @@ export default function ChatWindow({ selectedConversationId }: Props) {
 
     const candidates = [
       "audio/ogg;codecs=opus",
-      "audio/ogg",
       "audio/mp4",
       "audio/aac",
       "audio/mpeg"
