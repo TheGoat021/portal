@@ -110,6 +110,7 @@ export default function ChatWindow({ selectedConversationId }: Props) {
   const audioChunksRef = useRef<Blob[]>([])
   const streamRef = useRef<MediaStream | null>(null)
   const recordMimeTypeRef = useRef<string>("audio/ogg")
+  const shouldSendRecordingRef = useRef(false)
 
   function formatTime(dateString: string) {
     const date = new Date(dateString)
@@ -381,6 +382,7 @@ export default function ChatWindow({ selectedConversationId }: Props) {
       recordMimeTypeRef.current = selectedMimeType
       mediaRecorderRef.current = mediaRecorder
       audioChunksRef.current = []
+      shouldSendRecordingRef.current = true
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
@@ -390,6 +392,7 @@ export default function ChatWindow({ selectedConversationId }: Props) {
 
       mediaRecorder.onstop = async () => {
         try {
+          if (!shouldSendRecordingRef.current) return
           if (audioChunksRef.current.length === 0) return
 
           const mimeType = recordMimeTypeRef.current || "audio/ogg"
@@ -400,6 +403,7 @@ export default function ChatWindow({ selectedConversationId }: Props) {
 
           await sendMedia(file)
         } finally {
+          shouldSendRecordingRef.current = false
           setRecordTime(0)
           audioChunksRef.current = []
           stopStreamTracks()
@@ -423,12 +427,14 @@ export default function ChatWindow({ selectedConversationId }: Props) {
   }
 
   const stopRecording = () => {
+    shouldSendRecordingRef.current = true
     mediaRecorderRef.current?.stop()
     setIsRecording(false)
     if (recordIntervalRef.current) clearInterval(recordIntervalRef.current)
   }
 
   const cancelRecording = () => {
+    shouldSendRecordingRef.current = false
     audioChunksRef.current = []
     mediaRecorderRef.current?.stop()
     stopStreamTracks()

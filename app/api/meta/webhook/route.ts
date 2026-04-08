@@ -9,6 +9,7 @@ import {
   touchMetaConversation
 } from '@/lib/metaDb'
 import { uploadMetaInboundMedia } from '@/lib/metaStorage'
+import { runMetaChatbotForInbound } from '@/lib/metaChatbot'
 import {
   downloadMediaFile,
   extractWebhookEntries,
@@ -136,6 +137,19 @@ async function handleInboundMessage({
     lastMessageType: parsed.type,
     incrementUnread: true
   })
+
+  if (parsed.type === "text" && (parsed.text || "").trim()) {
+    try {
+      await runMetaChatbotForInbound({
+        connectionId: connection.id,
+        conversationId: conversation.id,
+        to: fromPhone,
+        inboundText: parsed.text || ""
+      })
+    } catch (chatbotError) {
+      console.error("Erro ao executar fluxo do chatbot Meta:", chatbotError)
+    }
+  }
 }
 
 async function handleStatuses(statuses: WebhookStatus[]) {

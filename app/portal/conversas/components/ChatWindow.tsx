@@ -126,6 +126,7 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const streamRef = useRef<MediaStream | null>(null)
+  const shouldSendRecordingRef = useRef(false)
 
   function formatTime(dateString: string) {
     const date = new Date(dateString)
@@ -297,6 +298,7 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
       const mediaRecorder = new MediaRecorder(stream)
       mediaRecorderRef.current = mediaRecorder
       audioChunksRef.current = []
+      shouldSendRecordingRef.current = true
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
@@ -306,6 +308,7 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
 
       mediaRecorder.onstop = async () => {
         try {
+          if (!shouldSendRecordingRef.current) return
           if (audioChunksRef.current.length === 0) return
 
           const audioBlob = new Blob(audioChunksRef.current, { type: "audio/ogg" })
@@ -315,6 +318,7 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
 
           await sendMedia(file)
         } finally {
+          shouldSendRecordingRef.current = false
           setRecordTime(0)
           audioChunksRef.current = []
           stopStreamTracks()
@@ -338,14 +342,17 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
   }
 
   const stopRecording = () => {
+    shouldSendRecordingRef.current = true
     mediaRecorderRef.current?.stop()
     setIsRecording(false)
     if (recordIntervalRef.current) clearInterval(recordIntervalRef.current)
   }
 
   const cancelRecording = () => {
+    shouldSendRecordingRef.current = false
     audioChunksRef.current = []
     mediaRecorderRef.current?.stop()
+    stopStreamTracks()
     setIsRecording(false)
     setRecordTime(0)
     if (recordIntervalRef.current) clearInterval(recordIntervalRef.current)
