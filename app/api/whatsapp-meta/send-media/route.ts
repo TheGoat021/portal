@@ -1,6 +1,11 @@
 // app/api/whatsapp-meta/send-media/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
+import ffmpeg from 'fluent-ffmpeg'
+import ffmpegStatic from 'ffmpeg-static'
+import fs from 'fs/promises'
+import os from 'os'
+import path from 'path'
 import { getMetaConnectionById, insertMetaMessage, touchMetaConversation } from '@/lib/metaDb'
 import { uploadMetaInboundMedia } from '@/lib/metaStorage'
 import { guessMessageText, normalizePhone, sendMediaMessage, uploadMedia } from '@/lib/whatsappMeta'
@@ -46,6 +51,44 @@ function detectAudioMimeFromBuffer(buffer: Buffer): string | null {
   return null
 }
 
+async function convertAudioToOggOpus(fileBuffer: Buffer, originalName: string) {
+  const ffmpegPath = ffmpegStatic || ''
+  if (!ffmpegPath) {
+    throw new Error('ffmpeg-static não encontrado para conversão de áudio')
+  }
+
+  ffmpeg.setFfmpegPath(ffmpegPath)
+
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'meta-audio-'))
+  const safeName = (originalName || `audio-${Date.now()}.tmp`).replace(/[^\w.\-]/g, '_')
+  const inputPath = path.join(tmpDir, safeName)
+  const outputPath = path.join(tmpDir, `${Date.now()}-audio.ogg`)
+
+  await fs.writeFile(inputPath, fileBuffer)
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg(inputPath)
+        .audioCodec('libopus')
+        .audioChannels(1)
+        .audioFrequency(48000)
+        .format('ogg')
+        .save(outputPath)
+        .on('end', () => resolve())
+        .on('error', (err: Error) => reject(err))
+    })
+
+    const convertedBuffer = await fs.readFile(outputPath)
+    return {
+      buffer: convertedBuffer,
+      mimeType: 'audio/ogg; codecs=opus',
+      fileName: `audio_${Date.now()}.ogg`
+    }
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true })
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const form = await req.formData()
@@ -84,13 +127,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Conexão Meta inválida' }, { status: 400 })
     }
 
-    const fileBuffer = Buffer.from(await file.arrayBuffer())
-    const fileMimeType = file.type || 'application/octet-stream'
-    const fileName = file.name || 'arquivo'
+    let fileBuffer = Buffer.from(await file.arrayBuffer())
+    let fileMimeType = file.type || 'application/octet-stream'
+    let fileName = file.name || 'arquivo'
 
     if (type === 'audio') {
-      const normalizedAudioMime = fileMimeType.toLowerCase().split(';')[0].trim()
-      const allowedAudioMimes = new Set([
+      const detectedMime = detectAudioMimeFromBuffer(fileBuffer)
+      const normalizedAudioMime = (detectedMime || fileMimeType || '').toLowerCase().split(';')[0].trim()
+      const convertibleMimes = new Set([
+        'audio/webm',
         'audio/ogg',
         'audio/mp4',
         'audio/mpeg',
@@ -98,44 +143,22 @@ export async function POST(req: NextRequest) {
         'audio/amr'
       ])
 
-      const detectedMime = detectAudioMimeFromBuffer(fileBuffer)
-
-      if (detectedMime === 'audio/webm') {
+      if (!convertibleMimes.has(normalizedAudioMime)) {
         return NextResponse.json(
           {
             ok: false,
             error:
-              'Áudio gravado em WebM não é aceito pela API da Meta. Use OGG/Opus ou envie um arquivo .m4a/.mp3/.aac/.amr.'
+              `Formato de áudio não suportado: ${fileMimeType || normalizedAudioMime || 'desconhecido'}. ` +
+              'Use webm/ogg/m4a/mp3/aac/amr.'
           },
           { status: 400 }
         )
       }
 
-      const effectiveAudioMime = detectedMime || normalizedAudioMime
-
-      if (!allowedAudioMimes.has(effectiveAudioMime)) {
-        return NextResponse.json(
-          {
-            ok: false,
-            error:
-              `Formato de áudio não suportado pela Meta: ${fileMimeType}. ` +
-              'Use OGG/Opus, MP4 (m4a), MP3, AAC ou AMR.'
-          },
-          { status: 400 }
-        )
-      }
-
-      if (normalizedAudioMime && normalizedAudioMime !== effectiveAudioMime) {
-        return NextResponse.json(
-          {
-            ok: false,
-            error:
-              `MIME inconsistente no áudio: enviado como ${fileMimeType}, mas o conteúdo é ${effectiveAudioMime}. ` +
-              'Use um formato compatível real (OGG/Opus, m4a, mp3, aac, amr).'
-          },
-          { status: 400 }
-        )
-      }
+      const converted = await convertAudioToOggOpus(fileBuffer, fileName)
+      fileBuffer = converted.buffer
+      fileMimeType = converted.mimeType
+      fileName = converted.fileName
     }
 
     const upload = await uploadMedia({

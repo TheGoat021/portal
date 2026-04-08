@@ -337,6 +337,8 @@ export default function ChatWindow({ selectedConversationId }: Props) {
     }
 
     const candidates = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
       "audio/ogg;codecs=opus",
       "audio/ogg"
     ]
