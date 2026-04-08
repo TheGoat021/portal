@@ -2,7 +2,7 @@
 
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   FileText,
   Image as ImageIcon,
@@ -11,7 +11,6 @@ import {
   UserRound,
   Video
 } from "lucide-react"
-import { supabase } from "@/lib/supabaseClient"
 
 interface Props {
   selectedConversationId: string | null
@@ -102,12 +101,6 @@ function getInitials(nameOrPhone: string) {
   return cleaned.replace(/\D/g, "").slice(-2) || cleaned.slice(0, 2).toUpperCase()
 }
 
-function toTs(dateString?: string) {
-  if (!dateString) return 0
-  const t = new Date(dateString).getTime()
-  return Number.isFinite(t) ? t : 0
-}
-
 function normalizePhone(phone?: string | null) {
   if (!phone) return ""
   return String(phone).replace(/\D/g, "")
@@ -182,8 +175,6 @@ export default function ConversationsList({
   const [loadingConnections, setLoadingConnections] = useState(false)
   const [creatingConversation, setCreatingConversation] = useState(false)
 
-  const [lastSeenAtById, setLastSeenAtById] = useState<Record<string, number>>({})
-  const selectedRef = useRef<string | null>(null)
 
   const fetchConnections = async () => {
     try {
@@ -247,21 +238,6 @@ export default function ConversationsList({
         lastMessageType: conv.last_message_type ?? "text"
       }))
 
-      const selectedId = selectedRef.current
-      if (selectedId) {
-        const openConv = mapped.find((c) => c.id === selectedId)
-        if (openConv?.lastMessageAt) {
-          const ts = toTs(openConv.lastMessageAt)
-          if (ts) {
-            setLastSeenAtById((prev) => {
-              const cur = prev[selectedId] ?? 0
-              if (ts <= cur) return prev
-              return { ...prev, [selectedId]: ts }
-            })
-          }
-        }
-      }
-
       setConversations(mapped)
     } catch (error) {
       console.error("Erro ao buscar conversas meta", error)
@@ -282,10 +258,6 @@ export default function ConversationsList({
     const interval = setInterval(() => fetchConversations(selectedConnectionId), 3000)
     return () => clearInterval(interval)
   }, [selectedConnectionId])
-
-  useEffect(() => {
-    selectedRef.current = selectedConversationId
-  }, [selectedConversationId])
 
   const filteredConversations = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -381,15 +353,6 @@ export default function ConversationsList({
 
   const handleSelectConversation = async (conv: Conversation) => {
     try {
-      const ts = toTs(conv.lastMessageAt)
-      if (ts) {
-        setLastSeenAtById((prev) => {
-          const cur = prev[conv.id] ?? 0
-          if (ts <= cur) return prev
-          return { ...prev, [conv.id]: ts }
-        })
-      }
-
       onSelectConversation(conv.id)
 
       await fetch(`/api/whatsapp-meta/conversations/${conv.id}/read`, {
@@ -480,11 +443,9 @@ export default function ConversationsList({
             const time = formatListTime(conv.lastMessageAt)
             const initials = getInitials(title)
 
-            const lastSeenTs = lastSeenAtById[conv.id] ?? 0
-            const lastMsgTs = toTs(conv.lastMessageAt)
             const hasNew =
               !isSelected &&
-              ((conv.unreadCount ?? 0) > 0 || (lastMsgTs > 0 && lastMsgTs > lastSeenTs))
+              (conv.unreadCount ?? 0) > 0
 
             const preview = getConversationPreview(conv)
 

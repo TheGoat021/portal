@@ -16,7 +16,10 @@ import {
   Reply,
   Sticker,
   Video,
-  UserRound
+  UserRound,
+  Users,
+  X,
+  CircleStop
 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 
@@ -92,7 +95,7 @@ type MetaConversation = {
   last_message_at?: string | null
 }
 
-export default function ChatWindow({ selectedConversationId }: Props) {
+export default function ChatWindow({ selectedConversationId, currentUser }: Props) {
   const [messages, setMessages] = useState<Message[]>([])
   const [conversation, setConversation] = useState<MetaConversation | null>(null)
   const [newMessage, setNewMessage] = useState("")
@@ -101,6 +104,12 @@ export default function ChatWindow({ selectedConversationId }: Props) {
   const [loading, setLoading] = useState(false)
   const [sendingMessage, setSendingMessage] = useState(false)
   const [sendingMedia, setSendingMedia] = useState(false)
+  const [agents, setAgents] = useState<Array<{ id: string; email: string; role: string }>>([])
+  const [transferOpen, setTransferOpen] = useState(false)
+  const [transferTo, setTransferTo] = useState("")
+  const [agentsLoading, setAgentsLoading] = useState(false)
+  const [transferSaving, setTransferSaving] = useState(false)
+  const [closingConversation, setClosingConversation] = useState(false)
 
   const recordIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
@@ -188,6 +197,89 @@ export default function ChatWindow({ selectedConversationId }: Props) {
       })
     } catch (error) {
       console.error("Erro ao marcar conversa como lida:", error)
+    }
+  }
+
+  const openTransfer = async () => {
+    if (!selectedConversationId) return
+
+    setTransferOpen(true)
+    setTransferTo("")
+    setAgents([])
+    setAgentsLoading(true)
+
+    try {
+      const res = await fetch("/api/agents", { cache: "no-store" })
+      if (!res.ok) {
+        console.error("Erro ao carregar atendentes:", await res.text())
+        return
+      }
+
+      const data = await res.json()
+      const list = Array.isArray(data) ? data : []
+      setAgents(
+        list.map((item) => ({
+          id: String(item.id),
+          email: String(item.email || ""),
+          role: String(item.role || "Sem departamento")
+        }))
+      )
+    } catch (error) {
+      console.error("Erro ao carregar atendentes:", error)
+    } finally {
+      setAgentsLoading(false)
+    }
+  }
+
+  const confirmTransfer = async () => {
+    if (!selectedConversationId || !transferTo || transferSaving) return
+
+    try {
+      setTransferSaving(true)
+
+      const res = await fetch(`/api/whatsapp-meta/conversations/${selectedConversationId}/transfer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          toUserId: transferTo,
+          byUserId: currentUser.id
+        })
+      })
+
+      if (!res.ok) {
+        console.error("Erro ao transferir conversa meta:", await res.text())
+        return
+      }
+
+      setTransferOpen(false)
+    } catch (error) {
+      console.error("Erro ao transferir conversa meta:", error)
+    } finally {
+      setTransferSaving(false)
+    }
+  }
+
+  const closeAttendance = async () => {
+    if (!selectedConversationId || closingConversation) return
+
+    try {
+      setClosingConversation(true)
+      const res = await fetch(`/api/whatsapp-meta/conversations/${selectedConversationId}/close`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          byUserId: currentUser.id
+        })
+      })
+
+      if (!res.ok) {
+        console.error("Erro ao encerrar atendimento:", await res.text())
+        return
+      }
+    } catch (error) {
+      console.error("Erro ao encerrar atendimento:", error)
+    } finally {
+      setClosingConversation(false)
     }
   }
 
@@ -610,6 +702,28 @@ export default function ChatWindow({ selectedConversationId }: Props) {
             {conversation?.wa_id ?? selectedConversationId ?? ""}
           </div>
         </div>
+
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={openTransfer}
+            className={iconBtn}
+            title="Transferir para outro atendente"
+            disabled={!selectedConversationId || transferSaving || closingConversation}
+          >
+            <Users size={20} />
+          </button>
+
+          <button
+            type="button"
+            onClick={closeAttendance}
+            className={iconBtn}
+            title="Encerrar atendimento"
+            disabled={!selectedConversationId || transferSaving || closingConversation}
+          >
+            <CircleStop size={20} />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-2">
@@ -789,6 +903,77 @@ export default function ChatWindow({ selectedConversationId }: Props) {
           </div>
         )}
       </div>
+
+      {transferOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="w-[560px] max-w-[96vw] bg-white rounded-2xl shadow-xl border border-black/5 overflow-hidden">
+            <div className="px-5 py-4 border-b flex items-center justify-between">
+              <div>
+                <div className="text-sm font-semibold">Transferir conversa Meta</div>
+                <div className="text-xs text-gray-500">Atendentes agrupados por departamento</div>
+              </div>
+
+              <button
+                className="h-9 w-9 rounded-full hover:bg-gray-100 flex items-center justify-center"
+                onClick={() => setTransferOpen(false)}
+                title="Fechar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3">
+              <label className="text-xs text-gray-500">Atendente de destino</label>
+
+              <select
+                value={transferTo}
+                onChange={(e) => setTransferTo(e.target.value)}
+                className="w-full h-11 px-4 rounded-xl border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
+                disabled={agentsLoading || transferSaving}
+              >
+                <option value="">
+                  {agentsLoading ? "Carregando atendentes..." : "Selecione um atendente"}
+                </option>
+
+                {Object.entries(
+                  agents.reduce<Record<string, Array<{ id: string; email: string; role: string }>>>((acc, agent) => {
+                    const department = (agent.role || "Sem departamento").trim() || "Sem departamento"
+                    if (!acc[department]) acc[department] = []
+                    acc[department].push(agent)
+                    return acc
+                  }, {})
+                ).map(([department, list]) => (
+                  <optgroup key={department} label={department}>
+                    {list.map((agent) => (
+                      <option key={agent.id} value={agent.id}>
+                        {agent.email}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  className="px-4 py-2 rounded-xl border hover:bg-gray-50"
+                  onClick={() => setTransferOpen(false)}
+                  disabled={transferSaving}
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  className="px-4 py-2 rounded-xl bg-gray-900 text-white hover:bg-black disabled:opacity-60"
+                  onClick={confirmTransfer}
+                  disabled={!transferTo || transferSaving}
+                >
+                  {transferSaving ? "Transferindo..." : "Confirmar transferência"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

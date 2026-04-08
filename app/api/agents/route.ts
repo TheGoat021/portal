@@ -5,7 +5,7 @@ export async function GET() {
   try {
     const { data, error } = await supabaseAdmin
       .from("portal_users")
-      .select("id, email")
+      .select("id, email, role")
       .order("email", { ascending: true })
 
     if (error) {
@@ -19,7 +19,7 @@ export async function GET() {
     const formatted = (data ?? []).map((user) => ({
       id: user.id,
       email: user.email ?? "",
-      role: "Atendente"
+      role: user.role ?? "Atendente"
     }))
 
     return NextResponse.json(formatted)
