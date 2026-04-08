@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import ffmpeg from 'fluent-ffmpeg'
 import ffmpegStatic from 'ffmpeg-static'
+import fsSync from 'fs'
 import fs from 'fs/promises'
 import os from 'os'
 import path from 'path'
@@ -52,7 +53,17 @@ function detectAudioMimeFromBuffer(buffer: Buffer): string | null {
 }
 
 async function convertAudioToOggOpus(fileBuffer: Buffer, originalName: string) {
-  const ffmpegPath = ffmpegStatic || ''
+  const fromPackage = typeof ffmpegStatic === 'string' ? ffmpegStatic : ''
+  const candidates = [
+    fromPackage,
+    fromPackage.replace(/^\/root\//i, '/var/task/'),
+    fromPackage.replace(/^\/ROOT\//, '/var/task/'),
+    path.join(process.cwd(), 'node_modules', 'ffmpeg-static', process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'),
+    '/var/task/node_modules/ffmpeg-static/ffmpeg'
+  ].filter(Boolean)
+
+  const ffmpegPath = candidates.find((candidate) => fsSync.existsSync(candidate)) || ''
+
   if (!ffmpegPath) {
     throw new Error('ffmpeg-static não encontrado para conversão de áudio')
   }
