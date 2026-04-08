@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin"
 import { getMetaConnectionById, insertMetaMessage, touchMetaConversation } from "@/lib/metaDb"
+import { upsertMetaConversationManagement } from "@/lib/metaConversationManagement"
 import { normalizePhone, sendTextMessage } from "@/lib/whatsappMeta"
 
 export type ChatbotNodeType = "start" | "message" | "question" | "condition" | "action" | "end"
@@ -104,7 +105,7 @@ function buildQuestionText(message: string, options: string[]) {
 }
 
 function pickStartNode(flow: ChatbotFlow) {
-  return flow.nodes.find((node) => node.type === "start") ?? flow.nodes[0] ?? null
+  return flow.nodes.find((node) => resolveNodeKind(node) === "start") ?? flow.nodes[0] ?? null
 }
 
 function matchQuestionOption(options: string[], inboundText: string) {
@@ -283,7 +284,7 @@ export async function runMetaChatbotForInbound({
   if (!flow) return
 
   const session = await getOrCreateSession({ connectionId, conversationId })
-  if (session.state === "disabled") return
+  if (session.state === "disabled" || session.state === "completed") return
 
   const isFirstInboundForSession = !session.current_node_id
   let currentNodeId = session.current_node_id
@@ -387,6 +388,22 @@ export async function runMetaChatbotForInbound({
 
       if (message) {
         await sendBotMessage({ connectionId, conversationId, to, text: message })
+      }
+
+      if (actionType === "route" && actionValue.trim()) {
+        await upsertMetaConversationManagement({
+          conversation_id: conversationId,
+          connection_id: connectionId,
+          status: "open",
+          assigned_user_id: null,
+          assigned_user_email: null,
+          assigned_department: actionValue.trim(),
+          closed_at: null,
+          closed_by_user_id: null
+        })
+
+        await updateSession(session.id, { current_node_id: null, state: "completed", context })
+        return
       }
 
       const next = outgoing[0]?.target

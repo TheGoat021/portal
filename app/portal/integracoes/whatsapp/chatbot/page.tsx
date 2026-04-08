@@ -59,6 +59,7 @@ function cleanNodeLabel(node: Node<FlowNodeData>) {
 
 export default function MetaChatbotBuilderPage() {
   const [connections, setConnections] = useState<MetaConnection[]>([])
+  const [departmentRoles, setDepartmentRoles] = useState<string[]>([])
   const [selectedConnectionId, setSelectedConnectionId] = useState("")
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<FlowNodeData>>(DEFAULT_NODES)
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<FlowEdgeData>>(DEFAULT_EDGES)
@@ -89,6 +90,28 @@ export default function MetaChatbotBuilderPage() {
       setSelectedConnectionId(list[0].id)
     }
   }, [selectedConnectionId])
+
+  const fetchDepartmentRoles = useCallback(async () => {
+    try {
+      const res = await fetch("/api/users", { cache: "no-store" })
+      if (!res.ok) return
+
+      const users = await res.json()
+      const list = Array.isArray(users) ? users : []
+
+      const roles = Array.from(
+        new Set(
+          list
+            .map((item) => String(item?.role || "").trim())
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b))
+
+      setDepartmentRoles(roles)
+    } catch {
+      setDepartmentRoles([])
+    }
+  }, [])
 
   const loadFlow = useCallback(
     async (connectionId: string) => {
@@ -121,6 +144,10 @@ export default function MetaChatbotBuilderPage() {
   useEffect(() => {
     fetchConnections()
   }, [fetchConnections])
+
+  useEffect(() => {
+    fetchDepartmentRoles()
+  }, [fetchDepartmentRoles])
 
   useEffect(() => {
     if (selectedConnectionId) {
@@ -394,17 +421,37 @@ export default function MetaChatbotBuilderPage() {
               <option value="note">Ação: Nota</option>
             </select>
 
-            <input
-              value={selectedNode.data?.actionValue || ""}
-              onChange={(e) =>
-                updateNode(selectedNode.id, (node) => ({
-                  ...node,
-                  data: { ...node.data, actionValue: e.target.value }
-                }))
-              }
-              placeholder="Valor da ação (ex.: fila-comercial)"
-              className="w-full border rounded-lg px-3 py-2 text-sm"
-            />
+            {(selectedNode.data?.actionType || "route") === "route" ? (
+              <select
+                value={selectedNode.data?.actionValue || ""}
+                onChange={(e) =>
+                  updateNode(selectedNode.id, (node) => ({
+                    ...node,
+                    data: { ...node.data, actionValue: e.target.value }
+                  }))
+                }
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              >
+                <option value="">Selecione o setor (role)</option>
+                {departmentRoles.map((role) => (
+                  <option key={role} value={role}>
+                    {role}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                value={selectedNode.data?.actionValue || ""}
+                onChange={(e) =>
+                  updateNode(selectedNode.id, (node) => ({
+                    ...node,
+                    data: { ...node.data, actionValue: e.target.value }
+                  }))
+                }
+                placeholder="Valor da ação"
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              />
+            )}
           </div>
         )}
 
@@ -412,7 +459,7 @@ export default function MetaChatbotBuilderPage() {
           <div className="space-y-2 border-t pt-4">
             <div className="text-xs font-semibold text-gray-700">Conexão selecionada</div>
             <div className="text-[11px] text-gray-500">
-              {selectedEdge.source} → {selectedEdge.target}
+              {selectedEdge.source} {"->"} {selectedEdge.target}
             </div>
 
             <input
@@ -484,3 +531,5 @@ export default function MetaChatbotBuilderPage() {
     </div>
   )
 }
+
+

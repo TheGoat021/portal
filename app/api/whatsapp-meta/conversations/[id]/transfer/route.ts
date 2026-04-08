@@ -30,7 +30,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
           .eq("id", conversationId)
           .single(),
         supabaseAdmin
-          .from("portal_users")
+          .from("profiles")
           .select("id, email, role")
           .eq("id", toUserId)
           .single()
@@ -64,4 +64,3 @@ export async function POST(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ ok: false, error: message }, { status: 500 })
   }
 }
-

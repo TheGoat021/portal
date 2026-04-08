@@ -18,6 +18,8 @@ export async function getMetaConversationManagement(conversationId: string) {
     .from("meta_conversation_management")
     .select("*")
     .eq("conversation_id", conversationId)
+    .order("updated_at", { ascending: false })
+    .limit(1)
     .maybeSingle()
 
   if (error) throw new Error(error.message)
@@ -30,19 +32,34 @@ export async function upsertMetaConversationManagement(
     connection_id: string
   }
 ) {
+  const existing = await getMetaConversationManagement(payload.conversation_id)
+  const updatedAt = new Date().toISOString()
+
+  if (existing) {
+    const { error: updateError } = await supabaseAdmin
+      .from("meta_conversation_management")
+      .update({
+        ...payload,
+        updated_at: updatedAt
+      })
+      .eq("conversation_id", payload.conversation_id)
+
+    if (updateError) throw new Error(updateError.message)
+
+    const refreshed = await getMetaConversationManagement(payload.conversation_id)
+    if (!refreshed) throw new Error("Falha ao atualizar gestão da conversa Meta")
+    return refreshed
+  }
+
   const { data, error } = await supabaseAdmin
     .from("meta_conversation_management")
-    .upsert(
-      {
-        ...payload,
-        updated_at: new Date().toISOString()
-      },
-      { onConflict: "conversation_id" }
-    )
+    .insert({
+      ...payload,
+      updated_at: updatedAt
+    })
     .select("*")
     .single()
 
   if (error) throw new Error(error.message)
   return data as MetaConversationManagement
 }
-

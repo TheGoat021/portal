@@ -138,6 +138,21 @@ async function handleInboundMessage({
     incrementUnread: true
   })
 
+  const { error: reopenError } = await supabaseAdmin
+    .from("meta_conversation_management")
+    .update({
+      status: "open",
+      closed_at: null,
+      closed_by_user_id: null,
+      updated_at: new Date().toISOString()
+    })
+    .eq("conversation_id", conversation.id)
+    .eq("status", "closed")
+
+  if (reopenError) {
+    console.error("Erro ao reabrir conversa Meta arquivada:", reopenError)
+  }
+
   if (parsed.type === "text" && (parsed.text || "").trim()) {
     try {
       await runMetaChatbotForInbound({

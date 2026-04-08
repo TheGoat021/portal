@@ -25,6 +25,7 @@ import { supabase } from "@/lib/supabaseClient"
 
 interface Props {
   selectedConversationId: string | null
+  onCloseConversation: () => void
   currentUser: {
     id: string
     email: string
@@ -95,7 +96,7 @@ type MetaConversation = {
   last_message_at?: string | null
 }
 
-export default function ChatWindow({ selectedConversationId, currentUser }: Props) {
+export default function ChatWindow({ selectedConversationId, onCloseConversation, currentUser }: Props) {
   const [messages, setMessages] = useState<Message[]>([])
   const [conversation, setConversation] = useState<MetaConversation | null>(null)
   const [newMessage, setNewMessage] = useState("")
@@ -106,6 +107,7 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
   const [sendingMedia, setSendingMedia] = useState(false)
   const [agents, setAgents] = useState<Array<{ id: string; email: string; role: string }>>([])
   const [transferOpen, setTransferOpen] = useState(false)
+  const [selectedDepartment, setSelectedDepartment] = useState("")
   const [transferTo, setTransferTo] = useState("")
   const [agentsLoading, setAgentsLoading] = useState(false)
   const [transferSaving, setTransferSaving] = useState(false)
@@ -204,6 +206,7 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
     if (!selectedConversationId) return
 
     setTransferOpen(true)
+    setSelectedDepartment("")
     setTransferTo("")
     setAgents([])
     setAgentsLoading(true)
@@ -276,6 +279,8 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
         console.error("Erro ao encerrar atendimento:", await res.text())
         return
       }
+
+      onCloseConversation()
     } catch (error) {
       console.error("Erro ao encerrar atendimento:", error)
     } finally {
@@ -691,6 +696,20 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
     conversation?.wa_id ||
     "Conversa selecionada"
 
+  const departments = Array.from(
+    new Set(
+      agents
+        .map((agent) => (agent.role || "Sem departamento").trim() || "Sem departamento")
+        .filter(Boolean)
+    )
+  ).sort((a, b) => a.localeCompare(b))
+
+  const filteredAgents = agents.filter((agent) => {
+    if (!selectedDepartment) return false
+    const department = (agent.role || "Sem departamento").trim() || "Sem departamento"
+    return department === selectedDepartment
+  })
+
   return (
     <div className="flex flex-col h-full min-h-0 bg-[#EFEAE2]">
       <div className="h-14 px-3 flex items-center justify-between border-b bg-white">
@@ -926,30 +945,42 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
               <label className="text-xs text-gray-500">Atendente de destino</label>
 
               <select
-                value={transferTo}
-                onChange={(e) => setTransferTo(e.target.value)}
+                value={selectedDepartment}
+                onChange={(e) => {
+                  setSelectedDepartment(e.target.value)
+                  setTransferTo("")
+                }}
                 className="w-full h-11 px-4 rounded-xl border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
                 disabled={agentsLoading || transferSaving}
               >
                 <option value="">
-                  {agentsLoading ? "Carregando atendentes..." : "Selecione um atendente"}
+                  {agentsLoading ? "Carregando setores..." : "Selecione um setor"}
+                </option>
+                {departments.map((department) => (
+                  <option key={department} value={department}>
+                    {department}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={transferTo}
+                onChange={(e) => setTransferTo(e.target.value)}
+                className="w-full h-11 px-4 rounded-xl border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
+                disabled={agentsLoading || transferSaving || !selectedDepartment}
+              >
+                <option value="">
+                  {agentsLoading
+                    ? "Carregando atendentes..."
+                    : !selectedDepartment
+                      ? "Selecione um setor primeiro"
+                      : "Selecione um atendente"}
                 </option>
 
-                {Object.entries(
-                  agents.reduce<Record<string, Array<{ id: string; email: string; role: string }>>>((acc, agent) => {
-                    const department = (agent.role || "Sem departamento").trim() || "Sem departamento"
-                    if (!acc[department]) acc[department] = []
-                    acc[department].push(agent)
-                    return acc
-                  }, {})
-                ).map(([department, list]) => (
-                  <optgroup key={department} label={department}>
-                    {list.map((agent) => (
-                      <option key={agent.id} value={agent.id}>
-                        {agent.email}
-                      </option>
-                    ))}
-                  </optgroup>
+                {filteredAgents.map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.email}
+                  </option>
                 ))}
               </select>
 
