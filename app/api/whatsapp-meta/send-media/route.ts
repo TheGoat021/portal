@@ -7,6 +7,45 @@ import { guessMessageText, normalizePhone, sendMediaMessage, uploadMedia } from 
 
 export const runtime = 'nodejs'
 
+function detectAudioMimeFromBuffer(buffer: Buffer): string | null {
+  if (buffer.length < 12) return null
+
+  if (buffer.subarray(0, 4).toString('ascii') === 'OggS') {
+    return 'audio/ogg'
+  }
+
+  if (buffer.subarray(0, 3).toString('ascii') === 'ID3') {
+    return 'audio/mpeg'
+  }
+
+  const hasMp3FrameSync = buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0
+  if (hasMp3FrameSync) {
+    return 'audio/mpeg'
+  }
+
+  const hasAmrHeader = buffer.subarray(0, 6).toString('ascii') === '#!AMR\n'
+  if (hasAmrHeader) {
+    return 'audio/amr'
+  }
+
+  const hasMp4Ftyp = buffer.subarray(4, 8).toString('ascii') === 'ftyp'
+  if (hasMp4Ftyp) {
+    return 'audio/mp4'
+  }
+
+  const hasEbml = buffer[0] === 0x1a && buffer[1] === 0x45 && buffer[2] === 0xdf && buffer[3] === 0xa3
+  if (hasEbml) {
+    return 'audio/webm'
+  }
+
+  const hasAdtsSync = buffer[0] === 0xff && (buffer[1] & 0xf6) === 0xf0
+  if (hasAdtsSync) {
+    return 'audio/aac'
+  }
+
+  return null
+}
+
 export async function POST(req: NextRequest) {
   try {
     const form = await req.formData()
@@ -59,13 +98,40 @@ export async function POST(req: NextRequest) {
         'audio/amr'
       ])
 
-      if (!allowedAudioMimes.has(normalizedAudioMime)) {
+      const detectedMime = detectAudioMimeFromBuffer(fileBuffer)
+
+      if (detectedMime === 'audio/webm') {
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              'Áudio gravado em WebM não é aceito pela API da Meta. Use OGG/Opus ou envie um arquivo .m4a/.mp3/.aac/.amr.'
+          },
+          { status: 400 }
+        )
+      }
+
+      const effectiveAudioMime = detectedMime || normalizedAudioMime
+
+      if (!allowedAudioMimes.has(effectiveAudioMime)) {
         return NextResponse.json(
           {
             ok: false,
             error:
               `Formato de áudio não suportado pela Meta: ${fileMimeType}. ` +
               'Use OGG/Opus, MP4 (m4a), MP3, AAC ou AMR.'
+          },
+          { status: 400 }
+        )
+      }
+
+      if (normalizedAudioMime && normalizedAudioMime !== effectiveAudioMime) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              `MIME inconsistente no áudio: enviado como ${fileMimeType}, mas o conteúdo é ${effectiveAudioMime}. ` +
+              'Use um formato compatível real (OGG/Opus, m4a, mp3, aac, amr).'
           },
           { status: 400 }
         )
