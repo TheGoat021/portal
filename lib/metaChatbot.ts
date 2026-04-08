@@ -162,17 +162,26 @@ async function sendBotMessage({
   })
 }
 
-async function getPublishedFlow(connectionId: string): Promise<ChatbotFlow | null> {
+async function getAvailableFlow(connectionId: string): Promise<ChatbotFlow | null> {
   const { data, error } = await supabaseAdmin
     .from("meta_chatbot_flows")
-    .select("published_flow")
+    .select("published_flow, draft_flow")
     .eq("connection_id", connectionId)
     .maybeSingle()
 
   if (error) throw new Error(error.message)
 
-  const flow = data?.published_flow as ChatbotFlow | null | undefined
-  if (!flow?.nodes?.length) return null
+  const publishedFlow = data?.published_flow as ChatbotFlow | null | undefined
+  const draftFlow = data?.draft_flow as ChatbotFlow | null | undefined
+
+  const flow =
+    publishedFlow?.nodes?.length
+      ? publishedFlow
+      : draftFlow?.nodes?.length
+        ? draftFlow
+        : null
+
+  if (!flow) return null
 
   return {
     nodes: Array.isArray(flow.nodes) ? flow.nodes : [],
@@ -239,12 +248,13 @@ export async function runMetaChatbotForInbound({
   to: string
   inboundText: string
 }) {
-  const flow = await getPublishedFlow(connectionId)
+  const flow = await getAvailableFlow(connectionId)
   if (!flow) return
 
   const session = await getOrCreateSession({ connectionId, conversationId })
   if (session.state === "disabled") return
 
+  const isFirstInboundForSession = !session.current_node_id
   let currentNodeId = session.current_node_id
   if (!currentNodeId) {
     const startNode = pickStartNode(flow)
@@ -256,7 +266,7 @@ export async function runMetaChatbotForInbound({
   let node = getNode(flow, currentNodeId)
   if (!node) return
 
-  let remainingInput = inboundText || ""
+  let remainingInput = isFirstInboundForSession ? "" : inboundText || ""
   let context = { ...(session.context ?? {}) }
 
   const maxSteps = 12
@@ -371,4 +381,3 @@ export async function runMetaChatbotForInbound({
 
   await updateSession(session.id, { current_node_id: node?.id ?? null, state: "active", context })
 }
-
