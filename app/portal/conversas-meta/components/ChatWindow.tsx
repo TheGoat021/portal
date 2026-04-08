@@ -369,10 +369,17 @@ export default function ChatWindow({ selectedConversationId }: Props) {
       streamRef.current = stream
 
       const selectedMimeType = pickRecordingMimeType()
-      const mediaRecorder = selectedMimeType
-        ? new MediaRecorder(stream, { mimeType: selectedMimeType })
-        : new MediaRecorder(stream)
-      recordMimeTypeRef.current = selectedMimeType || "audio/ogg"
+
+      if (!selectedMimeType) {
+        console.error(
+          "Navegador sem suporte a gravação de áudio em formato aceito pela Meta. Use upload de áudio (.ogg/.m4a/.mp3)."
+        )
+        stopStreamTracks()
+        return
+      }
+
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: selectedMimeType })
+      recordMimeTypeRef.current = selectedMimeType
       mediaRecorderRef.current = mediaRecorder
       audioChunksRef.current = []
 

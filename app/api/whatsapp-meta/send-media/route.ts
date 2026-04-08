@@ -1,45 +1,11 @@
 // app/api/whatsapp-meta/send-media/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
-import ffmpeg from 'fluent-ffmpeg'
-import fs from 'fs/promises'
-import os from 'os'
-import path from 'path'
 import { getMetaConnectionById, insertMetaMessage, touchMetaConversation } from '@/lib/metaDb'
 import { uploadMetaInboundMedia } from '@/lib/metaStorage'
 import { guessMessageText, normalizePhone, sendMediaMessage, uploadMedia } from '@/lib/whatsappMeta'
 
 export const runtime = 'nodejs'
-
-async function convertAudioToOggOpus(fileBuffer: Buffer, originalName: string) {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'meta-audio-'))
-  const inputPath = path.join(tmpDir, originalName || `audio-${Date.now()}.tmp`)
-  const outputPath = path.join(tmpDir, `${Date.now()}-audio.ogg`)
-
-  await fs.writeFile(inputPath, fileBuffer)
-
-  try {
-    await new Promise<void>((resolve, reject) => {
-      ffmpeg(inputPath)
-        .audioCodec('libopus')
-        .audioChannels(1)
-        .audioFrequency(48000)
-        .format('ogg')
-        .save(outputPath)
-        .on('end', () => resolve())
-        .on('error', (err: Error) => reject(err))
-    })
-
-    const convertedBuffer = await fs.readFile(outputPath)
-    return {
-      buffer: convertedBuffer,
-      mimeType: 'audio/ogg; codecs=opus',
-      fileName: `audio_${Date.now()}.ogg`
-    }
-  } finally {
-    await fs.rm(tmpDir, { recursive: true, force: true })
-  }
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -79,16 +45,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Conexão Meta inválida' }, { status: 400 })
     }
 
-    const inputBuffer = Buffer.from(await file.arrayBuffer())
-    let fileBuffer = inputBuffer
-    let fileMimeType = file.type || 'application/octet-stream'
-    let fileName = file.name || 'arquivo'
+    const fileBuffer = Buffer.from(await file.arrayBuffer())
+    const fileMimeType = file.type || 'application/octet-stream'
+    const fileName = file.name || 'arquivo'
 
     if (type === 'audio') {
-      const converted = await convertAudioToOggOpus(fileBuffer, fileName)
-      fileBuffer = converted.buffer
-      fileMimeType = converted.mimeType
-      fileName = converted.fileName
+      const normalizedAudioMime = fileMimeType.toLowerCase().split(';')[0].trim()
+      const allowedAudioMimes = new Set([
+        'audio/ogg',
+        'audio/mp4',
+        'audio/mpeg',
+        'audio/aac',
+        'audio/amr'
+      ])
+
+      if (!allowedAudioMimes.has(normalizedAudioMime)) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              `Formato de áudio não suportado pela Meta: ${fileMimeType}. ` +
+              'Use OGG/Opus, MP4 (m4a), MP3, AAC ou AMR.'
+          },
+          { status: 400 }
+        )
+      }
     }
 
     const upload = await uploadMedia({
