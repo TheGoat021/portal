@@ -9,6 +9,7 @@ export type ChatbotNode = {
   type: ChatbotNodeType
   position?: { x: number; y: number }
   data?: {
+    kind?: ChatbotNodeType
     title?: string
     message?: string
     options?: string[]
@@ -60,6 +61,36 @@ function getOutgoingEdges(flow: ChatbotFlow, nodeId: string) {
 function getNode(flow: ChatbotFlow, nodeId: string | null | undefined) {
   if (!nodeId) return null
   return flow.nodes.find((node) => node.id === nodeId) ?? null
+}
+
+function resolveNodeKind(node: ChatbotNode): ChatbotNodeType {
+  const byDataKind = node.data?.kind
+  if (byDataKind && ["start", "message", "question", "condition", "action", "end"].includes(byDataKind)) {
+    return byDataKind
+  }
+
+  const byType = node.type
+  if (["start", "message", "question", "condition", "action", "end"].includes(byType)) {
+    return byType as ChatbotNodeType
+  }
+
+  const nodeId = (node.id || "").toLowerCase()
+  if (nodeId.startsWith("start-")) return "start"
+  if (nodeId.startsWith("message-")) return "message"
+  if (nodeId.startsWith("question-")) return "question"
+  if (nodeId.startsWith("condition-")) return "condition"
+  if (nodeId.startsWith("action-")) return "action"
+  if (nodeId.startsWith("end-")) return "end"
+
+  const title = normalizeText(node.data?.title || "")
+  if (title === "inicio" || title === "início") return "start"
+  if (title === "mensagem") return "message"
+  if (title === "pergunta") return "question"
+  if (title === "condicao" || title === "condição") return "condition"
+  if (title === "acao" || title === "ação") return "action"
+  if (title === "fim") return "end"
+
+  return "message"
 }
 
 function buildQuestionText(message: string, options: string[]) {
@@ -276,8 +307,9 @@ export async function runMetaChatbotForInbound({
 
     const outgoing = getOutgoingEdges(flow, node.id)
     const message = (node.data?.message || "").trim()
+    const nodeKind = resolveNodeKind(node)
 
-    if (node.type === "start" || node.type === "message") {
+    if (nodeKind === "start" || nodeKind === "message") {
       if (message) {
         await sendBotMessage({ connectionId, conversationId, to, text: message })
       }
@@ -292,7 +324,7 @@ export async function runMetaChatbotForInbound({
       continue
     }
 
-    if (node.type === "question") {
+    if (nodeKind === "question") {
       const options = (node.data?.options ?? []).map((item) => item.trim()).filter(Boolean)
 
       if (!remainingInput) {
@@ -327,7 +359,7 @@ export async function runMetaChatbotForInbound({
       continue
     }
 
-    if (node.type === "condition") {
+    if (nodeKind === "condition") {
       const pickedEdge = pickEdgeByRule(outgoing, remainingInput)
       remainingInput = ""
 
@@ -340,7 +372,7 @@ export async function runMetaChatbotForInbound({
       continue
     }
 
-    if (node.type === "action") {
+    if (nodeKind === "action") {
       const actionType = node.data?.actionType || "note"
       const actionValue = node.data?.actionValue || ""
 
@@ -367,7 +399,7 @@ export async function runMetaChatbotForInbound({
       continue
     }
 
-    if (node.type === "end") {
+    if (nodeKind === "end") {
       if (message) {
         await sendBotMessage({ connectionId, conversationId, to, text: message })
       }

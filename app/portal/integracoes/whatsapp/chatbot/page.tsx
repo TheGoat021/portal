@@ -23,6 +23,7 @@ type MetaConnection = {
 }
 
 type FlowNodeData = {
+  kind?: "start" | "message" | "question" | "condition" | "action" | "end"
   title?: string
   message?: string
   options?: string[]
@@ -41,7 +42,7 @@ const DEFAULT_NODES: Node<FlowNodeData>[] = [
     id: "start-1",
     type: "default",
     position: { x: 80, y: 80 },
-    data: { title: "Início", message: "Olá! Vou te ajudar com o atendimento." }
+    data: { kind: "start", title: "Início", message: "Olá! Vou te ajudar com o atendimento." }
   }
 ]
 
@@ -157,6 +158,7 @@ export default function MetaChatbotBuilderPage() {
       type: "default",
       position: { x: 160 + Math.random() * 320, y: 120 + Math.random() * 280 },
       data: {
+        kind,
         title:
           kind === "message"
             ? "Mensagem"
