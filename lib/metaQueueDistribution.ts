@@ -59,7 +59,7 @@ export async function getAgentAvailability({
     .maybeSingle()
 
   if (error) throw new Error(error.message)
-  return data?.is_active ?? true
+  return data?.is_active ?? false
 }
 
 export async function setAgentAvailability({
@@ -141,7 +141,7 @@ export async function tryAutoAssignConversation({
     availabilityMap.set(String(row.user_id), Boolean(row.is_active))
   }
 
-  let eligibleAgents = agentsList.filter((agent) => availabilityMap.get(agent.id) !== false)
+  let eligibleAgents = agentsList.filter((agent) => availabilityMap.get(agent.id) === true)
   if (!eligibleAgents.length) return null
 
   if (settings.max_simultaneous_enabled && (settings.max_simultaneous_per_agent ?? 0) > 0) {
@@ -219,4 +219,3 @@ export async function tryAutoAssignConversation({
 
   return picked
 }
-

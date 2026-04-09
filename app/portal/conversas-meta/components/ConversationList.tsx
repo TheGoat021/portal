@@ -189,7 +189,7 @@ export default function ConversationsList({
   const [creatingConversation, setCreatingConversation] = useState(false)
   const [pullingConversationId, setPullingConversationId] = useState<string | null>(null)
   const [onlyUnreadForOperator, setOnlyUnreadForOperator] = useState(false)
-  const [distributionActive, setDistributionActive] = useState(true)
+  const [distributionActive, setDistributionActive] = useState(false)
   const [loadingAvailability, setLoadingAvailability] = useState(false)
   const [savingAvailability, setSavingAvailability] = useState(false)
   const roleUpper = (currentUser.role || "").toUpperCase()
@@ -287,7 +287,7 @@ export default function ConversationsList({
 
   useEffect(() => {
     if (!selectedConnectionId || isDiretoria) {
-      setDistributionActive(true)
+      setDistributionActive(false)
       return
     }
 

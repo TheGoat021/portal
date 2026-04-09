@@ -23,6 +23,14 @@ type CurrentUser = {
   role: string
 }
 
+type QueueAgent = {
+  id: string
+  email: string
+  role: string
+  isActiveInQueue: boolean
+  updatedAt?: string | null
+}
+
 function defaultSettings(connectionId: string): QueueSettings {
   return {
     connection_id: connectionId,
@@ -52,6 +60,9 @@ export default function MetaQueueSettingsPage() {
   const [saving, setSaving] = useState(false)
   const [statusText, setStatusText] = useState("")
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
+  const [queueAgents, setQueueAgents] = useState<QueueAgent[]>([])
+  const [loadingQueueAgents, setLoadingQueueAgents] = useState(false)
+  const [updatingAgentId, setUpdatingAgentId] = useState<string | null>(null)
 
   const canManage = useMemo(
     () => Boolean(currentUser?.role && isManagerRole(currentUser.role)),
@@ -121,6 +132,35 @@ export default function MetaQueueSettingsPage() {
     }
   }, [])
 
+  const loadQueueAgents = useCallback(
+    async (connectionId: string) => {
+      if (!currentUser || !canManage || !connectionId) {
+        setQueueAgents([])
+        return
+      }
+
+      setLoadingQueueAgents(true)
+      try {
+        const res = await fetch(
+          `/api/whatsapp-meta/queue-agents?connectionId=${encodeURIComponent(connectionId)}&actorRole=${encodeURIComponent(currentUser.role || "")}`,
+          { cache: "no-store" }
+        )
+        const payload = await res.json().catch(() => null)
+
+        if (!res.ok || !payload?.ok) {
+          setStatusText(payload?.error || "Erro ao carregar usuarios da fila.")
+          setQueueAgents([])
+          return
+        }
+
+        setQueueAgents((payload.data as QueueAgent[]) ?? [])
+      } finally {
+        setLoadingQueueAgents(false)
+      }
+    },
+    [canManage, currentUser]
+  )
+
   useEffect(() => {
     loadCurrentUser()
     loadConnections()
@@ -130,11 +170,13 @@ export default function MetaQueueSettingsPage() {
     if (selectedConnectionId) {
       setSettings(defaultSettings(selectedConnectionId))
       loadSettings(selectedConnectionId)
+      loadQueueAgents(selectedConnectionId)
     } else {
       setLoading(false)
       setSettings(null)
+      setQueueAgents([])
     }
-  }, [loadSettings, selectedConnectionId])
+  }, [loadQueueAgents, loadSettings, selectedConnectionId])
 
   const saveSettings = async () => {
     if (!currentUser || !selectedConnectionId || !canManage || saving) return
@@ -170,6 +212,41 @@ export default function MetaQueueSettingsPage() {
       setStatusText("Configuracoes de fila salvas com sucesso.")
     } finally {
       setSaving(false)
+    }
+  }
+
+  const toggleQueueAgent = async (agent: QueueAgent) => {
+    if (!currentUser || !selectedConnectionId || !canManage || updatingAgentId) return
+
+    const nextValue = !agent.isActiveInQueue
+    setUpdatingAgentId(agent.id)
+
+    try {
+      const res = await fetch("/api/whatsapp-meta/queue-agents", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          connectionId: selectedConnectionId,
+          actorUserId: currentUser.id,
+          actorUserRole: currentUser.role,
+          targetUserId: agent.id,
+          isActive: nextValue
+        })
+      })
+
+      const payload = await res.json().catch(() => null)
+      if (!res.ok || !payload?.ok) {
+        setStatusText(payload?.error || "Erro ao atualizar usuario da fila.")
+        return
+      }
+
+      setQueueAgents((prev) =>
+        prev.map((item) =>
+          item.id === agent.id ? { ...item, isActiveInQueue: nextValue, updatedAt: new Date().toISOString() } : item
+        )
+      )
+    } finally {
+      setUpdatingAgentId(null)
     }
   }
 
@@ -335,6 +412,62 @@ export default function MetaQueueSettingsPage() {
           </>
         )}
       </div>
+
+      {selectedConnectionId && canManage ? (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 md:p-5 space-y-4">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Operadores da fila</h2>
+            <p className="text-xs text-gray-500 mt-1">
+              Ative apenas usuarios que devem participar da distribuicao automatica nesta conexao.
+            </p>
+          </div>
+
+          {loadingQueueAgents ? (
+            <div className="text-sm text-gray-500">Carregando usuarios...</div>
+          ) : queueAgents.length === 0 ? (
+            <div className="text-sm text-gray-500">Nenhum usuario encontrado.</div>
+          ) : (
+            <div className="overflow-x-auto border rounded-xl">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr className="text-left">
+                    <th className="px-3 py-2 font-medium text-gray-600">Usuário</th>
+                    <th className="px-3 py-2 font-medium text-gray-600">Role</th>
+                    <th className="px-3 py-2 font-medium text-gray-600">Fila</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {queueAgents.map((agent) => (
+                    <tr key={agent.id} className="border-t">
+                      <td className="px-3 py-2 text-gray-800">{agent.email || agent.id}</td>
+                      <td className="px-3 py-2 text-gray-600">{agent.role || "Sem role"}</td>
+                      <td className="px-3 py-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleQueueAgent(agent)}
+                          disabled={updatingAgentId === agent.id}
+                          className={[
+                            "px-3 py-1 rounded-full border text-xs font-medium transition disabled:opacity-60",
+                            agent.isActiveInQueue
+                              ? "bg-green-50 text-green-700 border-green-300"
+                              : "bg-gray-50 text-gray-600 border-gray-200"
+                          ].join(" ")}
+                        >
+                          {updatingAgentId === agent.id
+                            ? "Atualizando..."
+                            : agent.isActiveInQueue
+                              ? "Ativo"
+                              : "Inativo"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : null}
     </div>
   )
 }
