@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
-  FileText,
   LogOut,
   ChevronDown,
   ChevronRight,
@@ -14,12 +13,13 @@ import { menuConfig } from "@/config/menu";
 import { usePortalStore } from "@/store/portalStore";
 import { useTrainingStore } from "@/store/trainingStore";
 import { supabase } from "@/lib/supabaseClient";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/store/authStore";
 
 export function Sidebar() {
   const { role } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   const setActiveHref = usePortalStore((state) => state.setActiveHref);
   const { setProgress, isUnlocked, progress } = useTrainingStore();
@@ -80,6 +80,12 @@ export function Sidebar() {
 
     setActiveHref(null);
     router.push(href);
+  }
+
+  function isActiveRoute(href?: string) {
+    if (!href || href.startsWith("http")) return false;
+    if (href === "/portal") return pathname === "/portal";
+    return pathname === href || pathname.startsWith(`${href}/`);
   }
 
   async function handleLogout() {
@@ -158,6 +164,8 @@ export function Sidebar() {
                         : null;
 
                       const approved = current?.approved === true;
+                      const isActive = isActiveRoute(item.href);
+                      const isStandaloneHome = !section.title && item.label === "Home";
 
                      const locked =
   isTrainingItem &&
@@ -171,11 +179,23 @@ export function Sidebar() {
                             <button
                               onClick={() => handleClick(item.href, locked)}
                               disabled={locked}
-                              className={`w-full flex items-center gap-3 px-3 py-2 rounded hover:bg-slate-800 ${
-                                locked ? "opacity-50 cursor-not-allowed" : ""
+                              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg border transition ${
+                                locked
+                                  ? "opacity-50 cursor-not-allowed border-transparent"
+                                  : isActive
+                                    ? "bg-slate-800 border-slate-700 text-white"
+                                    : "border-transparent hover:bg-slate-800/80 hover:border-slate-700/70 text-slate-100"
                               }`}
                             >
-                              {/* sem ícone nos submenus */}
+                              {isStandaloneHome ? (
+                                Icon ? <Icon size={16} /> : <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                              ) : (
+                                <span
+                                  className={`h-1.5 w-1.5 rounded-full ${
+                                    isActive ? "bg-blue-300" : "bg-slate-500"
+                                  }`}
+                                />
+                              )}
                               <span className="flex-1 text-left">
                                 {item.label}
                               </span>
@@ -212,7 +232,7 @@ export function Sidebar() {
       {/* Logout */}
       <button
         onClick={handleLogout}
-        className="mt-6 flex items-center gap-3 px-3 py-2 rounded hover:bg-slate-800 text-sm"
+        className="mt-6 flex items-center gap-3 px-3 py-2.5 rounded-lg border border-transparent hover:bg-slate-800/80 hover:border-slate-700/70 text-sm text-slate-100 transition"
       >
         <LogOut size={16} />
         {!collapsed && <span>Logout</span>}

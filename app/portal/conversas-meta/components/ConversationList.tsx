@@ -4,7 +4,10 @@
 
 import { useEffect, useMemo, useState } from "react"
 import {
+  Archive,
+  Bot,
   FileText,
+  Headset,
   Image as ImageIcon,
   Mic,
   MessageSquare,
@@ -50,6 +53,7 @@ interface BackendConversation {
     | "unknown"
   unread_count?: number | null
   connection_id: string
+  service_state?: "bot" | "operator" | "closed"
 }
 
 interface Conversation {
@@ -61,6 +65,7 @@ interface Conversation {
   lastMessageAt?: string
   unreadCount: number
   connectionId: string
+  serviceState: "bot" | "operator" | "closed"
   lastMessageType?:
     | "text"
     | "image"
@@ -172,6 +177,7 @@ export default function ConversationsList({
   const [newPhone, setNewPhone] = useState("")
   const [newMessage, setNewMessage] = useState("")
   const [search, setSearch] = useState("")
+  const [serviceFilter, setServiceFilter] = useState<ServiceFilter>("bot")
   const [loadingConnections, setLoadingConnections] = useState(false)
   const [creatingConversation, setCreatingConversation] = useState(false)
 
@@ -235,6 +241,7 @@ export default function ConversationsList({
         lastMessageAt: conv.last_message_at ?? undefined,
         unreadCount: Number(conv.unread_count ?? 0),
         connectionId: conv.connection_id,
+        serviceState: conv.service_state || "bot",
         lastMessageType: conv.last_message_type ?? "text"
       }))
 
@@ -261,7 +268,7 @@ export default function ConversationsList({
 
   const filteredConversations = useMemo(() => {
     const q = search.trim().toLowerCase()
-    const base = conversations
+    const base = conversations.filter((conversation) => conversation.serviceState === serviceFilter)
 
     if (!q) return base
 
@@ -278,7 +285,22 @@ export default function ConversationsList({
         last.includes(q)
       )
     })
-  }, [conversations, search])
+  }, [conversations, search, serviceFilter])
+
+  const botCount = useMemo(
+    () => conversations.filter((conversation) => conversation.serviceState === "bot").length,
+    [conversations]
+  )
+
+  const operatorCount = useMemo(
+    () => conversations.filter((conversation) => conversation.serviceState === "operator").length,
+    [conversations]
+  )
+
+  const closedCount = useMemo(
+    () => conversations.filter((conversation) => conversation.serviceState === "closed").length,
+    [conversations]
+  )
 
   const handleCreateConversation = async () => {
     if (!selectedConnectionId || !newPhone.trim() || !newMessage.trim() || creatingConversation) {
@@ -413,6 +435,53 @@ export default function ConversationsList({
           </button>
         </div>
 
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            onClick={() => setServiceFilter("bot")}
+            className={[
+              "h-10 rounded-xl border flex items-center justify-center gap-1.5 transition",
+              serviceFilter === "bot"
+                ? "bg-blue-50 border-blue-300 text-blue-700"
+                : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+            ].join(" ")}
+            title="Clientes no fluxo do bot"
+          >
+            <Bot size={16} />
+            <span className="text-xs font-medium">{botCount}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setServiceFilter("operator")}
+            className={[
+              "h-10 rounded-xl border flex items-center justify-center gap-1.5 transition",
+              serviceFilter === "operator"
+                ? "bg-green-50 border-green-300 text-green-700"
+                : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+            ].join(" ")}
+            title="Clientes em atendimento com operador"
+          >
+            <Headset size={16} />
+            <span className="text-xs font-medium">{operatorCount}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setServiceFilter("closed")}
+            className={[
+              "h-10 rounded-xl border flex items-center justify-center gap-1.5 transition",
+              serviceFilter === "closed"
+                ? "bg-amber-50 border-amber-300 text-amber-700"
+                : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+            ].join(" ")}
+            title="Atendimentos encerrados"
+          >
+            <Archive size={16} />
+            <span className="text-xs font-medium">{closedCount}</span>
+          </button>
+        </div>
+
         {selectedConnection ? (
           <div className="text-[11px] text-gray-500 px-1">
             Conexão ativa:{" "}
@@ -431,7 +500,13 @@ export default function ConversationsList({
             Selecione uma conexão Meta para ver as conversas.
           </div>
         ) : filteredConversations.length === 0 ? (
-          <div className="p-6 text-sm text-gray-500">Nenhuma conversa encontrada.</div>
+          <div className="p-6 text-sm text-gray-500">
+            {serviceFilter === "bot"
+              ? "Nenhum cliente no fluxo do bot."
+              : serviceFilter === "operator"
+                ? "Nenhum cliente em atendimento com operador."
+                : "Nenhum atendimento encerrado."}
+          </div>
         ) : (
           filteredConversations.map((conv) => {
             const isSelected = selectedConversationId === conv.id
@@ -561,3 +636,5 @@ export default function ConversationsList({
     </div>
   )
 }
+
+type ServiceFilter = "bot" | "operator" | "closed"
