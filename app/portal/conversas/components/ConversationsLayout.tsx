@@ -37,6 +37,7 @@ export default function ConversationsLayout({
         <div className="flex-1 min-h-0">
           <ChatWindow
             selectedConversationId={selectedConversationId}
+            onCloseConversation={() => onSelectConversation("")}
             currentUser={{
               id: currentUser.id,
               email: currentUser.email

@@ -10,6 +10,7 @@ import {
   FileText,
   Users,
   X,
+  CircleStop,
   MessageSquare,
   Check,
   CheckCheck,
@@ -22,6 +23,7 @@ import {
 
 interface Props {
   selectedConversationId: string | null
+  onCloseConversation: () => void
   currentUser: {
     id: string
     email: string
@@ -102,7 +104,7 @@ type Agent = {
   role: string
 }
 
-export default function ChatWindow({ selectedConversationId, currentUser }: Props) {
+export default function ChatWindow({ selectedConversationId, onCloseConversation, currentUser }: Props) {
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [isRecording, setIsRecording] = useState(false)
@@ -116,6 +118,7 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
   const [agentsLoading, setAgentsLoading] = useState(false)
   const [transferTo, setTransferTo] = useState<string>("")
   const [transferSaving, setTransferSaving] = useState(false)
+  const [closingConversation, setClosingConversation] = useState(false)
 
   const recordIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
@@ -414,6 +417,33 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
     }
   }
 
+  const closeAttendance = async () => {
+    if (!selectedConversationId || closingConversation) return
+
+    try {
+      setClosingConversation(true)
+
+      const res = await fetch(`/api/conversations/${selectedConversationId}/close`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          byUserId: currentUser.id
+        })
+      })
+
+      if (!res.ok) {
+        console.error("Erro ao finalizar atendimento:", await res.text())
+        return
+      }
+
+      onCloseConversation()
+    } catch (error) {
+      console.error("Erro ao finalizar atendimento:", error)
+    } finally {
+      setClosingConversation(false)
+    }
+  }
+
   const selectedAgentLabel = useMemo(() => {
     const agent = agents.find((item) => item.id === transferTo)
     if (!agent) return "Selecione um atendente"
@@ -643,9 +673,19 @@ export default function ChatWindow({ selectedConversationId, currentUser }: Prop
             onClick={openTransfer}
             className={iconBtn}
             title="Transferir para outro atendente"
-            disabled={!selectedConversationId || transferSaving}
+            disabled={!selectedConversationId || transferSaving || closingConversation}
           >
             <Users size={20} />
+          </button>
+
+          <button
+            type="button"
+            onClick={closeAttendance}
+            className={iconBtn}
+            title="Finalizar atendimento"
+            disabled={!selectedConversationId || transferSaving || closingConversation}
+          >
+            <CircleStop size={20} />
           </button>
         </div>
       </div>

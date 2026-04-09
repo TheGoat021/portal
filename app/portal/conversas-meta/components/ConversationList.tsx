@@ -168,7 +168,8 @@ function getConversationPreview(conv: Conversation) {
 
 export default function ConversationsList({
   selectedConversationId,
-  onSelectConversation
+  onSelectConversation,
+  currentUser
 }: Props) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [connections, setConnections] = useState<MetaConnection[]>([])
@@ -180,6 +181,7 @@ export default function ConversationsList({
   const [serviceFilter, setServiceFilter] = useState<ServiceFilter>("bot")
   const [loadingConnections, setLoadingConnections] = useState(false)
   const [creatingConversation, setCreatingConversation] = useState(false)
+  const [pullingConversationId, setPullingConversationId] = useState<string | null>(null)
 
 
   const fetchConnections = async () => {
@@ -391,6 +393,35 @@ export default function ConversationsList({
     }
   }
 
+  const handlePullToOperator = async (conv: Conversation) => {
+    if (!conv?.id || !currentUser?.id || pullingConversationId) return
+
+    try {
+      setPullingConversationId(conv.id)
+
+      const res = await fetch(`/api/whatsapp-meta/conversations/${conv.id}/transfer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          toUserId: currentUser.id
+        })
+      })
+
+      if (!res.ok) {
+        console.error("Erro ao puxar conversa para atendimento:", await res.text())
+        return
+      }
+
+      setServiceFilter("operator")
+      await fetchConversations(selectedConnectionId)
+      onSelectConversation(conv.id)
+    } catch (error) {
+      console.error("Erro ao puxar conversa para atendimento:", error)
+    } finally {
+      setPullingConversationId(null)
+    }
+  }
+
   const selectedConnection = connections.find((item) => item.id === selectedConnectionId)
 
   return (
@@ -525,11 +556,19 @@ export default function ConversationsList({
             const preview = getConversationPreview(conv)
 
             return (
-              <button
+              <div
                 key={conv.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => handleSelectConversation(conv)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault()
+                    handleSelectConversation(conv)
+                  }
+                }}
                 className={[
-                  "w-full text-left px-4 py-3 border-b border-gray-100 transition",
+                  "w-full text-left px-4 py-3 border-b border-gray-100 transition cursor-pointer",
                   isSelected ? "bg-gray-50" : "hover:bg-gray-50"
                 ].join(" ")}
               >
@@ -575,6 +614,20 @@ export default function ConversationsList({
                             </span>
                           ) : null}
                         </div>
+
+                        {serviceFilter === "bot" && conv.serviceState === "bot" ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              handlePullToOperator(conv)
+                            }}
+                            className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 disabled:opacity-60"
+                            disabled={pullingConversationId === conv.id}
+                          >
+                            {pullingConversationId === conv.id ? "Puxando..." : "Puxar"}
+                          </button>
+                        ) : null}
                       </div>
                     </div>
 
@@ -589,7 +642,7 @@ export default function ConversationsList({
                     </div>
                   </div>
                 </div>
-              </button>
+              </div>
             )
           })
         )}

@@ -25,7 +25,37 @@ export async function GET() {
       )
     }
 
-    const formatted = (data ?? []).map((conv) => ({
+    const { data: managementRows, error: managementRowsError } = await supabaseAdmin
+      .from("conversation_management")
+      .select("conversation_id, status, updated_at")
+      .order("updated_at", { ascending: false })
+
+    const isMissingManagementTable =
+      (managementRowsError as { code?: string } | null)?.code === "42P01"
+
+    if (managementRowsError && !isMissingManagementTable) {
+      console.error("Erro ao buscar gestão de conversas:", managementRowsError)
+      return NextResponse.json(
+        { error: "Erro ao buscar status das conversas" },
+        { status: 500 }
+      )
+    }
+
+    const latestStatusByConversation = new Map<string, string>()
+    for (const row of managementRows ?? []) {
+      const conversationId = String(row.conversation_id)
+      if (!latestStatusByConversation.has(conversationId)) {
+        latestStatusByConversation.set(conversationId, String(row.status || "open"))
+      }
+    }
+
+    const formatted = (data ?? []).map((conv) => {
+      const serviceState =
+        latestStatusByConversation.get(String(conv.id)) === "closed"
+          ? "closed"
+          : "open"
+
+      return {
       id: conv.id,
       phone: conv.phone ?? "",
       name: conv.name ?? conv.phone ?? "Sem nome",
@@ -33,8 +63,10 @@ export async function GET() {
       lastMessageAt: conv.last_message_at ?? null,
       lastMessageType: conv.last_message_type ?? "text",
       agentId: conv.agent_id ?? null,
-      agentName: conv.agent_name ?? null
-    }))
+      agentName: conv.agent_name ?? null,
+      serviceState
+    }
+    })
 
     return NextResponse.json(formatted)
   } catch (error) {

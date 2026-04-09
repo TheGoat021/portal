@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
+  Archive,
   FileText,
+  Headset,
   Image as ImageIcon,
   Mic,
   MessageSquare,
@@ -32,6 +34,8 @@ interface BackendConversation {
   agent_id?: string | null
   agentName?: string | null
   agent_name?: string | null
+  serviceState?: "open" | "closed"
+  service_state?: "open" | "closed"
   lastMessageType?:
     | "text"
     | "image"
@@ -80,6 +84,7 @@ interface Conversation {
   lastMessageAt?: string
   agentId?: string | null
   agentName?: string | null
+  serviceState: "open" | "closed"
   lastMessageType?:
     | "text"
     | "image"
@@ -218,6 +223,7 @@ export default function ConversationsList({
   const [newPhone, setNewPhone] = useState("")
   const [newMessage, setNewMessage] = useState("")
   const [search, setSearch] = useState("")
+  const [serviceFilter, setServiceFilter] = useState<ServiceFilter>("open")
 
   const roleUpper = (currentUser.role || "").toUpperCase()
   const isDiretoria =
@@ -228,6 +234,7 @@ export default function ConversationsList({
 
   const [lastSeenAtById, setLastSeenAtById] = useState<Record<string, number>>({})
   const selectedRef = useRef<string | null>(null)
+  const seenStorageKey = `conversations-last-seen:${currentUser.id}`
 
   const fetchConversations = async () => {
     try {
@@ -247,6 +254,7 @@ export default function ConversationsList({
         lastMessageAt: conv.lastMessageAt ?? conv.last_message_at ?? undefined,
         agentId: conv.agentId ?? conv.agent_id ?? null,
         agentName: conv.agentName ?? conv.agent_name ?? null,
+        serviceState: conv.serviceState ?? conv.service_state ?? "open",
         lastMessageType: conv.lastMessageType ?? conv.last_message_type ?? "text"
       }))
 
@@ -255,13 +263,7 @@ export default function ConversationsList({
         const openConv = mapped.find((c) => c.id === selectedId)
         if (openConv?.lastMessageAt) {
           const ts = toTs(openConv.lastMessageAt)
-          if (ts) {
-            setLastSeenAtById((prev) => {
-              const cur = prev[selectedId] ?? 0
-              if (ts <= cur) return prev
-              return { ...prev, [selectedId]: ts }
-            })
-          }
+          if (ts) setSeenAt(selectedId, ts)
         }
       }
 
@@ -278,13 +280,45 @@ export default function ConversationsList({
   }, [currentUser.id, currentUser.role])
 
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem(seenStorageKey)
+      if (!raw) {
+        setLastSeenAtById({})
+        return
+      }
+
+      const parsed = JSON.parse(raw) as Record<string, number>
+      if (parsed && typeof parsed === "object") {
+        setLastSeenAtById(parsed)
+      }
+    } catch {
+      setLastSeenAtById({})
+    }
+  }, [seenStorageKey])
+
+  const setSeenAt = (conversationId: string, ts: number) => {
+    if (!conversationId || !ts) return
+
+    setLastSeenAtById((prev) => {
+      const current = prev[conversationId] ?? 0
+      if (ts <= current) return prev
+
+      const next = { ...prev, [conversationId]: ts }
+      try {
+        localStorage.setItem(seenStorageKey, JSON.stringify(next))
+      } catch {}
+      return next
+    })
+  }
+
+  useEffect(() => {
     selectedRef.current = selectedConversationId
   }, [selectedConversationId])
 
   const filteredConversations = useMemo(() => {
     const q = search.trim().toLowerCase()
 
-    let base = conversations
+    let base = conversations.filter((conversation) => conversation.serviceState === serviceFilter)
 
     if (!isDiretoria) {
       base = base.filter((c) => !c.agentId || c.agentId === currentUser.id)
@@ -305,7 +339,22 @@ export default function ConversationsList({
         agent.includes(q)
       )
     })
-  }, [conversations, search, isDiretoria, currentUser.id])
+  }, [conversations, search, isDiretoria, currentUser.id, serviceFilter])
+
+  const countBase = useMemo(() => {
+    if (isDiretoria) return conversations
+    return conversations.filter((conversation) => !conversation.agentId || conversation.agentId === currentUser.id)
+  }, [conversations, isDiretoria, currentUser.id])
+
+  const openCount = useMemo(
+    () => countBase.filter((conversation) => conversation.serviceState === "open").length,
+    [countBase]
+  )
+
+  const closedCount = useMemo(
+    () => countBase.filter((conversation) => conversation.serviceState === "closed").length,
+    [countBase]
+  )
 
   const handleCreateConversation = async () => {
     if (!newPhone || !newMessage) return
@@ -368,13 +417,7 @@ export default function ConversationsList({
       }
 
       const ts = toTs(conv.lastMessageAt)
-      if (ts) {
-        setLastSeenAtById((prev) => {
-          const cur = prev[conv.id] ?? 0
-          if (ts <= cur) return prev
-          return { ...prev, [conv.id]: ts }
-        })
-      }
+      if (ts) setSeenAt(conv.id, ts)
 
       onSelectConversation(conv.id)
     } catch (error) {
@@ -400,11 +443,47 @@ export default function ConversationsList({
             +
           </button>
         </div>
+
+        <div className="grid grid-cols-2 gap-2 mt-2">
+          <button
+            type="button"
+            onClick={() => setServiceFilter("open")}
+            className={[
+              "h-10 rounded-xl border flex items-center justify-center gap-1.5 transition",
+              serviceFilter === "open"
+                ? "bg-green-50 border-green-300 text-green-700"
+                : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+            ].join(" ")}
+            title="Em atendimento"
+          >
+            <Headset size={16} />
+            <span className="text-xs font-medium">{openCount}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setServiceFilter("closed")}
+            className={[
+              "h-10 rounded-xl border flex items-center justify-center gap-1.5 transition",
+              serviceFilter === "closed"
+                ? "bg-amber-50 border-amber-300 text-amber-700"
+                : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+            ].join(" ")}
+            title="Arquivados/finalizados"
+          >
+            <Archive size={16} />
+            <span className="text-xs font-medium">{closedCount}</span>
+          </button>
+        </div>
       </div>
 
       <div className="min-h-0">
         {filteredConversations.length === 0 ? (
-          <div className="p-6 text-sm text-gray-500">Nenhuma conversa encontrada.</div>
+          <div className="p-6 text-sm text-gray-500">
+            {serviceFilter === "open"
+              ? "Nenhum atendimento em andamento."
+              : "Nenhum atendimento arquivado."}
+          </div>
         ) : (
           filteredConversations.map((conv) => {
             const isSelected = selectedConversationId === conv.id
@@ -543,3 +622,5 @@ export default function ConversationsList({
     </div>
   )
 }
+
+type ServiceFilter = "open" | "closed"
