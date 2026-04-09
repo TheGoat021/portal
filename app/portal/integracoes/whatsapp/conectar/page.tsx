@@ -23,6 +23,22 @@ export default function ConectarWhatsAppPage() {
           Abrir construtor
         </Link>
       </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 md:p-5 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm md:text-base font-semibold text-gray-900">Configuracoes de fila</h2>
+          <p className="text-xs md:text-sm text-gray-600 mt-1">
+            Defina distribuicao automatica, limite simultaneo por operador e encerramento por inatividade.
+          </p>
+        </div>
+
+        <Link
+          href="/portal/integracoes/whatsapp/fila"
+          className="shrink-0 px-4 py-2 rounded-xl bg-gray-900 text-white text-sm hover:bg-black transition"
+        >
+          Abrir configuracoes
+        </Link>
+      </div>
     </div>
   );
 }

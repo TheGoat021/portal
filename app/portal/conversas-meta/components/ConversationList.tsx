@@ -1,16 +1,20 @@
-// app/portal/conversas-meta/components/ConversationsList.tsx
+﻿// app/portal/conversas-meta/components/ConversationsList.tsx
 
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
 import {
   Archive,
+  Bell,
+  BellOff,
   Bot,
   FileText,
   Headset,
   Image as ImageIcon,
   Mic,
   MessageSquare,
+  UserCheck,
+  UserX,
   UserRound,
   Video
 } from "lucide-react"
@@ -54,6 +58,7 @@ interface BackendConversation {
   unread_count?: number | null
   connection_id: string
   service_state?: "bot" | "operator" | "closed"
+  assigned_user_id?: string | null
 }
 
 interface Conversation {
@@ -66,6 +71,7 @@ interface Conversation {
   unreadCount: number
   connectionId: string
   serviceState: "bot" | "operator" | "closed"
+  assignedUserId?: string | null
   lastMessageType?:
     | "text"
     | "image"
@@ -118,20 +124,20 @@ function getConversationPreview(conv: Conversation) {
     case "image":
       return {
         icon: <ImageIcon size={14} className="opacity-70 shrink-0" />,
-        text: text && text !== "📷 Imagem" ? text : "Imagem"
+        text: text && text !== "ðŸ“· Imagem" ? text : "Imagem"
       }
 
     case "video":
       return {
         icon: <Video size={14} className="opacity-70 shrink-0" />,
-        text: text && text !== "🎥 Vídeo" ? text : "Vídeo"
+        text: text && text !== "ðŸŽ¥ VÃ­deo" ? text : "VÃ­deo"
       }
 
     case "audio":
     case "ptt":
       return {
         icon: <Mic size={14} className="opacity-70 shrink-0" />,
-        text: "Áudio"
+        text: "Ãudio"
       }
 
     case "document":
@@ -155,13 +161,13 @@ function getConversationPreview(conv: Conversation) {
     case "location":
       return {
         icon: <MessageSquare size={14} className="opacity-70 shrink-0" />,
-        text: "Localização"
+        text: "LocalizaÃ§Ã£o"
       }
 
     default:
       return {
         icon: null,
-        text: text || "—"
+        text: text || "â€”"
       }
   }
 }
@@ -182,6 +188,16 @@ export default function ConversationsList({
   const [loadingConnections, setLoadingConnections] = useState(false)
   const [creatingConversation, setCreatingConversation] = useState(false)
   const [pullingConversationId, setPullingConversationId] = useState<string | null>(null)
+  const [onlyUnreadForOperator, setOnlyUnreadForOperator] = useState(false)
+  const [distributionActive, setDistributionActive] = useState(true)
+  const [loadingAvailability, setLoadingAvailability] = useState(false)
+  const [savingAvailability, setSavingAvailability] = useState(false)
+  const roleUpper = (currentUser.role || "").toUpperCase()
+  const isDiretoria =
+    roleUpper === "DIRETORIA" ||
+    roleUpper === "ADMINISTRAÃ‡ÃƒO" ||
+    roleUpper === "ADMINISTRACAO" ||
+    roleUpper === "ADMIN"
 
 
   const fetchConnections = async () => {
@@ -193,7 +209,7 @@ export default function ConversationsList({
       })
 
       if (!res.ok) {
-        console.error("Erro ao buscar conexões Meta:", await res.text())
+        console.error("Erro ao buscar conexÃµes Meta:", await res.text())
         return
       }
 
@@ -206,7 +222,7 @@ export default function ConversationsList({
         setSelectedConnectionId(items[0].id)
       }
     } catch (error) {
-      console.error("Erro ao buscar conexões Meta:", error)
+      console.error("Erro ao buscar conexÃµes Meta:", error)
     } finally {
       setLoadingConnections(false)
     }
@@ -222,7 +238,7 @@ export default function ConversationsList({
       }
 
       const res = await fetch(
-        `/api/whatsapp-meta/conversations?connectionId=${encodeURIComponent(activeConnectionId)}`,
+        `/api/whatsapp-meta/conversations?connectionId=${encodeURIComponent(activeConnectionId)}&userId=${encodeURIComponent(currentUser.id)}&userRole=${encodeURIComponent(currentUser.role || "")}`,
         { cache: "no-store" }
       )
 
@@ -244,6 +260,7 @@ export default function ConversationsList({
         unreadCount: Number(conv.unread_count ?? 0),
         connectionId: conv.connection_id,
         serviceState: conv.service_state || "bot",
+        assignedUserId: conv.assigned_user_id ?? null,
         lastMessageType: conv.last_message_type ?? "text"
       }))
 
@@ -268,9 +285,88 @@ export default function ConversationsList({
     return () => clearInterval(interval)
   }, [selectedConnectionId])
 
+  useEffect(() => {
+    if (!selectedConnectionId || isDiretoria) {
+      setDistributionActive(true)
+      return
+    }
+
+    let active = true
+    setLoadingAvailability(true)
+
+    fetch(
+      `/api/whatsapp-meta/agent-availability?connectionId=${encodeURIComponent(selectedConnectionId)}&userId=${encodeURIComponent(currentUser.id)}`,
+      { cache: "no-store" }
+    )
+      .then(async (res) => {
+        const payload = await res.json().catch(() => null)
+        if (!active) return
+        if (!res.ok || !payload?.ok) return
+        setDistributionActive(Boolean(payload.data?.isActive))
+      })
+      .catch((error) => {
+        console.error("Erro ao carregar disponibilidade do operador:", error)
+      })
+      .finally(() => {
+        if (active) setLoadingAvailability(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [selectedConnectionId, currentUser.id, isDiretoria])
+
+  const toggleDistributionActive = async () => {
+    if (!selectedConnectionId || isDiretoria || savingAvailability) return
+
+    const nextValue = !distributionActive
+    setDistributionActive(nextValue)
+    setSavingAvailability(true)
+
+    try {
+      const res = await fetch("/api/whatsapp-meta/agent-availability", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          connectionId: selectedConnectionId,
+          userId: currentUser.id,
+          userRole: currentUser.role || "",
+          isActive: nextValue
+        })
+      })
+
+      const payload = await res.json().catch(() => null)
+      if (!res.ok || !payload?.ok) {
+        setDistributionActive(!nextValue)
+        console.error("Erro ao atualizar disponibilidade do operador:", payload?.error || "falha")
+      }
+    } catch (error) {
+      setDistributionActive(!nextValue)
+      console.error("Erro ao atualizar disponibilidade do operador:", error)
+    } finally {
+      setSavingAvailability(false)
+    }
+  }
+
+  const visibleConversations = useMemo(() => {
+    if (isDiretoria) return conversations
+
+    return conversations.filter((conversation) => {
+      if (conversation.serviceState === "bot") return true
+      if (conversation.serviceState === "operator") {
+        return !conversation.assignedUserId || conversation.assignedUserId === currentUser.id
+      }
+      return conversation.assignedUserId === currentUser.id
+    })
+  }, [conversations, currentUser.id, isDiretoria])
+
   const filteredConversations = useMemo(() => {
     const q = search.trim().toLowerCase()
-    const base = conversations.filter((conversation) => conversation.serviceState === serviceFilter)
+    let base = visibleConversations.filter((conversation) => conversation.serviceState === serviceFilter)
+
+    if (!isDiretoria && onlyUnreadForOperator) {
+      base = base.filter((conversation) => (conversation.unreadCount ?? 0) > 0)
+    }
 
     if (!q) return base
 
@@ -287,21 +383,26 @@ export default function ConversationsList({
         last.includes(q)
       )
     })
-  }, [conversations, search, serviceFilter])
+  }, [visibleConversations, search, serviceFilter, isDiretoria, onlyUnreadForOperator])
+
+  const unreadVisibleCount = useMemo(
+    () => visibleConversations.filter((conversation) => (conversation.unreadCount ?? 0) > 0).length,
+    [visibleConversations]
+  )
 
   const botCount = useMemo(
-    () => conversations.filter((conversation) => conversation.serviceState === "bot").length,
-    [conversations]
+    () => visibleConversations.filter((conversation) => conversation.serviceState === "bot").length,
+    [visibleConversations]
   )
 
   const operatorCount = useMemo(
-    () => conversations.filter((conversation) => conversation.serviceState === "operator").length,
-    [conversations]
+    () => visibleConversations.filter((conversation) => conversation.serviceState === "operator").length,
+    [visibleConversations]
   )
 
   const closedCount = useMemo(
-    () => conversations.filter((conversation) => conversation.serviceState === "closed").length,
-    [conversations]
+    () => visibleConversations.filter((conversation) => conversation.serviceState === "closed").length,
+    [visibleConversations]
   )
 
   const handleCreateConversation = async () => {
@@ -316,7 +417,7 @@ export default function ConversationsList({
 
       const connection = connections.find((item) => item.id === selectedConnectionId)
       if (!connection) {
-        console.error("Conexão Meta não encontrada")
+        console.error("ConexÃ£o Meta nÃ£o encontrada")
         return
       }
 
@@ -342,7 +443,7 @@ export default function ConversationsList({
       const conversationId = ensureConversationPayload?.data?.id
 
       if (!conversationId) {
-        console.error("ConversationId não retornado")
+        console.error("ConversationId nÃ£o retornado")
         return
       }
 
@@ -377,6 +478,29 @@ export default function ConversationsList({
 
   const handleSelectConversation = async (conv: Conversation) => {
     try {
+      if (
+        !isDiretoria &&
+        conv.serviceState === "operator" &&
+        !conv.assignedUserId &&
+        currentUser?.id
+      ) {
+        const claimRes = await fetch(`/api/whatsapp-meta/conversations/${conv.id}/transfer`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            toUserId: currentUser.id,
+            byUserId: currentUser.id
+          })
+        })
+
+        if (!claimRes.ok) {
+          console.error("Erro ao assumir conversa da fila:", await claimRes.text())
+          return
+        }
+
+        await fetchConversations(selectedConnectionId)
+      }
+
       onSelectConversation(conv.id)
 
       await fetch(`/api/whatsapp-meta/conversations/${conv.id}/read`, {
@@ -403,7 +527,8 @@ export default function ConversationsList({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          toUserId: currentUser.id
+          toUserId: currentUser.id,
+          byUserId: currentUser.id
         })
       })
 
@@ -438,7 +563,7 @@ export default function ConversationsList({
             disabled={loadingConnections}
           >
             <option value="">
-              {loadingConnections ? "Carregando conexões..." : "Selecione uma conexão Meta"}
+              {loadingConnections ? "Carregando conexÃµes..." : "Selecione uma conexÃ£o Meta"}
             </option>
 
             {connections.map((connection) => (
@@ -514,13 +639,51 @@ export default function ConversationsList({
         </div>
 
         {selectedConnection ? (
-          <div className="text-[11px] text-gray-500 px-1">
-            Conexão ativa:{" "}
-            <span className="font-medium text-gray-700">
-              {selectedConnection.display_phone_number ||
-                selectedConnection.verified_name ||
-                selectedConnection.id}
-            </span>
+          <div className="px-1 flex items-center justify-between gap-2">
+            <div className="text-[11px] text-gray-500">
+              Conexão ativa:{" "}
+              <span className="font-medium text-gray-700">
+                {selectedConnection.display_phone_number ||
+                  selectedConnection.verified_name ||
+                  selectedConnection.id}
+              </span>
+            </div>
+
+            {!isDiretoria ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={toggleDistributionActive}
+                  disabled={loadingAvailability || savingAvailability}
+                  className={[
+                    "h-7 px-2 rounded-full border text-[11px] font-medium flex items-center gap-1.5 transition disabled:opacity-60",
+                    distributionActive
+                      ? "bg-green-50 text-green-700 border-green-300"
+                      : "bg-red-50 text-red-700 border-red-300"
+                  ].join(" ")}
+                  title="Disponibilidade do operador para distribuicao automatica"
+                >
+                  {distributionActive ? <UserCheck size={12} /> : <UserX size={12} />}
+                  <span>{distributionActive ? "Ativo na fila" : "Pausado na fila"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setOnlyUnreadForOperator((prev) => !prev)}
+                  className={[
+                    "h-7 px-2 rounded-full border text-[11px] font-medium flex items-center gap-1.5 transition",
+                    onlyUnreadForOperator
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                      : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                  ].join(" ")}
+                  title="Mostrar apenas conversas com mensagens não lidas"
+                >
+                  {onlyUnreadForOperator ? <Bell size={12} /> : <BellOff size={12} />}
+                  <span>Não lidas</span>
+                  <span className="text-[10px] opacity-80">({unreadVisibleCount})</span>
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -528,7 +691,7 @@ export default function ConversationsList({
       <div className="min-h-0">
         {!selectedConnectionId ? (
           <div className="p-6 text-sm text-gray-500">
-            Selecione uma conexão Meta para ver as conversas.
+            Selecione uma conexÃ£o Meta para ver as conversas.
           </div>
         ) : filteredConversations.length === 0 ? (
           <div className="p-6 text-sm text-gray-500">
@@ -610,7 +773,7 @@ export default function ConversationsList({
                               className="min-w-[18px] h-[18px] px-1 rounded-full bg-green-500 text-white text-[10px] flex items-center justify-center"
                               title="Novas mensagens"
                             >
-                              {conv.unreadCount > 9 ? "9+" : conv.unreadCount || "•"}
+                              {conv.unreadCount > 9 ? "9+" : conv.unreadCount || "â€¢"}
                             </span>
                           ) : null}
                         </div>
@@ -691,3 +854,4 @@ export default function ConversationsList({
 }
 
 type ServiceFilter = "bot" | "operator" | "closed"
+

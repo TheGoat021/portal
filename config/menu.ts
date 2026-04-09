@@ -1,4 +1,4 @@
-import type { LucideIcon } from "lucide-react";
+﻿import type { LucideIcon } from "lucide-react";
 import {
   Home,
   GraduationCap,
@@ -16,18 +16,18 @@ export type MenuItem = {
   external?: boolean;
   module?: string;
   newTab?: boolean;
-  allowExternal?: boolean; // ✅ ADICIONADO
+  allowExternal?: boolean; // âœ… ADICIONADO
 };
 
 export type MenuSection = {
-  title?: string; // 👈 opcional (Home fica sem título)
-  icon?: LucideIcon; // ✅ ícone só no título da seção (e no "Home" quando retraída)
+  title?: string; // ðŸ‘ˆ opcional (Home fica sem título)
+  icon?: LucideIcon; // âœ… ícone só no título da seção (e no "Home" quando retraída)
   roles: string[];
   items: MenuItem[];
 };
 
 export const menuConfig: MenuSection[] = [
-  // ✅ HOME (sem submenu, aparece direto)
+  // âœ… HOME (sem submenu, aparece direto)
   {
     icon: Home,
     roles: ["TREINAMENTO", "COMERCIAL", "AGENDAMENTO", "EXAMES", "DIRETORIA"],
@@ -377,6 +377,10 @@ export const menuConfig: MenuSection[] = [
         href: "/portal/whatsapp",
       },
       {
+        label: "Fila Whats Meta",
+        href: "/portal/integracoes/whatsapp/fila",
+      },
+      {
         label: "Importar",
         href: "/portal/vendas/importar",
       },
@@ -384,3 +388,4 @@ export const menuConfig: MenuSection[] = [
     ],
   },
 ];
+

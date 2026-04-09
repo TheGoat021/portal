@@ -5,6 +5,7 @@ import {
   insertMetaMessage,
   touchMetaConversation
 } from '@/lib/metaDb'
+import { getMetaConversationManagement, upsertMetaConversationManagement } from '@/lib/metaConversationManagement'
 
 export const runtime = 'nodejs'
 
@@ -17,6 +18,8 @@ type Body = {
   message: string
   connectionId?: string | null
   companyId?: string | null
+  agentId?: string | null
+  agentEmail?: string | null
 }
 
 function normalizePhone(phone?: string | null) {
@@ -163,7 +166,11 @@ export async function POST(req: NextRequest) {
       fileName: null,
       sha256: null,
       contextMessageId: null,
-      rawPayload: data
+      rawPayload: {
+        ...data,
+        agentId: body.agentId ?? null,
+        agentEmail: body.agentEmail ?? null
+      }
     })
 
     await touchMetaConversation({
@@ -172,6 +179,30 @@ export async function POST(req: NextRequest) {
       lastMessageType: 'text',
       incrementUnread: false
     })
+
+    if (body.agentId && body.agentEmail) {
+      const [currentManagement, profileResult] = await Promise.all([
+        getMetaConversationManagement(conversation.id),
+        supabaseAdmin
+          .from("profiles")
+          .select("role")
+          .eq("id", body.agentId)
+          .maybeSingle()
+      ])
+
+      if (!currentManagement?.assigned_user_id) {
+        await upsertMetaConversationManagement({
+          conversation_id: conversation.id,
+          connection_id: connection.id,
+          status: "open",
+          assigned_user_id: body.agentId,
+          assigned_user_email: body.agentEmail,
+          assigned_department: profileResult.data?.role ? String(profileResult.data.role) : null,
+          closed_at: null,
+          closed_by_user_id: null
+        })
+      }
+    }
 
     return NextResponse.json({
       ok: true,

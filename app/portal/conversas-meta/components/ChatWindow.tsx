@@ -57,6 +57,7 @@ interface BackendMetaMessage {
   meta_message_id?: string | null
   mime_type?: string | null
   file_name?: string | null
+  agent_email?: string | null
 }
 
 interface Message {
@@ -84,6 +85,8 @@ interface Message {
   metaMessageId?: string | null
   mimeType?: string | null
   fileName?: string | null
+  agentEmail?: string | null
+  isSystem?: boolean
 }
 
 type MetaConversation = {
@@ -126,6 +129,17 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
   function formatTime(dateString: string) {
     const date = new Date(dateString)
     return date.toLocaleTimeString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit"
+    })
+  }
+
+  function formatDateTime(dateString: string) {
+    const date = new Date(dateString)
+    return date.toLocaleString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "2-digit",
       hour: "2-digit",
       minute: "2-digit"
     })
@@ -181,7 +195,9 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
         contextMessageId: msg.context_message_id || null,
         metaMessageId: msg.meta_message_id || null,
         mimeType: msg.mime_type || null,
-        fileName: msg.file_name || null
+        fileName: msg.file_name || null,
+        agentEmail: msg.agent_email || null,
+        isSystem: msg.type === "system"
       }))
 
       setMessages(mapped)
@@ -255,6 +271,7 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
       }
 
       setTransferOpen(false)
+      await fetchMessages(selectedConversationId)
     } catch (error) {
       console.error("Erro ao transferir conversa meta:", error)
     } finally {
@@ -343,7 +360,9 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
           connectionId: conversation.connection_id,
           conversationId: selectedConversationId,
           to: conversation.wa_id,
-          message: messageToSend
+          message: messageToSend,
+          agentId: currentUser.id,
+          agentEmail: currentUser.email
         })
       })
 
@@ -383,6 +402,8 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
     formData.append("type", inferMediaType(file))
     formData.append("caption", caption)
     formData.append("file", file)
+    formData.append("agentId", currentUser.id)
+    formData.append("agentEmail", currentUser.email)
 
     try {
       setSendingMedia(true)
@@ -575,6 +596,10 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
   }
 
   function renderMessageContent(msg: Message) {
+    if (msg.type === "system" || msg.isSystem) {
+      return null
+    }
+
     const mediaUrl = resolveMediaUrl(msg)
 
     if (msg.type === "sticker") {
@@ -687,6 +712,17 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
     return <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
   }
 
+  function renderSystemMessage(msg: Message) {
+    return (
+      <div key={msg.id} className="flex justify-center py-2">
+        <div className="max-w-[80%] rounded-2xl bg-[#FFF3CD] text-[#6B5B00] px-4 py-3 text-center shadow-sm border border-[#F3E19C]">
+          <div className="text-sm italic">{msg.text}</div>
+          <div className="mt-1 text-xs opacity-70">{formatDateTime(msg.createdAt)}</div>
+        </div>
+      </div>
+    )
+  }
+
   const iconBtn =
     "h-10 w-10 rounded-full flex items-center justify-center text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition disabled:opacity-60 disabled:hover:bg-transparent"
 
@@ -763,6 +799,10 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
             )}
 
             {messages.map((msg) => {
+              if (msg.isSystem || msg.type === "system") {
+                return renderSystemMessage(msg)
+              }
+
               const outbound = msg.direction === "outbound"
 
               return (
@@ -771,6 +811,12 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
                   className={`flex ${outbound ? "justify-end" : "justify-start"}`}
                 >
                   <div className="max-w-[75%]">
+                    {outbound && msg.agentEmail && (
+                      <div className="px-1 mb-1 text-xs font-semibold text-gray-700">
+                        {msg.agentEmail}:
+                      </div>
+                    )}
+
                     <div
                       className={`rounded-2xl px-3 py-2 shadow-sm border border-black/5 ${
                         outbound ? "bg-[#D9FDD3]" : "bg-white"

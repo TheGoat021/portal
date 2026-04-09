@@ -8,6 +8,13 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url)
     const connectionId = url.searchParams.get('connectionId')
     const search = url.searchParams.get('search')?.trim() || ''
+    const userId = url.searchParams.get("userId")?.trim() || ""
+    const userRole = (url.searchParams.get("userRole")?.trim() || "").toUpperCase()
+    const isDiretoria =
+      userRole === "DIRETORIA" ||
+      userRole === "ADMINISTRAÇÃO" ||
+      userRole === "ADMINISTRACAO" ||
+      userRole === "ADMIN"
 
     if (!connectionId) {
       return NextResponse.json({ error: 'connectionId é obrigatório' }, { status: 400 })
@@ -87,13 +94,22 @@ export async function GET(req: NextRequest) {
 
       return {
         ...conversation,
-        service_state
+        service_state,
+        assigned_user_id: management?.assigned_user_id ?? null
       }
     })
 
+    const visibleConversations =
+      userId && !isDiretoria
+        ? conversationsWithServiceState.filter((conversation) => {
+            if (conversation.service_state === "bot") return true
+            return String(conversation.assigned_user_id || "") === userId
+          })
+        : conversationsWithServiceState
+
     return NextResponse.json({
       ok: true,
-      data: conversationsWithServiceState
+      data: visibleConversations
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Erro ao listar conversas'

@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin"
 import { getMetaConnectionById, insertMetaMessage, touchMetaConversation } from "@/lib/metaDb"
 import { upsertMetaConversationManagement } from "@/lib/metaConversationManagement"
+import { tryAutoAssignConversation } from "@/lib/metaQueueDistribution"
 import { normalizePhone, sendTextMessage } from "@/lib/whatsappMeta"
 
 export type ChatbotNodeType = "start" | "message" | "question" | "condition" | "action" | "end"
@@ -410,16 +411,28 @@ export async function runMetaChatbotForInbound({
       }
 
       if (actionType === "route" && actionValue.trim()) {
+        const department = actionValue.trim()
+
         await upsertMetaConversationManagement({
           conversation_id: conversationId,
           connection_id: connectionId,
           status: "open",
           assigned_user_id: null,
           assigned_user_email: null,
-          assigned_department: actionValue.trim(),
+          assigned_department: department,
           closed_at: null,
           closed_by_user_id: null
         })
+
+        try {
+          await tryAutoAssignConversation({
+            connectionId,
+            conversationId,
+            department
+          })
+        } catch (distributionError) {
+          console.error("Erro ao distribuir conversa automaticamente:", distributionError)
+        }
 
         await updateSession(session.id, { current_node_id: null, state: "completed", context })
         return

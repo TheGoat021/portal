@@ -18,24 +18,34 @@ export async function GET(_req: NextRequest, context: RouteContext) {
       )
     }
 
-    const { data, error } = await supabaseAdmin
-      .from("meta_messages")
-      .select(`
-        id,
-        message,
-        direction,
-        created_at,
-        type,
-        media_url,
-        status,
-        caption,
-        context_message_id,
-        meta_message_id,
-        mime_type,
-        file_name
-      `)
-      .eq("conversation_id", id)
-      .order("created_at", { ascending: true })
+    const [{ data, error }, { data: managementRow }] = await Promise.all([
+      supabaseAdmin
+        .from("meta_messages")
+        .select(`
+          id,
+          message,
+          direction,
+          created_at,
+          type,
+          media_url,
+          status,
+          caption,
+          context_message_id,
+          meta_message_id,
+          mime_type,
+          file_name,
+          raw_payload
+        `)
+        .eq("conversation_id", id)
+        .order("created_at", { ascending: true }),
+      supabaseAdmin
+        .from("meta_conversation_management")
+        .select("assigned_user_email")
+        .eq("conversation_id", id)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    ])
 
     if (error) {
       return NextResponse.json(
@@ -44,9 +54,54 @@ export async function GET(_req: NextRequest, context: RouteContext) {
       )
     }
 
+    const fallbackAgentEmail = managementRow?.assigned_user_email
+      ? String(managementRow.assigned_user_email)
+      : null
+
+    const mapped = (data ?? []).map((item) => {
+      const rawPayloadUnknown = (item as { raw_payload?: unknown })?.raw_payload
+      let parsedPayload: Record<string, unknown> | null = null
+
+      if (rawPayloadUnknown && typeof rawPayloadUnknown === "object") {
+        parsedPayload = rawPayloadUnknown as Record<string, unknown>
+      } else if (typeof rawPayloadUnknown === "string") {
+        try {
+          const obj = JSON.parse(rawPayloadUnknown)
+          if (obj && typeof obj === "object") {
+            parsedPayload = obj as Record<string, unknown>
+          }
+        } catch {}
+      }
+
+      const nestedSend =
+        parsedPayload && typeof parsedPayload.send === "object"
+          ? (parsedPayload.send as Record<string, unknown>)
+          : null
+
+      const agentFromPayload =
+        parsedPayload
+          ? String(parsedPayload.agentEmail ?? parsedPayload.agent_email ?? "")
+          : ""
+      const agentFromSend =
+        nestedSend
+          ? String(nestedSend.agentEmail ?? nestedSend.agent_email ?? "")
+          : ""
+
+      const agentEmail =
+        (agentFromPayload || "").trim() ||
+        (agentFromSend || "").trim() ||
+        ((item as { direction?: string }).direction === "outbound" ? fallbackAgentEmail : "") ||
+        null
+
+      return {
+        ...item,
+        agent_email: agentEmail
+      }
+    })
+
     return NextResponse.json({
       ok: true,
-      data: data ?? []
+      data: mapped
     })
   } catch (error: any) {
     return NextResponse.json(

@@ -7,7 +7,9 @@ import fsSync from 'fs'
 import fs from 'fs/promises'
 import os from 'os'
 import path from 'path'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getMetaConnectionById, insertMetaMessage, touchMetaConversation } from '@/lib/metaDb'
+import { getMetaConversationManagement, upsertMetaConversationManagement } from '@/lib/metaConversationManagement'
 import { uploadMetaInboundMedia } from '@/lib/metaStorage'
 import { guessMessageText, normalizePhone, sendMediaMessage, uploadMedia } from '@/lib/whatsappMeta'
 
@@ -110,6 +112,8 @@ export async function POST(req: NextRequest) {
     const type = String(form.get('type') || '') as 'image' | 'video' | 'audio' | 'document'
     const caption = String(form.get('caption') || '')
     const replyToMessageId = String(form.get('replyToMessageId') || '')
+    const agentId = String(form.get('agentId') || '')
+    const agentEmail = String(form.get('agentEmail') || '')
     const file = form.get('file') as File | null
 
     if (!connectionId) {
@@ -240,7 +244,9 @@ export async function POST(req: NextRequest) {
       sha256,
       rawPayload: {
         upload,
-        send: result
+        send: result,
+        agentId: agentId || null,
+        agentEmail: agentEmail || null
       },
       contextMessageId: replyToMessageId || null
     })
@@ -250,6 +256,30 @@ export async function POST(req: NextRequest) {
       lastMessage: previewText,
       lastMessageType: type
     })
+
+    if (agentId && agentEmail) {
+      const [currentManagement, profileResult] = await Promise.all([
+        getMetaConversationManagement(conversationId),
+        supabaseAdmin
+          .from("profiles")
+          .select("role")
+          .eq("id", agentId)
+          .maybeSingle()
+      ])
+
+      if (!currentManagement?.assigned_user_id) {
+        await upsertMetaConversationManagement({
+          conversation_id: conversationId,
+          connection_id: connection.id,
+          status: "open",
+          assigned_user_id: agentId,
+          assigned_user_email: agentEmail,
+          assigned_department: profileResult.data?.role ? String(profileResult.data.role) : null,
+          closed_at: null,
+          closed_by_user_id: null
+        })
+      }
+    }
 
     return NextResponse.json({
       ok: true,

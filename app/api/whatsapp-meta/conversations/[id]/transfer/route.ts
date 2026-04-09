@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabaseAdmin"
 import { upsertMetaConversationManagement } from "@/lib/metaConversationManagement"
+import { insertMetaMessage, touchMetaConversation } from "@/lib/metaDb"
 
 type RouteContext = {
   params: Promise<{
@@ -13,6 +14,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     const { id: conversationId } = await context.params
     const body = await req.json().catch(() => null)
     const toUserId = String(body?.toUserId || "")
+    const byUserId = String(body?.byUserId || "")
 
     if (!conversationId) {
       return NextResponse.json({ ok: false, error: "conversationId é obrigatório" }, { status: 400 })
@@ -53,6 +55,54 @@ export async function POST(req: NextRequest, context: RouteContext) {
       assigned_department: user.role ?? null,
       closed_at: null,
       closed_by_user_id: null
+    })
+
+    let actorEmail = "Sistema"
+    if (byUserId) {
+      const { data: actor } = await supabaseAdmin
+        .from("profiles")
+        .select("email")
+        .eq("id", byUserId)
+        .maybeSingle()
+
+      if (actor?.email) {
+        actorEmail = String(actor.email)
+      }
+    }
+
+    const targetEmail = user.email ? String(user.email) : "Sem e-mail"
+    const transferText = `Atendimento transferido por ${actorEmail} para ${targetEmail}.`
+
+    await insertMetaMessage({
+      conversationId: conversation.id,
+      connectionId: conversation.connection_id,
+      direction: "outbound",
+      status: "sent",
+      fromPhone: null,
+      toPhone: null,
+      type: "system",
+      message: transferText,
+      caption: null,
+      mediaId: null,
+      mimeType: null,
+      mediaUrl: null,
+      fileName: null,
+      sha256: null,
+      contextMessageId: null,
+      rawPayload: {
+        event: "transfer",
+        byUserId: byUserId || null,
+        toUserId: user.id,
+        actorEmail,
+        targetEmail
+      }
+    })
+
+    await touchMetaConversation({
+      conversationId: conversation.id,
+      lastMessage: transferText,
+      lastMessageType: "system",
+      incrementUnread: false
     })
 
     return NextResponse.json({
