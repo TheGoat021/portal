@@ -501,8 +501,88 @@ export async function runMetaChatbotForInbound({
     }
 
     if (nodeKind === "end") {
+      const actionType = node.data?.actionType || "note"
+      const actionValue = node.data?.actionValue || ""
+
       if (message) {
         await sendBotMessage({ connectionId, conversationId, to, text: message })
+      }
+
+      if (actionType === "route" && actionValue.trim()) {
+        const department = actionValue.trim()
+
+        await upsertMetaConversationManagement({
+          conversation_id: conversationId,
+          connection_id: connectionId,
+          status: "open",
+          assigned_user_id: null,
+          assigned_user_email: null,
+          assigned_department: department,
+          closed_at: null,
+          closed_by_user_id: null
+        })
+
+        try {
+          const assignedAgent = await tryAutoAssignConversation({
+            connectionId,
+            conversationId,
+            department
+          })
+
+          if (assignedAgent) {
+            const target = assignedAgent.email || assignedAgent.id
+            const transferText = `Atendimento transferido por chatbot para ${target}.`
+
+            await insertMetaMessage({
+              conversationId,
+              connectionId,
+              direction: "outbound",
+              status: "sent",
+              fromPhone: null,
+              toPhone: null,
+              type: "system",
+              message: transferText,
+              rawPayload: {
+                event: "auto_transfer",
+                by: "chatbot",
+                toUserId: assignedAgent.id,
+                toUserEmail: assignedAgent.email
+              }
+            })
+
+            await touchMetaConversation({
+              conversationId,
+              lastMessage: transferText,
+              lastMessageType: "system"
+            })
+          } else {
+            const transferText = "Chatbot concluiu o fluxo, mas nenhum operador elegivel foi encontrado para transferencia."
+
+            await insertMetaMessage({
+              conversationId,
+              connectionId,
+              direction: "outbound",
+              status: "sent",
+              fromPhone: null,
+              toPhone: null,
+              type: "system",
+              message: transferText,
+              rawPayload: {
+                event: "auto_transfer_not_assigned",
+                by: "chatbot",
+                department
+              }
+            })
+
+            await touchMetaConversation({
+              conversationId,
+              lastMessage: transferText,
+              lastMessageType: "system"
+            })
+          }
+        } catch (distributionError) {
+          console.error("Erro ao distribuir conversa automaticamente:", distributionError)
+        }
       }
 
       await updateSession(session.id, { current_node_id: null, state: "completed", context })
