@@ -31,6 +31,20 @@ type QueueAgent = {
   updatedAt?: string | null
 }
 
+type DistributionLog = {
+  id: string
+  conversation_id?: string | null
+  conversation_wa_id?: string | null
+  conversation_contact_name?: string | null
+  department?: string | null
+  status: string
+  reason?: string | null
+  selected_user_email?: string | null
+  candidates_count?: number | null
+  eligible_count?: number | null
+  created_at: string
+}
+
 function defaultSettings(connectionId: string): QueueSettings {
   return {
     connection_id: connectionId,
@@ -63,6 +77,8 @@ export default function MetaQueueSettingsPage() {
   const [queueAgents, setQueueAgents] = useState<QueueAgent[]>([])
   const [loadingQueueAgents, setLoadingQueueAgents] = useState(false)
   const [updatingAgentId, setUpdatingAgentId] = useState<string | null>(null)
+  const [distributionLogs, setDistributionLogs] = useState<DistributionLog[]>([])
+  const [loadingDistributionLogs, setLoadingDistributionLogs] = useState(false)
 
   const canManage = useMemo(
     () => Boolean(currentUser?.role && isManagerRole(currentUser.role)),
@@ -161,6 +177,32 @@ export default function MetaQueueSettingsPage() {
     [canManage, currentUser]
   )
 
+  const loadDistributionLogs = useCallback(
+    async (connectionId: string) => {
+      if (!currentUser || !canManage || !connectionId) {
+        setDistributionLogs([])
+        return
+      }
+
+      setLoadingDistributionLogs(true)
+      try {
+        const res = await fetch(
+          `/api/whatsapp-meta/queue-distribution-logs?connectionId=${encodeURIComponent(connectionId)}&actorRole=${encodeURIComponent(currentUser.role || "")}&limit=40`,
+          { cache: "no-store" }
+        )
+        const payload = await res.json().catch(() => null)
+        if (!res.ok || !payload?.ok) {
+          setDistributionLogs([])
+          return
+        }
+        setDistributionLogs((payload.data as DistributionLog[]) ?? [])
+      } finally {
+        setLoadingDistributionLogs(false)
+      }
+    },
+    [canManage, currentUser]
+  )
+
   useEffect(() => {
     loadCurrentUser()
     loadConnections()
@@ -171,12 +213,14 @@ export default function MetaQueueSettingsPage() {
       setSettings(defaultSettings(selectedConnectionId))
       loadSettings(selectedConnectionId)
       loadQueueAgents(selectedConnectionId)
+      loadDistributionLogs(selectedConnectionId)
     } else {
       setLoading(false)
       setSettings(null)
       setQueueAgents([])
+      setDistributionLogs([])
     }
-  }, [loadQueueAgents, loadSettings, selectedConnectionId])
+  }, [loadDistributionLogs, loadQueueAgents, loadSettings, selectedConnectionId])
 
   const saveSettings = async () => {
     if (!currentUser || !selectedConnectionId || !canManage || saving) return
@@ -245,9 +289,20 @@ export default function MetaQueueSettingsPage() {
           item.id === agent.id ? { ...item, isActiveInQueue: nextValue, updatedAt: new Date().toISOString() } : item
         )
       )
+      await loadDistributionLogs(selectedConnectionId)
     } finally {
       setUpdatingAgentId(null)
     }
+  }
+
+  function formatLogDate(value: string) {
+    const d = new Date(value)
+    return d.toLocaleString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    })
   }
 
   return (
@@ -460,6 +515,72 @@ export default function MetaQueueSettingsPage() {
                               : "Inativo"}
                         </button>
                       </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {selectedConnectionId && canManage ? (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 md:p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Logs de distribuição</h2>
+              <p className="text-xs text-gray-500 mt-1">Últimos eventos da distribuição automática.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => loadDistributionLogs(selectedConnectionId)}
+              className="px-3 py-1.5 rounded-lg border text-xs hover:bg-gray-50"
+            >
+              Atualizar
+            </button>
+          </div>
+
+          {loadingDistributionLogs ? (
+            <div className="text-sm text-gray-500">Carregando logs...</div>
+          ) : distributionLogs.length === 0 ? (
+            <div className="text-sm text-gray-500">Sem logs para essa conexão ainda.</div>
+          ) : (
+            <div className="overflow-x-auto border rounded-xl">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50">
+                  <tr className="text-left">
+                    <th className="px-3 py-2 font-medium text-gray-600">Quando</th>
+                    <th className="px-3 py-2 font-medium text-gray-600">Contato</th>
+                    <th className="px-3 py-2 font-medium text-gray-600">Role</th>
+                    <th className="px-3 py-2 font-medium text-gray-600">Status</th>
+                    <th className="px-3 py-2 font-medium text-gray-600">Operador</th>
+                    <th className="px-3 py-2 font-medium text-gray-600">Motivo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {distributionLogs.map((log) => (
+                    <tr key={log.id} className="border-t">
+                      <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{formatLogDate(log.created_at)}</td>
+                      <td className="px-3 py-2 text-gray-700">
+                        {log.conversation_contact_name || log.conversation_wa_id || log.conversation_id || "-"}
+                      </td>
+                      <td className="px-3 py-2 text-gray-700">{log.department || "-"}</td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={[
+                            "px-2 py-0.5 rounded-full border",
+                            log.status === "assigned"
+                              ? "bg-green-50 text-green-700 border-green-300"
+                              : log.status === "error"
+                                ? "bg-red-50 text-red-700 border-red-300"
+                                : "bg-amber-50 text-amber-700 border-amber-300"
+                          ].join(" ")}
+                        >
+                          {log.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-gray-700">{log.selected_user_email || "-"}</td>
+                      <td className="px-3 py-2 text-gray-600">{log.reason || "-"}</td>
                     </tr>
                   ))}
                 </tbody>

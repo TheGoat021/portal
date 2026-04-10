@@ -484,6 +484,27 @@ export async function runMetaChatbotForInbound({
           }
         } catch (distributionError) {
           console.error("Erro ao distribuir conversa automaticamente:", distributionError)
+          const transferText = "Erro ao transferir atendimento automaticamente pelo chatbot."
+          await insertMetaMessage({
+            conversationId,
+            connectionId,
+            direction: "outbound",
+            status: "sent",
+            fromPhone: null,
+            toPhone: null,
+            type: "system",
+            message: transferText,
+            rawPayload: {
+              event: "auto_transfer_error",
+              by: "chatbot",
+              details: distributionError instanceof Error ? distributionError.message : String(distributionError)
+            }
+          })
+          await touchMetaConversation({
+            conversationId,
+            lastMessage: transferText,
+            lastMessageType: "system"
+          })
         }
 
         await updateSession(session.id, { current_node_id: null, state: "completed", context })
@@ -582,6 +603,27 @@ export async function runMetaChatbotForInbound({
           }
         } catch (distributionError) {
           console.error("Erro ao distribuir conversa automaticamente:", distributionError)
+          const transferText = "Erro ao transferir atendimento automaticamente pelo chatbot."
+          await insertMetaMessage({
+            conversationId,
+            connectionId,
+            direction: "outbound",
+            status: "sent",
+            fromPhone: null,
+            toPhone: null,
+            type: "system",
+            message: transferText,
+            rawPayload: {
+              event: "auto_transfer_error",
+              by: "chatbot",
+              details: distributionError instanceof Error ? distributionError.message : String(distributionError)
+            }
+          })
+          await touchMetaConversation({
+            conversationId,
+            lastMessage: transferText,
+            lastMessageType: "system"
+          })
         }
       }
 
