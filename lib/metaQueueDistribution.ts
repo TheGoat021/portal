@@ -59,6 +59,21 @@ async function insertDistributionLog(payload: {
   }
 }
 
+export async function logMetaQueueDistributionEvent(payload: {
+  connectionId: string
+  conversationId: string
+  department: string
+  status: string
+  reason?: string | null
+  selectedUserId?: string | null
+  selectedUserEmail?: string | null
+  candidatesCount?: number | null
+  eligibleCount?: number | null
+  details?: Record<string, unknown>
+}) {
+  await insertDistributionLog(payload)
+}
+
 function normalizeRoleText(value: string) {
   return value
     .normalize("NFD")

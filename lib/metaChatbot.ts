@@ -1,7 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin"
 import { getMetaConnectionById, insertMetaMessage, touchMetaConversation } from "@/lib/metaDb"
 import { upsertMetaConversationManagement } from "@/lib/metaConversationManagement"
-import { tryAutoAssignConversation } from "@/lib/metaQueueDistribution"
+import { logMetaQueueDistributionEvent, tryAutoAssignConversation } from "@/lib/metaQueueDistribution"
 import { normalizePhone, sendTextMessage } from "@/lib/whatsappMeta"
 
 export type ChatbotNodeType = "start" | "message" | "question" | "condition" | "action" | "end"
@@ -419,6 +419,13 @@ export async function runMetaChatbotForInbound({
           nodeKind,
           department
         })
+        await logMetaQueueDistributionEvent({
+          connectionId,
+          conversationId,
+          department,
+          status: "route_action_entered",
+          reason: "chatbot_action_node"
+        })
 
         await upsertMetaConversationManagement({
           conversation_id: conversationId,
@@ -551,6 +558,13 @@ export async function runMetaChatbotForInbound({
           nodeId: node.id,
           nodeKind,
           department
+        })
+        await logMetaQueueDistributionEvent({
+          connectionId,
+          conversationId,
+          department,
+          status: "route_action_entered",
+          reason: "chatbot_end_node"
         })
 
         await upsertMetaConversationManagement({
