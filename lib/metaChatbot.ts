@@ -394,8 +394,8 @@ export async function runMetaChatbotForInbound({
     }
 
     if (nodeKind === "action") {
-      const actionType = node.data?.actionType || "note"
-      const actionValue = node.data?.actionValue || ""
+      const actionValue = (node.data?.actionValue || "").trim()
+      const actionType = node.data?.actionType || (actionValue ? "route" : "note")
 
       context = {
         ...context,
@@ -410,8 +410,8 @@ export async function runMetaChatbotForInbound({
         await sendBotMessage({ connectionId, conversationId, to, text: message })
       }
 
-      if (actionType === "route" && actionValue.trim()) {
-        const department = actionValue.trim()
+      if (actionType === "route" && actionValue) {
+        const department = actionValue
         console.log("META CHATBOT ROUTE ACTION:", {
           connectionId,
           conversationId,
@@ -543,15 +543,15 @@ export async function runMetaChatbotForInbound({
     }
 
     if (nodeKind === "end") {
-      const actionType = node.data?.actionType || "note"
-      const actionValue = node.data?.actionValue || ""
+      const actionValue = (node.data?.actionValue || "").trim()
+      const actionType = node.data?.actionType || (actionValue ? "route" : "note")
 
       if (message) {
         await sendBotMessage({ connectionId, conversationId, to, text: message })
       }
 
-      if (actionType === "route" && actionValue.trim()) {
-        const department = actionValue.trim()
+      if (actionType === "route" && actionValue) {
+        const department = actionValue
         console.log("META CHATBOT ROUTE ACTION:", {
           connectionId,
           conversationId,
