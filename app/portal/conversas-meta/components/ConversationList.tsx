@@ -199,6 +199,7 @@ export default function ConversationsList({
   const [creatingConversation, setCreatingConversation] = useState(false)
   const [pullingConversationId, setPullingConversationId] = useState<string | null>(null)
   const [onlyUnreadForOperator, setOnlyUnreadForOperator] = useState(false)
+  const [alertColorFilter, setAlertColorFilter] = useState<"all" | "warning" | "danger">("all")
   const [distributionActive, setDistributionActive] = useState(true)
   const [loadingAvailability, setLoadingAvailability] = useState(false)
   const [savingAvailability, setSavingAvailability] = useState(false)
@@ -381,6 +382,12 @@ export default function ConversationsList({
       base = base.filter((conversation) => (conversation.unreadCount ?? 0) > 0)
     }
 
+    if (alertColorFilter === "warning") {
+      base = base.filter((conversation) => conversation.responseAlertLevel === "warning")
+    } else if (alertColorFilter === "danger") {
+      base = base.filter((conversation) => conversation.responseAlertLevel === "danger")
+    }
+
     const filtered = !q
       ? base
       : base.filter((c) => {
@@ -417,7 +424,7 @@ export default function ConversationsList({
       const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0
       return bTime - aTime
     })
-  }, [visibleConversations, search, serviceFilter, isDiretoria, onlyUnreadForOperator])
+  }, [visibleConversations, search, serviceFilter, isDiretoria, onlyUnreadForOperator, alertColorFilter])
 
   const unreadVisibleCount = useMemo(
     () => visibleConversations.filter((conversation) => (conversation.unreadCount ?? 0) > 0).length,
@@ -667,32 +674,41 @@ export default function ConversationsList({
                   onClick={toggleDistributionActive}
                   disabled={loadingAvailability || savingAvailability}
                   className={[
-                    "h-7 px-2 rounded-full border text-[11px] font-medium flex items-center gap-1.5 transition disabled:opacity-60",
+                    "h-7 w-7 rounded-full border text-[11px] font-medium flex items-center justify-center transition disabled:opacity-60",
                     distributionActive
                       ? "bg-green-50 text-green-700 border-green-300"
                       : "bg-red-50 text-red-700 border-red-300"
                   ].join(" ")}
                   title="Disponibilidade do operador para distribuicao automatica"
                 >
-                  {distributionActive ? <UserCheck size={12} /> : <UserX size={12} />}
-                  <span>{distributionActive ? "Ativo na fila" : "Pausado na fila"}</span>
+                  {distributionActive ? <UserCheck size={13} /> : <UserX size={13} />}
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setOnlyUnreadForOperator((prev) => !prev)}
                   className={[
-                    "h-7 px-2 rounded-full border text-[11px] font-medium flex items-center gap-1.5 transition",
+                    "h-7 min-w-7 px-1.5 rounded-full border text-[11px] font-medium flex items-center justify-center gap-1 transition",
                     onlyUnreadForOperator
                       ? "bg-emerald-50 text-emerald-700 border-emerald-300"
                       : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
                   ].join(" ")}
                   title="Mostrar apenas conversas com mensagens não lidas"
                 >
-                  {onlyUnreadForOperator ? <Bell size={12} /> : <BellOff size={12} />}
-                  <span>Não lidas</span>
-                  <span className="text-[10px] opacity-80">({unreadVisibleCount})</span>
+                  {onlyUnreadForOperator ? <Bell size={13} /> : <BellOff size={13} />}
+                  <span className="text-[10px] opacity-80">{unreadVisibleCount}</span>
                 </button>
+
+                <select
+                  value={alertColorFilter}
+                  onChange={(e) => setAlertColorFilter(e.target.value as "all" | "warning" | "danger")}
+                  className="h-7 w-10 rounded-full border text-[11px] font-medium bg-white text-gray-700 border-gray-200 focus:outline-none"
+                  title="Filtrar por cor do alerta"
+                >
+                  <option value="all">⚪</option>
+                  <option value="warning">🟡</option>
+                  <option value="danger">🔴</option>
+                </select>
               </div>
             ) : null}
           </div>

@@ -3,6 +3,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
+function parseRawPayload(raw: unknown): Record<string, unknown> | null {
+  if (!raw) return null
+  if (typeof raw === "object") return raw as Record<string, unknown>
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>
+    } catch {}
+  }
+  return null
+}
+
+function isOperatorOutbound(rawPayload: unknown) {
+  const parsed = parseRawPayload(rawPayload)
+  if (!parsed) return false
+
+  const directAgentId = String(parsed.agentId ?? parsed.agent_id ?? "").trim()
+  const directAgentEmail = String(parsed.agentEmail ?? parsed.agent_email ?? "").trim()
+  if (directAgentId || directAgentEmail) return true
+
+  const nestedSend =
+    parsed.send && typeof parsed.send === "object"
+      ? (parsed.send as Record<string, unknown>)
+      : null
+
+  const nestedAgentId = nestedSend ? String(nestedSend.agentId ?? nestedSend.agent_id ?? "").trim() : ""
+  const nestedAgentEmail = nestedSend ? String(nestedSend.agentEmail ?? nestedSend.agent_email ?? "").trim() : ""
+  return Boolean(nestedAgentId || nestedAgentEmail)
+}
+
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url)
@@ -91,7 +121,7 @@ export async function GET(req: NextRequest) {
     const latestOutboundByConversation = new Map<string, string>()
 
     if (conversationIds.length > 0) {
-      const [{ data: inboundRows }, { data: outboundRows }] = await Promise.all([
+      const [{ data: inboundRows }, { data: outboundRowsRaw }] = await Promise.all([
         supabaseAdmin
           .from("meta_messages")
           .select("conversation_id, created_at")
@@ -100,7 +130,7 @@ export async function GET(req: NextRequest) {
           .order("created_at", { ascending: false }),
         supabaseAdmin
           .from("meta_messages")
-          .select("conversation_id, created_at")
+          .select("conversation_id, created_at, raw_payload")
           .in("conversation_id", conversationIds)
           .eq("direction", "outbound")
           .neq("type", "system")
@@ -114,7 +144,10 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      for (const row of outboundRows ?? []) {
+      for (const row of outboundRowsRaw ?? []) {
+        if (!isOperatorOutbound((row as { raw_payload?: unknown }).raw_payload)) {
+          continue
+        }
         const conversationId = String(row.conversation_id)
         if (!latestOutboundByConversation.has(conversationId)) {
           latestOutboundByConversation.set(conversationId, String(row.created_at))
