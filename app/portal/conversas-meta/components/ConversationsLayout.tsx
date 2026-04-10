@@ -50,6 +50,10 @@ export default function ConversationsMetaLayout({
         <div className="flex-1 overflow-y-auto">
           <ClientDetails
             selectedConversationId={selectedConversationId}
+            currentUser={{
+              id: currentUser.id,
+              email: currentUser.email
+            }}
           />
         </div>
       </div>

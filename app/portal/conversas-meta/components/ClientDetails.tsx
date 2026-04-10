@@ -8,6 +8,10 @@ import { supabase } from "@/lib/supabaseClient"
 
 interface Props {
   selectedConversationId: string | null
+  currentUser: {
+    id: string
+    email: string
+  }
 }
 
 type LeadStatus = "Novo" | "Em contato" | "Proposta" | "Ganho" | "Perdido"
@@ -36,6 +40,18 @@ interface Client {
   lead_status?: LeadStatus | null
   origemId?: string | null
   connectionId?: string | null
+}
+
+type ConversationNote = {
+  id: string
+  note: string
+  user_email?: string | null
+  created_at: string
+}
+
+type ConversationReminder = {
+  scheduled_for: string
+  description: string
 }
 
 const statusToValue: Record<LeadStatus, LeadStatusValue> = {
@@ -74,9 +90,34 @@ function normalizeLeadStatus(value: unknown): LeadStatus {
   return "Novo"
 }
 
-export default function ClientDetails({ selectedConversationId }: Props) {
+function formatDateTimeLocalInput(value?: string | null) {
+  if (!value) return ""
+  const d = new Date(value)
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function formatDateTimeBR(value?: string | null) {
+  if (!value) return "-"
+  return new Date(value).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  })
+}
+
+export default function ClientDetails({ selectedConversationId, currentUser }: Props) {
   const [client, setClient] = useState<Client | null>(null)
   const [origens, setOrigens] = useState<Origem[]>([])
+  const [notes, setNotes] = useState<ConversationNote[]>([])
+  const [newNote, setNewNote] = useState("")
+  const [savingNote, setSavingNote] = useState(false)
+  const [reminderDateTime, setReminderDateTime] = useState("")
+  const [reminderDescription, setReminderDescription] = useState("")
+  const [activeReminder, setActiveReminder] = useState<ConversationReminder | null>(null)
+  const [savingReminder, setSavingReminder] = useState(false)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savingStatus, setSavingStatus] = useState(false)
@@ -115,10 +156,12 @@ export default function ClientDetails({ selectedConversationId }: Props) {
       try {
         setLoading(true)
 
-        const [conversationRes, leadsRes, origensRes] = await Promise.all([
+        const [conversationRes, leadsRes, origensRes, notesRes, reminderRes] = await Promise.all([
           fetch(`/api/whatsapp-meta/conversations/${selectedConversationId}`, { cache: "no-store" }),
           fetch("/api/leads", { cache: "no-store" }),
-          fetch("/api/origens", { cache: "no-store" })
+          fetch("/api/origens", { cache: "no-store" }),
+          fetch(`/api/whatsapp-meta/conversations/${selectedConversationId}/notes`, { cache: "no-store" }),
+          fetch(`/api/whatsapp-meta/conversations/${selectedConversationId}/reminder`, { cache: "no-store" })
         ])
 
         if (!conversationRes.ok || !leadsRes.ok) {
@@ -130,8 +173,14 @@ export default function ClientDetails({ selectedConversationId }: Props) {
         const conversation: MetaConversation | null = conversationPayload?.data ?? conversationPayload ?? null
         const leads: any[] = await leadsRes.json()
         const origensData: Origem[] = origensRes.ok ? await origensRes.json() : []
+        const notesPayload = notesRes.ok ? await notesRes.json() : { data: [] }
+        const reminderPayload = reminderRes.ok ? await reminderRes.json() : { data: null }
 
         setOrigens(origensData || [])
+        setNotes((notesPayload?.data ?? []) as ConversationNote[])
+        setActiveReminder((reminderPayload?.data as ConversationReminder | null) ?? null)
+        setReminderDateTime(formatDateTimeLocalInput(reminderPayload?.data?.scheduled_for))
+        setReminderDescription(String(reminderPayload?.data?.description || ""))
 
         if (!conversation) {
           setClient(null)
@@ -176,6 +225,71 @@ export default function ClientDetails({ selectedConversationId }: Props) {
 
     fetchClient()
   }, [selectedConversationId])
+
+  const handleAddNote = async () => {
+    if (!selectedConversationId || !newNote.trim() || savingNote) return
+    try {
+      setSavingNote(true)
+      const res = await fetch(`/api/whatsapp-meta/conversations/${selectedConversationId}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          note: newNote.trim()
+        })
+      })
+      const payload = await res.json().catch(() => null)
+      if (!res.ok || !payload?.ok) return
+      setNotes((prev) => [payload.data as ConversationNote, ...prev])
+      setNewNote("")
+    } finally {
+      setSavingNote(false)
+    }
+  }
+
+  const handleSaveReminder = async () => {
+    if (!selectedConversationId || !reminderDateTime || !reminderDescription.trim() || savingReminder) return
+    try {
+      setSavingReminder(true)
+      const res = await fetch(`/api/whatsapp-meta/conversations/${selectedConversationId}/reminder`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          scheduledFor: new Date(reminderDateTime).toISOString(),
+          description: reminderDescription.trim()
+        })
+      })
+      const payload = await res.json().catch(() => null)
+      if (!res.ok || !payload?.ok) return
+
+      const reminder = payload.data as ConversationReminder
+      setActiveReminder(reminder)
+      setReminderDateTime(formatDateTimeLocalInput(reminder.scheduled_for))
+      setReminderDescription(reminder.description)
+    } finally {
+      setSavingReminder(false)
+    }
+  }
+
+  const handleCompleteReminder = async () => {
+    if (!selectedConversationId || !activeReminder || savingReminder) return
+    try {
+      setSavingReminder(true)
+      await fetch(`/api/whatsapp-meta/conversations/${selectedConversationId}/reminder`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: currentUser.id })
+      })
+      setActiveReminder(null)
+      setReminderDateTime("")
+      setReminderDescription("")
+    } finally {
+      setSavingReminder(false)
+    }
+  }
 
   const handleSave = async () => {
     if (!client) return
@@ -429,6 +543,86 @@ export default function ClientDetails({ selectedConversationId }: Props) {
           >
             {saving ? "Salvando..." : "Salvar alteracoes"}
           </button>
+        </div>
+
+        <div className="rounded-xl border bg-white p-3 space-y-3">
+          <div className="text-[11px] uppercase tracking-wide text-gray-500">Realizar mais tarde</div>
+
+          {activeReminder ? (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-2.5 text-xs text-blue-900">
+              <div className="font-medium">Agendado para {formatDateTimeBR(activeReminder.scheduled_for)}</div>
+              <div className="mt-1 whitespace-pre-wrap">{activeReminder.description}</div>
+            </div>
+          ) : null}
+
+          <div className="space-y-2">
+            <input
+              type="datetime-local"
+              value={reminderDateTime}
+              onChange={(e) => setReminderDateTime(e.target.value)}
+              className="w-full h-9 border rounded-lg px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-200"
+            />
+            <textarea
+              value={reminderDescription}
+              onChange={(e) => setReminderDescription(e.target.value)}
+              className="w-full min-h-[78px] border rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-200"
+              placeholder="O que precisa ser feito com esse cliente..."
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleSaveReminder}
+              disabled={savingReminder || !reminderDateTime || !reminderDescription.trim()}
+              className="flex-1 h-9 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition disabled:opacity-70"
+            >
+              {savingReminder ? "Salvando..." : "Salvar agendamento"}
+            </button>
+            {activeReminder ? (
+              <button
+                onClick={handleCompleteReminder}
+                disabled={savingReminder}
+                className="h-9 px-3 border rounded-lg text-sm hover:bg-gray-50 disabled:opacity-70"
+              >
+                Concluir
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-white p-3 space-y-3">
+          <div className="text-[11px] uppercase tracking-wide text-gray-500">Notas</div>
+
+          <div className="space-y-2">
+            <textarea
+              value={newNote}
+              onChange={(e) => setNewNote(e.target.value)}
+              className="w-full min-h-[80px] border rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-200"
+              placeholder="Anote informacoes importantes sobre esse cliente..."
+            />
+            <button
+              onClick={handleAddNote}
+              disabled={savingNote || !newNote.trim()}
+              className="h-9 px-3 rounded-lg bg-gray-900 text-white text-sm hover:bg-black transition disabled:opacity-70"
+            >
+              {savingNote ? "Salvando..." : "Adicionar nota"}
+            </button>
+          </div>
+
+          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+            {notes.length === 0 ? (
+              <div className="text-xs text-gray-500">Nenhuma nota ainda.</div>
+            ) : (
+              notes.map((note) => (
+                <div key={note.id} className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2">
+                  <div className="text-[11px] text-gray-500">
+                    {(note.user_email || "Operador")} • {formatDateTimeBR(note.created_at)}
+                  </div>
+                  <div className="text-sm text-gray-800 whitespace-pre-wrap mt-1">{note.note}</div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
     </div>

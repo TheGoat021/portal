@@ -16,6 +16,9 @@ type QueueSettings = {
   max_simultaneous_per_agent: number | null
   auto_close_inactive_enabled: boolean
   inactive_close_minutes: number | null
+  response_alerts_enabled: boolean
+  response_alert_warning_minutes: number | null
+  response_alert_danger_minutes: number | null
 }
 
 type CurrentUser = {
@@ -52,7 +55,27 @@ function defaultSettings(connectionId: string): QueueSettings {
     max_simultaneous_enabled: false,
     max_simultaneous_per_agent: null,
     auto_close_inactive_enabled: false,
-    inactive_close_minutes: null
+    inactive_close_minutes: null,
+    response_alerts_enabled: false,
+    response_alert_warning_minutes: 10,
+    response_alert_danger_minutes: 30
+  }
+}
+
+function normalizeSettings(connectionId: string, raw?: Partial<QueueSettings> | null): QueueSettings {
+  return {
+    connection_id: connectionId,
+    auto_distribution_enabled: Boolean(raw?.auto_distribution_enabled ?? true),
+    max_simultaneous_enabled: Boolean(raw?.max_simultaneous_enabled ?? false),
+    max_simultaneous_per_agent:
+      raw?.max_simultaneous_per_agent == null ? null : Number(raw.max_simultaneous_per_agent),
+    auto_close_inactive_enabled: Boolean(raw?.auto_close_inactive_enabled ?? false),
+    inactive_close_minutes: raw?.inactive_close_minutes == null ? null : Number(raw.inactive_close_minutes),
+    response_alerts_enabled: Boolean(raw?.response_alerts_enabled ?? false),
+    response_alert_warning_minutes:
+      raw?.response_alert_warning_minutes == null ? 10 : Number(raw.response_alert_warning_minutes),
+    response_alert_danger_minutes:
+      raw?.response_alert_danger_minutes == null ? 30 : Number(raw.response_alert_danger_minutes)
   }
 }
 
@@ -142,7 +165,7 @@ export default function MetaQueueSettingsPage() {
         return
       }
 
-      setSettings((payload.data as QueueSettings) || defaultSettings(connectionId))
+      setSettings(normalizeSettings(connectionId, (payload.data as Partial<QueueSettings>) || null))
     } finally {
       setLoading(false)
     }
@@ -242,7 +265,10 @@ export default function MetaQueueSettingsPage() {
           maxSimultaneousEnabled: dataToSave.max_simultaneous_enabled,
           maxSimultaneousPerAgent: dataToSave.max_simultaneous_per_agent,
           autoCloseInactiveEnabled: dataToSave.auto_close_inactive_enabled,
-          inactiveCloseMinutes: dataToSave.inactive_close_minutes
+          inactiveCloseMinutes: dataToSave.inactive_close_minutes,
+          responseAlertsEnabled: dataToSave.response_alerts_enabled,
+          responseAlertWarningMinutes: dataToSave.response_alert_warning_minutes,
+          responseAlertDangerMinutes: dataToSave.response_alert_danger_minutes
         })
       })
 
@@ -252,7 +278,7 @@ export default function MetaQueueSettingsPage() {
         return
       }
 
-      setSettings(payload.data as QueueSettings)
+      setSettings(normalizeSettings(selectedConnectionId, (payload.data as Partial<QueueSettings>) || null))
       setStatusText("Configuracoes de fila salvas com sucesso.")
     } finally {
       setSaving(false)
@@ -409,6 +435,73 @@ export default function MetaQueueSettingsPage() {
                   className="w-full h-10 px-3 rounded-xl border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-gray-200 disabled:bg-gray-100"
                   placeholder="Ex: 3"
                 />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={formSettings.response_alerts_enabled}
+                  onChange={(e) =>
+                    updateSettings((prev) => ({
+                      ...prev,
+                      response_alerts_enabled: e.target.checked,
+                      response_alert_warning_minutes: e.target.checked
+                        ? prev.response_alert_warning_minutes || 10
+                        : null,
+                      response_alert_danger_minutes: e.target.checked
+                        ? prev.response_alert_danger_minutes || 30
+                        : null
+                    }))
+                  }
+                  disabled={!canManage}
+                  className="mt-1"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-gray-900">Alertas de tempo sem resposta</span>
+                  <span className="block text-xs text-gray-500">
+                    Pinta os cards da lista quando o cliente esta aguardando retorno do operador.
+                  </span>
+                </span>
+              </label>
+
+              <div className="pl-7 grid grid-cols-1 md:grid-cols-2 gap-3 max-w-xl">
+                <div>
+                  <label className="block text-xs text-amber-700 mb-1">Amarelo apos (min)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={formSettings.response_alert_warning_minutes ?? ""}
+                    onChange={(e) =>
+                      updateSettings((prev) => ({
+                        ...prev,
+                        response_alert_warning_minutes: e.target.value ? Number(e.target.value) : null
+                      }))
+                    }
+                    disabled={!canManage || !formSettings.response_alerts_enabled}
+                    className="w-full h-10 px-3 rounded-xl border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-gray-200 disabled:bg-gray-100"
+                    placeholder="Ex: 10"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-red-700 mb-1">Vermelho apos (min)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={formSettings.response_alert_danger_minutes ?? ""}
+                    onChange={(e) =>
+                      updateSettings((prev) => ({
+                        ...prev,
+                        response_alert_danger_minutes: e.target.value ? Number(e.target.value) : null
+                      }))
+                    }
+                    disabled={!canManage || !formSettings.response_alerts_enabled}
+                    className="w-full h-10 px-3 rounded-xl border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-gray-200 disabled:bg-gray-100"
+                    placeholder="Ex: 30"
+                  />
+                </div>
               </div>
             </div>
 

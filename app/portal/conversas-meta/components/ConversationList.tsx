@@ -59,6 +59,11 @@ interface BackendConversation {
   connection_id: string
   service_state?: "bot" | "operator" | "closed"
   assigned_user_id?: string | null
+  waiting_for_reply?: boolean
+  minutes_without_reply?: number | null
+  response_alert_level?: "warning" | "danger" | null
+  reminder_due_at?: string | null
+  reminder_description?: string | null
 }
 
 interface Conversation {
@@ -72,6 +77,11 @@ interface Conversation {
   connectionId: string
   serviceState: "bot" | "operator" | "closed"
   assignedUserId?: string | null
+  waitingForReply?: boolean
+  minutesWithoutReply?: number | null
+  responseAlertLevel?: "warning" | "danger" | null
+  reminderDueAt?: string | null
+  reminderDescription?: string | null
   lastMessageType?:
     | "text"
     | "image"
@@ -261,6 +271,12 @@ export default function ConversationsList({
         connectionId: conv.connection_id,
         serviceState: conv.service_state || "bot",
         assignedUserId: conv.assigned_user_id ?? null,
+        waitingForReply: Boolean(conv.waiting_for_reply),
+        minutesWithoutReply:
+          typeof conv.minutes_without_reply === "number" ? Number(conv.minutes_without_reply) : null,
+        responseAlertLevel: conv.response_alert_level ?? null,
+        reminderDueAt: conv.reminder_due_at ?? null,
+        reminderDescription: conv.reminder_description ?? null,
         lastMessageType: conv.last_message_type ?? "text"
       }))
 
@@ -365,20 +381,41 @@ export default function ConversationsList({
       base = base.filter((conversation) => (conversation.unreadCount ?? 0) > 0)
     }
 
-    if (!q) return base
+    const filtered = !q
+      ? base
+      : base.filter((c) => {
+          const name = (c.name || "").toLowerCase()
+          const profileName = (c.profileName || "").toLowerCase()
+          const phone = (c.phone || "").toLowerCase()
+          const last = (c.lastMessage || "").toLowerCase()
 
-    return base.filter((c) => {
-      const name = (c.name || "").toLowerCase()
-      const profileName = (c.profileName || "").toLowerCase()
-      const phone = (c.phone || "").toLowerCase()
-      const last = (c.lastMessage || "").toLowerCase()
+          return (
+            name.includes(q) ||
+            profileName.includes(q) ||
+            phone.includes(q) ||
+            last.includes(q)
+          )
+        })
 
-      return (
-        name.includes(q) ||
-        profileName.includes(q) ||
-        phone.includes(q) ||
-        last.includes(q)
-      )
+    const nowMs = Date.now()
+    return [...filtered].sort((a, b) => {
+      const aReminderMs = a.reminderDueAt ? new Date(a.reminderDueAt).getTime() : Number.POSITIVE_INFINITY
+      const bReminderMs = b.reminderDueAt ? new Date(b.reminderDueAt).getTime() : Number.POSITIVE_INFINITY
+
+      const aReminderDue = a.serviceState === "operator" && Number.isFinite(aReminderMs) && aReminderMs <= nowMs
+      const bReminderDue = b.serviceState === "operator" && Number.isFinite(bReminderMs) && bReminderMs <= nowMs
+
+      if (aReminderDue !== bReminderDue) {
+        return aReminderDue ? -1 : 1
+      }
+
+      if (aReminderDue && bReminderDue && aReminderMs !== bReminderMs) {
+        return aReminderMs - bReminderMs
+      }
+
+      const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0
+      const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0
+      return bTime - aTime
     })
   }, [visibleConversations, search, serviceFilter, isDiretoria, onlyUnreadForOperator])
 
@@ -691,6 +728,8 @@ export default function ConversationsList({
               (conv.unreadCount ?? 0) > 0
 
             const preview = getConversationPreview(conv)
+            const reminderMs = conv.reminderDueAt ? new Date(conv.reminderDueAt).getTime() : null
+            const reminderDue = conv.serviceState === "operator" && reminderMs !== null && reminderMs <= Date.now()
 
             return (
               <div
@@ -705,8 +744,13 @@ export default function ConversationsList({
                   }
                 }}
                 className={[
-                  "w-full text-left px-4 py-3 border-b border-gray-100 transition cursor-pointer",
-                  isSelected ? "bg-gray-50" : "hover:bg-gray-50"
+                  "w-full text-left px-4 py-3 border-b transition cursor-pointer",
+                  conv.responseAlertLevel === "danger"
+                    ? "border-red-500 bg-red-100/95 shadow-[inset_0_0_0_1px_rgba(220,38,38,0.45)] hover:bg-red-200/95"
+                    : conv.responseAlertLevel === "warning"
+                      ? "border-amber-400 bg-amber-100/95 shadow-[inset_0_0_0_1px_rgba(217,119,6,0.45)] hover:bg-amber-200/95"
+                      : "border-gray-100 hover:bg-gray-50",
+                  isSelected ? "ring-1 ring-gray-300" : ""
                 ].join(" ")}
               >
                 <div className="flex items-start gap-3">
@@ -764,6 +808,20 @@ export default function ConversationsList({
                           >
                             {pullingConversationId === conv.id ? "Puxando..." : "Puxar"}
                           </button>
+                        ) : null}
+                        {conv.reminderDueAt ? (
+                          <div
+                            className={[
+                              "text-[10px] px-1.5 py-0.5 rounded-full border flex items-center gap-1",
+                              reminderDue
+                                ? "bg-red-100 text-red-800 border-red-300"
+                                : "bg-indigo-50 text-indigo-700 border-indigo-200"
+                            ].join(" ")}
+                            title={conv.reminderDescription || "Realizar mais tarde"}
+                          >
+                            <Bell size={10} />
+                            <span>{formatReminderSmall(conv.reminderDueAt)}</span>
+                          </div>
                         ) : null}
                       </div>
                     </div>
@@ -825,6 +883,17 @@ export default function ConversationsList({
       )}
     </div>
   )
+}
+
+function formatReminderSmall(dateString?: string | null) {
+  if (!dateString) return ""
+  const d = new Date(dateString)
+  return d.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  })
 }
 
 type ServiceFilter = "bot" | "operator" | "closed"

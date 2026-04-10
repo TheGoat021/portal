@@ -98,11 +98,13 @@ export async function POST(req: NextRequest, context: RouteContext) {
       }
     })
 
+    const shouldMarkAsUnreadForTarget = Boolean(byUserId && byUserId !== toUserId)
+
     await touchMetaConversation({
       conversationId: conversation.id,
       lastMessage: transferText,
       lastMessageType: "system",
-      incrementUnread: false
+      incrementUnread: shouldMarkAsUnreadForTarget
     })
 
     return NextResponse.json({
