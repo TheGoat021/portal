@@ -28,6 +28,19 @@ async function insertDistributionLog(payload: {
   eligibleCount?: number | null
   details?: Record<string, unknown>
 }) {
+  console.log("META DISTRIBUTION LOG:", {
+    connectionId: payload.connectionId,
+    conversationId: payload.conversationId,
+    department: payload.department,
+    status: payload.status,
+    reason: payload.reason ?? null,
+    selectedUserId: payload.selectedUserId ?? null,
+    selectedUserEmail: payload.selectedUserEmail ?? null,
+    candidatesCount: payload.candidatesCount ?? null,
+    eligibleCount: payload.eligibleCount ?? null,
+    details: payload.details ?? {}
+  })
+
   const { error } = await supabaseAdmin.from("meta_queue_distribution_logs").insert({
     connection_id: payload.connectionId,
     conversation_id: payload.conversationId,
@@ -144,8 +157,21 @@ export async function tryAutoAssignConversation({
   if (!cleanDepartment) return null
   const normalizedDepartment = normalizeRoleText(cleanDepartment)
 
+  console.log("META DISTRIBUTION START:", {
+    connectionId,
+    conversationId,
+    department: cleanDepartment,
+    normalizedDepartment
+  })
+
   try {
     const settings = await getQueueSettings(connectionId)
+    console.log("META DISTRIBUTION SETTINGS:", {
+      connectionId,
+      conversationId,
+      settings
+    })
+
     if (!settings.auto_distribution_enabled) {
       await insertDistributionLog({
         connectionId,
@@ -158,6 +184,14 @@ export async function tryAutoAssignConversation({
     }
 
     const currentManagement = await getMetaConversationManagement(conversationId)
+    console.log("META DISTRIBUTION CURRENT MANAGEMENT:", {
+      connectionId,
+      conversationId,
+      assigned_user_id: currentManagement?.assigned_user_id ?? null,
+      assigned_department: currentManagement?.assigned_department ?? null,
+      status: currentManagement?.status ?? null
+    })
+
     if (currentManagement?.assigned_user_id) {
       await insertDistributionLog({
         connectionId,
@@ -185,6 +219,17 @@ export async function tryAutoAssignConversation({
         role: item.role ? String(item.role) : null
       }))
       .filter((item) => normalizeRoleText(item.role || "") === normalizedDepartment)
+
+    console.log("META DISTRIBUTION CANDIDATES:", {
+      connectionId,
+      conversationId,
+      department: cleanDepartment,
+      candidates: agentsList.map((item) => ({
+        id: item.id,
+        email: item.email,
+        role: item.role
+      }))
+    })
 
     if (!agentsList.length) {
       await insertDistributionLog({
@@ -215,6 +260,18 @@ export async function tryAutoAssignConversation({
     }
 
     let eligibleAgents = agentsList.filter((agent) => availabilityMap.get(agent.id) !== false)
+    console.log("META DISTRIBUTION ELIGIBLE AFTER AVAILABILITY:", {
+      connectionId,
+      conversationId,
+      department: cleanDepartment,
+      eligible: eligibleAgents.map((item) => ({
+        id: item.id,
+        email: item.email,
+        role: item.role
+      })),
+      availability: Array.from(availabilityMap.entries()).map(([userId, isActive]) => ({ userId, isActive }))
+    })
+
     if (!eligibleAgents.length) {
       await insertDistributionLog({
         connectionId,
@@ -249,6 +306,19 @@ export async function tryAutoAssignConversation({
       }
 
       eligibleAgents = eligibleAgents.filter((agent) => (openCountByUser.get(agent.id) ?? 0) < maxPerAgent)
+      console.log("META DISTRIBUTION ELIGIBLE AFTER CAPACITY:", {
+        connectionId,
+        conversationId,
+        department: cleanDepartment,
+        maxPerAgent,
+        eligible: eligibleAgents.map((item) => ({
+          id: item.id,
+          email: item.email,
+          role: item.role
+        })),
+        openCountByUser: Array.from(openCountByUser.entries()).map(([userId, count]) => ({ userId, count }))
+      })
+
       if (!eligibleAgents.length) {
         await insertDistributionLog({
           connectionId,
@@ -285,6 +355,17 @@ export async function tryAutoAssignConversation({
       eligibleAgents,
       rotationRow?.last_assigned_user_id ? String(rotationRow.last_assigned_user_id) : null
     )
+    console.log("META DISTRIBUTION ROTATION:", {
+      connectionId,
+      conversationId,
+      department: cleanDepartment,
+      lastAssignedUserId: rotationRow?.last_assigned_user_id ? String(rotationRow.last_assigned_user_id) : null,
+      rotatedOrder: rotatedAgents.map((item) => ({
+        id: item.id,
+        email: item.email
+      }))
+    })
+
     const picked = rotatedAgents[0]
     if (!picked) {
       await insertDistributionLog({
@@ -325,6 +406,14 @@ export async function tryAutoAssignConversation({
       )
 
     if (rotationUpsertError) throw new Error(rotationUpsertError.message)
+
+    console.log("META DISTRIBUTION ASSIGNED:", {
+      connectionId,
+      conversationId,
+      department: cleanDepartment,
+      selectedUserId: picked.id,
+      selectedUserEmail: picked.email
+    })
 
     await insertDistributionLog({
       connectionId,

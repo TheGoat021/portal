@@ -412,6 +412,13 @@ export async function runMetaChatbotForInbound({
 
       if (actionType === "route" && actionValue.trim()) {
         const department = actionValue.trim()
+        console.log("META CHATBOT ROUTE ACTION:", {
+          connectionId,
+          conversationId,
+          nodeId: node.id,
+          nodeKind,
+          department
+        })
 
         await upsertMetaConversationManagement({
           conversation_id: conversationId,
@@ -429,6 +436,13 @@ export async function runMetaChatbotForInbound({
             connectionId,
             conversationId,
             department
+          })
+          console.log("META CHATBOT ROUTE RESULT:", {
+            connectionId,
+            conversationId,
+            department,
+            assignedAgentId: assignedAgent?.id ?? null,
+            assignedAgentEmail: assignedAgent?.email ?? null
           })
 
           if (assignedAgent) {
@@ -531,6 +545,13 @@ export async function runMetaChatbotForInbound({
 
       if (actionType === "route" && actionValue.trim()) {
         const department = actionValue.trim()
+        console.log("META CHATBOT ROUTE ACTION:", {
+          connectionId,
+          conversationId,
+          nodeId: node.id,
+          nodeKind,
+          department
+        })
 
         await upsertMetaConversationManagement({
           conversation_id: conversationId,
@@ -548,6 +569,13 @@ export async function runMetaChatbotForInbound({
             connectionId,
             conversationId,
             department
+          })
+          console.log("META CHATBOT ROUTE RESULT:", {
+            connectionId,
+            conversationId,
+            department,
+            assignedAgentId: assignedAgent?.id ?? null,
+            assignedAgentEmail: assignedAgent?.email ?? null
           })
 
           if (assignedAgent) {
