@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
         id: String(user.id),
         email: user.email ? String(user.email) : "",
         role: user.role ? String(user.role) : "",
-        isActiveInQueue: availability?.is_active ?? false,
+        isActiveInQueue: availability?.is_active ?? true,
         updatedAt: availability?.updated_at ?? null
       }
     })
@@ -134,4 +134,3 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ ok: false, error: message }, { status: 500 })
   }
 }
-

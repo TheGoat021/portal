@@ -189,7 +189,7 @@ export default function ConversationsList({
   const [creatingConversation, setCreatingConversation] = useState(false)
   const [pullingConversationId, setPullingConversationId] = useState<string | null>(null)
   const [onlyUnreadForOperator, setOnlyUnreadForOperator] = useState(false)
-  const [distributionActive, setDistributionActive] = useState(false)
+  const [distributionActive, setDistributionActive] = useState(true)
   const [loadingAvailability, setLoadingAvailability] = useState(false)
   const [savingAvailability, setSavingAvailability] = useState(false)
   const roleUpper = (currentUser.role || "").toUpperCase()
@@ -287,7 +287,7 @@ export default function ConversationsList({
 
   useEffect(() => {
     if (!selectedConnectionId || isDiretoria) {
-      setDistributionActive(false)
+      setDistributionActive(true)
       return
     }
 
@@ -353,9 +353,6 @@ export default function ConversationsList({
 
     return conversations.filter((conversation) => {
       if (conversation.serviceState === "bot") return true
-      if (conversation.serviceState === "operator") {
-        return !conversation.assignedUserId || conversation.assignedUserId === currentUser.id
-      }
       return conversation.assignedUserId === currentUser.id
     })
   }, [conversations, currentUser.id, isDiretoria])
@@ -478,29 +475,6 @@ export default function ConversationsList({
 
   const handleSelectConversation = async (conv: Conversation) => {
     try {
-      if (
-        !isDiretoria &&
-        conv.serviceState === "operator" &&
-        !conv.assignedUserId &&
-        currentUser?.id
-      ) {
-        const claimRes = await fetch(`/api/whatsapp-meta/conversations/${conv.id}/transfer`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            toUserId: currentUser.id,
-            byUserId: currentUser.id
-          })
-        })
-
-        if (!claimRes.ok) {
-          console.error("Erro ao assumir conversa da fila:", await claimRes.text())
-          return
-        }
-
-        await fetchConversations(selectedConnectionId)
-      }
-
       onSelectConversation(conv.id)
 
       await fetch(`/api/whatsapp-meta/conversations/${conv.id}/read`, {

@@ -38,7 +38,7 @@ async function getQueueSettings(connectionId: string): Promise<QueueSettings> {
   }
 
   return {
-    auto_distribution_enabled: Boolean(data?.auto_distribution_enabled),
+    auto_distribution_enabled: data?.auto_distribution_enabled ?? true,
     max_simultaneous_enabled: Boolean(data?.max_simultaneous_enabled),
     max_simultaneous_per_agent: data?.max_simultaneous_per_agent ?? null
   }
@@ -59,7 +59,7 @@ export async function getAgentAvailability({
     .maybeSingle()
 
   if (error) throw new Error(error.message)
-  return data?.is_active ?? false
+  return data?.is_active ?? true
 }
 
 export async function setAgentAvailability({
@@ -141,7 +141,11 @@ export async function tryAutoAssignConversation({
     availabilityMap.set(String(row.user_id), Boolean(row.is_active))
   }
 
-  let eligibleAgents = agentsList.filter((agent) => availabilityMap.get(agent.id) === true)
+  const hasExplicitAvailability = availabilityMap.size > 0
+  let eligibleAgents = agentsList.filter((agent) => {
+    if (!hasExplicitAvailability) return true
+    return availabilityMap.get(agent.id) === true
+  })
   if (!eligibleAgents.length) return null
 
   if (settings.max_simultaneous_enabled && (settings.max_simultaneous_per_agent ?? 0) > 0) {

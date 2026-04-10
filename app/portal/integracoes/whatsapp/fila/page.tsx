@@ -34,7 +34,7 @@ type QueueAgent = {
 function defaultSettings(connectionId: string): QueueSettings {
   return {
     connection_id: connectionId,
-    auto_distribution_enabled: false,
+    auto_distribution_enabled: true,
     max_simultaneous_enabled: false,
     max_simultaneous_per_agent: null,
     auto_close_inactive_enabled: false,

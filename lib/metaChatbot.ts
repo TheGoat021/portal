@@ -425,11 +425,63 @@ export async function runMetaChatbotForInbound({
         })
 
         try {
-          await tryAutoAssignConversation({
+          const assignedAgent = await tryAutoAssignConversation({
             connectionId,
             conversationId,
             department
           })
+
+          if (assignedAgent) {
+            const target = assignedAgent.email || assignedAgent.id
+            const transferText = `Atendimento transferido por chatbot para ${target}.`
+
+            await insertMetaMessage({
+              conversationId,
+              connectionId,
+              direction: "outbound",
+              status: "sent",
+              fromPhone: null,
+              toPhone: null,
+              type: "system",
+              message: transferText,
+              rawPayload: {
+                event: "auto_transfer",
+                by: "chatbot",
+                toUserId: assignedAgent.id,
+                toUserEmail: assignedAgent.email
+              }
+            })
+
+            await touchMetaConversation({
+              conversationId,
+              lastMessage: transferText,
+              lastMessageType: "system"
+            })
+          } else {
+            const transferText = "Chatbot concluiu o fluxo, mas nenhum operador elegivel foi encontrado para transferencia."
+
+            await insertMetaMessage({
+              conversationId,
+              connectionId,
+              direction: "outbound",
+              status: "sent",
+              fromPhone: null,
+              toPhone: null,
+              type: "system",
+              message: transferText,
+              rawPayload: {
+                event: "auto_transfer_not_assigned",
+                by: "chatbot",
+                department
+              }
+            })
+
+            await touchMetaConversation({
+              conversationId,
+              lastMessage: transferText,
+              lastMessageType: "system"
+            })
+          }
         } catch (distributionError) {
           console.error("Erro ao distribuir conversa automaticamente:", distributionError)
         }
