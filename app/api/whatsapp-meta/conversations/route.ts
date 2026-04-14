@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { tryAutoAssignConversation } from '@/lib/metaQueueDistribution'
 
 function parseRawPayload(raw: unknown): Record<string, unknown> | null {
   if (!raw) return null
@@ -68,7 +69,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const { data: managementRows, error: managementRowsError } = await supabaseAdmin
+    let { data: managementRows, error: managementRowsError } = await supabaseAdmin
       .from("meta_conversation_management")
       .select("conversation_id, status, assigned_user_id, assigned_department, updated_at")
       .eq("connection_id", connectionId)
@@ -78,14 +79,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: managementRowsError.message }, { status: 500 })
     }
 
-    const { data: sessionRows, error: sessionRowsError } = await supabaseAdmin
-      .from("meta_chatbot_sessions")
-      .select("conversation_id, state")
+    const { data: queueSettings } = await supabaseAdmin
+      .from("meta_queue_settings")
+      .select(
+        "response_alerts_enabled, response_alert_warning_minutes, response_alert_danger_minutes, auto_close_inactive_enabled, inactive_close_minutes"
+      )
       .eq("connection_id", connectionId)
+      .maybeSingle()
 
-    if (sessionRowsError) {
-      return NextResponse.json({ error: sessionRowsError.message }, { status: 500 })
-    }
+    const autoCloseEnabled = Boolean(queueSettings?.auto_close_inactive_enabled)
+    const inactiveCloseMinutes = Number(queueSettings?.inactive_close_minutes ?? 0)
 
     const { data: reminderRowsRaw, error: reminderRowsError } = await supabaseAdmin
       .from("meta_conversation_reminders")
@@ -105,12 +108,6 @@ export async function GET(req: NextRequest) {
     }
 
     const reminderRows = reminderTableMissing ? [] : reminderRowsRaw ?? []
-
-    const { data: queueSettings } = await supabaseAdmin
-      .from("meta_queue_settings")
-      .select("response_alerts_enabled, response_alert_warning_minutes, response_alert_danger_minutes")
-      .eq("connection_id", connectionId)
-      .maybeSingle()
 
     const alertsEnabled = Boolean(queueSettings?.response_alerts_enabled)
     const warningMinutes = Number(queueSettings?.response_alert_warning_minutes ?? 10)
@@ -155,6 +152,87 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Auto-close: fecha por inatividade do contato tanto em bot quanto em atendimento.
+    if (autoCloseEnabled && inactiveCloseMinutes > 0) {
+      const thresholdMs = Date.now() - inactiveCloseMinutes * 60 * 1000
+      const toCloseConversationIds = new Set<string>()
+
+      for (const row of managementRows ?? []) {
+        const conversationId = String(row.conversation_id)
+        const status = String(row.status || "open")
+        if (status !== "open") continue
+
+        const lastInboundAt = latestInboundByConversation.get(conversationId)
+        if (!lastInboundAt) continue
+
+        const inboundMs = new Date(lastInboundAt).getTime()
+        if (!Number.isFinite(inboundMs)) continue
+        if (inboundMs <= thresholdMs) {
+          toCloseConversationIds.add(conversationId)
+        }
+      }
+
+      if (toCloseConversationIds.size > 0) {
+        await supabaseAdmin
+          .from("meta_conversation_management")
+          .update({
+            status: "closed",
+            closed_at: new Date().toISOString(),
+            closed_by_user_id: null,
+            updated_at: new Date().toISOString()
+          })
+          .eq("connection_id", connectionId)
+          .in("conversation_id", Array.from(toCloseConversationIds))
+          .eq("status", "open")
+      }
+    }
+
+    // Re-tenta atribuicao para conversas sem operador (evita ficarem presas invisiveis).
+    const pendingAutoAssign = new Map<string, string>()
+    for (const row of managementRows ?? []) {
+      const conversationId = String(row.conversation_id)
+      const status = String(row.status || "open")
+      const assignedUserId = row.assigned_user_id ? String(row.assigned_user_id) : ""
+      const department = row.assigned_department ? String(row.assigned_department).trim() : ""
+
+      if (status !== "open") continue
+      if (assignedUserId) continue
+      if (!department) continue
+      if (!pendingAutoAssign.has(conversationId)) {
+        pendingAutoAssign.set(conversationId, department)
+      }
+    }
+
+    if (pendingAutoAssign.size > 0) {
+      for (const [conversationId, department] of pendingAutoAssign.entries()) {
+        try {
+          await tryAutoAssignConversation({
+            connectionId,
+            conversationId,
+            department
+          })
+        } catch (assignError) {
+          console.error("Erro ao reprocessar atribuicao automatica:", {
+            connectionId,
+            conversationId,
+            department,
+            error: assignError instanceof Error ? assignError.message : String(assignError)
+          })
+        }
+      }
+
+      // Recarrega estado de gestao apos tentativas de atribuicao/auto-close.
+      const refreshed = await supabaseAdmin
+        .from("meta_conversation_management")
+        .select("conversation_id, status, assigned_user_id, assigned_department, updated_at")
+        .eq("connection_id", connectionId)
+        .order("updated_at", { ascending: false })
+
+      if (!refreshed.error) {
+        managementRows = refreshed.data ?? managementRows
+      }
+    }
+
     const latestManagementByConversation = new Map<
       string,
       { status: string; assigned_user_id: string | null; assigned_department: string | null }
@@ -171,11 +249,6 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const sessionStateByConversation = new Map<string, string>()
-    for (const row of sessionRows ?? []) {
-      sessionStateByConversation.set(String(row.conversation_id), String(row.state || "active"))
-    }
-
     const reminderByConversation = new Map<string, { scheduled_for: string; description: string }>()
     for (const row of reminderRows) {
       reminderByConversation.set(String(row.conversation_id), {
@@ -187,14 +260,9 @@ export async function GET(req: NextRequest) {
     const conversationsWithServiceState = (data ?? []).map((conversation) => {
       const conversationId = String(conversation.id)
       const management = latestManagementByConversation.get(conversationId)
-      const sessionState = sessionStateByConversation.get(conversationId)
 
       const isClosed = management?.status === "closed"
-      const hasOperator =
-        Boolean(management?.assigned_user_id) ||
-        Boolean((management?.assigned_department || "").trim()) ||
-        sessionState === "completed" ||
-        sessionState === "disabled"
+      const hasOperator = Boolean(management?.assigned_user_id)
 
       const service_state = isClosed ? "closed" : hasOperator ? "operator" : "bot"
 
