@@ -157,6 +157,12 @@ export async function POST(req: NextRequest) {
         'audio/aac',
         'audio/amr'
       ])
+      const passthroughMimes = new Set([
+        'audio/ogg',
+        'audio/mpeg',
+        'audio/mp4',
+        'audio/amr'
+      ])
 
       if (!convertibleMimes.has(normalizedAudioMime)) {
         return NextResponse.json(
@@ -170,10 +176,45 @@ export async function POST(req: NextRequest) {
         )
       }
 
-      const converted = await convertAudioToOggOpus(fileBuffer, fileName)
-      fileBuffer = converted.buffer
-      fileMimeType = converted.mimeType
-      fileName = converted.fileName
+      const isAlreadyOgg = normalizedAudioMime === 'audio/ogg'
+      if (isAlreadyOgg) {
+        fileMimeType = 'audio/ogg; codecs=opus'
+      } else {
+        try {
+          const converted = await convertAudioToOggOpus(fileBuffer, fileName)
+          fileBuffer = converted.buffer
+          fileMimeType = converted.mimeType
+          fileName = converted.fileName
+        } catch (firstError) {
+          console.warn('Falha na primeira tentativa de conversao de audio, tentando novamente...', {
+            mime: normalizedAudioMime,
+            fileName,
+            error: firstError instanceof Error ? firstError.message : String(firstError)
+          })
+
+          try {
+            const converted = await convertAudioToOggOpus(fileBuffer, fileName)
+            fileBuffer = converted.buffer
+            fileMimeType = converted.mimeType
+            fileName = converted.fileName
+          } catch (secondError) {
+            if (passthroughMimes.has(normalizedAudioMime)) {
+              console.warn('Conversao de audio falhou; enviando arquivo original em passthrough', {
+                mime: normalizedAudioMime,
+                fileName,
+                error: secondError instanceof Error ? secondError.message : String(secondError)
+              })
+              fileMimeType = normalizedAudioMime
+            } else {
+              throw new Error(
+                `Falha ao converter audio (${normalizedAudioMime}): ${
+                  secondError instanceof Error ? secondError.message : String(secondError)
+                }`
+              )
+            }
+          }
+        }
+      }
     }
 
     const upload = await uploadMedia({
@@ -287,6 +328,7 @@ export async function POST(req: NextRequest) {
       meta: result
     })
   } catch (error: unknown) {
+    console.error('Erro em /api/whatsapp-meta/send-media:', error)
     const message = error instanceof Error ? error.message : 'Erro ao enviar mídia'
     return NextResponse.json(
       { ok: false, error: message },
