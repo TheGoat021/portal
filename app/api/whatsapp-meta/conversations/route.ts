@@ -87,9 +87,6 @@ export async function GET(req: NextRequest) {
       .eq("connection_id", connectionId)
       .maybeSingle()
 
-    const autoCloseEnabled = Boolean(queueSettings?.auto_close_inactive_enabled)
-    const inactiveCloseMinutes = Number(queueSettings?.inactive_close_minutes ?? 0)
-
     const { data: reminderRowsRaw, error: reminderRowsError } = await supabaseAdmin
       .from("meta_conversation_reminders")
       .select("conversation_id, scheduled_for, description")
@@ -152,40 +149,8 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Auto-close: fecha por inatividade do contato tanto em bot quanto em atendimento.
-    if (autoCloseEnabled && inactiveCloseMinutes > 0) {
-      const thresholdMs = Date.now() - inactiveCloseMinutes * 60 * 1000
-      const toCloseConversationIds = new Set<string>()
-
-      for (const row of managementRows ?? []) {
-        const conversationId = String(row.conversation_id)
-        const status = String(row.status || "open")
-        if (status !== "open") continue
-
-        const lastInboundAt = latestInboundByConversation.get(conversationId)
-        if (!lastInboundAt) continue
-
-        const inboundMs = new Date(lastInboundAt).getTime()
-        if (!Number.isFinite(inboundMs)) continue
-        if (inboundMs <= thresholdMs) {
-          toCloseConversationIds.add(conversationId)
-        }
-      }
-
-      if (toCloseConversationIds.size > 0) {
-        await supabaseAdmin
-          .from("meta_conversation_management")
-          .update({
-            status: "closed",
-            closed_at: new Date().toISOString(),
-            closed_by_user_id: null,
-            updated_at: new Date().toISOString()
-          })
-          .eq("connection_id", connectionId)
-          .in("conversation_id", Array.from(toCloseConversationIds))
-          .eq("status", "open")
-      }
-    }
+    // Hotfix: nao fecha conversas dentro da listagem.
+    // O auto-close sera executado em rotina dedicada para evitar fechamento em massa.
 
     // Re-tenta atribuicao para conversas sem operador (evita ficarem presas invisiveis).
     const pendingAutoAssign = new Map<string, string>()
@@ -309,6 +274,7 @@ export async function GET(req: NextRequest) {
       userId && !isDiretoria
         ? conversationsWithServiceState.filter((conversation) => {
             if (conversation.service_state === "bot") return true
+            if (conversation.service_state === "closed") return true
             return String(conversation.assigned_user_id || "") === userId
           })
         : conversationsWithServiceState
