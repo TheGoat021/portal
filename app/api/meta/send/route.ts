@@ -5,7 +5,7 @@ import {
   insertMetaMessage,
   touchMetaConversation
 } from '@/lib/metaDb'
-import { getMetaConversationManagement, upsertMetaConversationManagement } from '@/lib/metaConversationManagement'
+import { upsertMetaConversationManagement } from '@/lib/metaConversationManagement'
 
 export const runtime = 'nodejs'
 
@@ -181,27 +181,22 @@ export async function POST(req: NextRequest) {
     })
 
     if (body.agentId && body.agentEmail) {
-      const [currentManagement, profileResult] = await Promise.all([
-        getMetaConversationManagement(conversation.id),
-        supabaseAdmin
-          .from("profiles")
-          .select("role")
-          .eq("id", body.agentId)
-          .maybeSingle()
-      ])
+      const { data: profileResult } = await supabaseAdmin
+        .from("profiles")
+        .select("role")
+        .eq("id", body.agentId)
+        .maybeSingle()
 
-      if (!currentManagement?.assigned_user_id) {
-        await upsertMetaConversationManagement({
-          conversation_id: conversation.id,
-          connection_id: connection.id,
-          status: "open",
-          assigned_user_id: body.agentId,
-          assigned_user_email: body.agentEmail,
-          assigned_department: profileResult.data?.role ? String(profileResult.data.role) : null,
-          closed_at: null,
-          closed_by_user_id: null
-        })
-      }
+      await upsertMetaConversationManagement({
+        conversation_id: conversation.id,
+        connection_id: connection.id,
+        status: "open",
+        assigned_user_id: body.agentId,
+        assigned_user_email: body.agentEmail,
+        assigned_department: profileResult?.role ? String(profileResult.role) : null,
+        closed_at: null,
+        closed_by_user_id: null
+      })
     }
 
     return NextResponse.json({

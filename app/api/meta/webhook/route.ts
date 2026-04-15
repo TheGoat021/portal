@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
   ensureMetaConversation,
@@ -10,7 +10,7 @@ import {
 } from '@/lib/metaDb'
 import { uploadMetaInboundMedia } from '@/lib/metaStorage'
 import { runMetaChatbotForInbound } from '@/lib/metaChatbot'
-import { getMetaConversationManagement } from '@/lib/metaConversationManagement'
+import { getMetaConversationManagement, upsertMetaConversationManagement } from '@/lib/metaConversationManagement'
 import {
   downloadMediaFile,
   extractWebhookEntries,
@@ -30,6 +30,7 @@ type WebhookContact = {
 type WebhookMessage = {
   id?: string
   from?: string
+  timestamp?: string
   [key: string]: unknown
 }
 
@@ -73,7 +74,7 @@ async function handleInboundMessage({
   message: WebhookMessage
   contact?: WebhookContact
 }) {
-  
+
   const fromPhone = normalizePhone(message?.from)
   if (!fromPhone) return
 
@@ -84,6 +85,26 @@ async function handleInboundMessage({
     contactName: contact?.profile?.name || null,
     profileName: value?.metadata?.display_phone_number || null
   })
+
+  let restartByInactivity = false
+  try {
+    const { data: queueSettings } = await supabaseAdmin
+      .from("meta_queue_settings")
+      .select("auto_close_inactive_enabled, inactive_close_minutes")
+      .eq("connection_id", connection.id)
+      .maybeSingle()
+
+    const enabled = Boolean(queueSettings?.auto_close_inactive_enabled)
+    const minutes = Number(queueSettings?.inactive_close_minutes ?? 0)
+    const lastMessageAt = conversation?.last_message_at ? new Date(String(conversation.last_message_at)).getTime() : NaN
+
+    if (enabled && minutes > 0 && Number.isFinite(lastMessageAt)) {
+      const thresholdMs = Date.now() - minutes * 60 * 1000
+      restartByInactivity = lastMessageAt <= thresholdMs
+    }
+  } catch (queueError) {
+    console.error("Erro ao avaliar inatividade da conversa Meta:", queueError)
+  }
 
 
   const parsed = getInboundTypeAndContent(message)
@@ -107,7 +128,7 @@ async function handleInboundMessage({
       mediaUrl = uploaded.publicUrl
       sha256 = uploaded.sha256
     } catch (mediaError) {
-      console.error('Falha ao processar mídia inbound da Meta:', mediaError)
+      console.error('Falha ao processar mÃ­dia inbound da Meta:', mediaError)
     }
   }
 
@@ -140,38 +161,68 @@ async function handleInboundMessage({
   })
 
   let reopenedFromClosed = false
+  let shouldSkipChatbotForStaleClosedInbound = false
+  let shouldRestartSessionByInactivity = false
+  let inboundMessageMs = Number.NaN
+
+  const inboundTimestampRaw = String(message?.timestamp || "").trim()
+  if (inboundTimestampRaw) {
+    const asSeconds = Number(inboundTimestampRaw)
+    if (Number.isFinite(asSeconds)) {
+      // Meta envia timestamp em segundos.
+      inboundMessageMs = asSeconds * 1000
+    } else {
+      const asDate = Date.parse(inboundTimestampRaw)
+      if (Number.isFinite(asDate)) {
+        inboundMessageMs = asDate
+      }
+    }
+  }
+
   try {
     const management = await getMetaConversationManagement(conversation.id)
-    reopenedFromClosed = management?.status === "closed"
+    if (management?.status === "closed") {
+      const closedAtMs = management.closed_at ? Date.parse(String(management.closed_at)) : Number.NaN
 
-    if (reopenedFromClosed) {
-      const { error: reopenError } = await supabaseAdmin
-        .from("meta_conversation_management")
-        .update({
-          status: "open",
-          closed_at: null,
-          closed_by_user_id: null,
-          updated_at: new Date().toISOString()
-        })
-        .eq("conversation_id", conversation.id)
-        .eq("status", "closed")
-
-      if (reopenError) {
-        console.error("Erro ao reabrir conversa Meta arquivada:", reopenError)
+      // Evita reabrir conversa encerrada por evento inbound antigo/atrasado.
+      // Reabre apenas se a mensagem for posterior ao fechamento.
+      if (Number.isFinite(inboundMessageMs) && Number.isFinite(closedAtMs) && inboundMessageMs <= closedAtMs) {
+        reopenedFromClosed = false
+        shouldSkipChatbotForStaleClosedInbound = true
+      } else {
+        reopenedFromClosed = true
       }
+
+      // So faz restart por inatividade quando a conversa ja estava encerrada.
+      shouldRestartSessionByInactivity = restartByInactivity
+    } else {
+      // Conversa aberta (inclusive em atendimento): nunca remover atribuicao por inatividade aqui.
+      shouldRestartSessionByInactivity = false
+    }
+
+    if (reopenedFromClosed || shouldRestartSessionByInactivity) {
+      await upsertMetaConversationManagement({
+        conversation_id: conversation.id,
+        connection_id: connection.id,
+        status: "open",
+        assigned_user_id: null,
+        assigned_user_email: null,
+        assigned_department: null,
+        closed_at: null,
+        closed_by_user_id: null
+      })
     }
   } catch (managementError) {
     console.error("Erro ao consultar gestão da conversa Meta:", managementError)
   }
-
-  if (parsed.type === "text" && (parsed.text || "").trim()) {
+  if (!shouldSkipChatbotForStaleClosedInbound && parsed.type === "text" && (parsed.text || "").trim()) {
     try {
       await runMetaChatbotForInbound({
         connectionId: connection.id,
         conversationId: conversation.id,
         to: fromPhone,
         inboundText: parsed.text || "",
-        restartSession: reopenedFromClosed
+        restartSession: reopenedFromClosed || shouldRestartSessionByInactivity
       })
     } catch (chatbotError) {
       console.error("Erro ao executar fluxo do chatbot Meta:", chatbotError)

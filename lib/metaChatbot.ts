@@ -289,9 +289,7 @@ export async function runMetaChatbotForInbound({
   let session = await getOrCreateSession({ connectionId, conversationId })
   if (session.state === "disabled") return
 
-  if (session.state === "completed") {
-    if (!restartSession) return
-
+  if (restartSession) {
     await updateSession(session.id, {
       state: "active",
       current_node_id: null,
@@ -304,6 +302,8 @@ export async function runMetaChatbotForInbound({
       current_node_id: null,
       context: {}
     }
+  } else if (session.state === "completed") {
+    return
   }
 
   const isFirstInboundForSession = !session.current_node_id

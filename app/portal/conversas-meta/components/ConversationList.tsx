@@ -25,6 +25,7 @@ interface Props {
   currentUser: {
     id: string
     role: string
+    email?: string
   }
 }
 
@@ -59,6 +60,7 @@ interface BackendConversation {
   connection_id: string
   service_state?: "bot" | "operator" | "closed"
   assigned_user_id?: string | null
+  assigned_user_email?: string | null
   waiting_for_reply?: boolean
   minutes_without_reply?: number | null
   response_alert_level?: "warning" | "danger" | null
@@ -77,6 +79,7 @@ interface Conversation {
   connectionId: string
   serviceState: "bot" | "operator" | "closed"
   assignedUserId?: string | null
+  assignedUserEmail?: string | null
   waitingForReply?: boolean
   minutesWithoutReply?: number | null
   responseAlertLevel?: "warning" | "danger" | null
@@ -203,6 +206,8 @@ export default function ConversationsList({
   const [distributionActive, setDistributionActive] = useState(true)
   const [loadingAvailability, setLoadingAvailability] = useState(false)
   const [savingAvailability, setSavingAvailability] = useState(false)
+  const [selectedBotConversationIds, setSelectedBotConversationIds] = useState<string[]>([])
+  const [closingSelectedBots, setClosingSelectedBots] = useState(false)
   const roleUpper = (currentUser.role || "").toUpperCase()
   const isDiretoria =
     roleUpper === "DIRETORIA" ||
@@ -261,25 +266,39 @@ export default function ConversationsList({
       const payload = await res.json()
       const data: BackendConversation[] = payload?.data ?? []
 
-      const mapped: Conversation[] = (data ?? []).map((conv) => ({
-        id: String(conv.id),
-        phone: conv.wa_id,
-        name: conv.contact_name ?? null,
-        profileName: conv.profile_name ?? null,
-        lastMessage: conv.last_message ?? "",
-        lastMessageAt: conv.last_message_at ?? undefined,
-        unreadCount: Number(conv.unread_count ?? 0),
-        connectionId: conv.connection_id,
-        serviceState: conv.service_state || "bot",
-        assignedUserId: conv.assigned_user_id ?? null,
-        waitingForReply: Boolean(conv.waiting_for_reply),
-        minutesWithoutReply:
-          typeof conv.minutes_without_reply === "number" ? Number(conv.minutes_without_reply) : null,
-        responseAlertLevel: conv.response_alert_level ?? null,
-        reminderDueAt: conv.reminder_due_at ?? null,
-        reminderDescription: conv.reminder_description ?? null,
-        lastMessageType: conv.last_message_type ?? "text"
-      }))
+      const mapped: Conversation[] = (data ?? []).map((conv) => {
+        // Defesa no front: se já existe atribuição, nunca tratar como "bot".
+        // Isso evita contagem incorreta quando o backend vier com service_state inconsistente.
+        const normalizedServiceState: "bot" | "operator" | "closed" =
+          conv.service_state === "closed"
+            ? "closed"
+            : conv.assigned_user_id || conv.assigned_user_email
+              ? "operator"
+              : conv.service_state === "operator"
+                ? "operator"
+                : "bot"
+
+        return {
+          id: String(conv.id),
+          phone: conv.wa_id,
+          name: conv.contact_name ?? null,
+          profileName: conv.profile_name ?? null,
+          lastMessage: conv.last_message ?? "",
+          lastMessageAt: conv.last_message_at ?? undefined,
+          unreadCount: Number(conv.unread_count ?? 0),
+          connectionId: conv.connection_id,
+          serviceState: normalizedServiceState,
+          assignedUserId: conv.assigned_user_id ?? null,
+          assignedUserEmail: conv.assigned_user_email ?? null,
+          waitingForReply: Boolean(conv.waiting_for_reply),
+          minutesWithoutReply:
+            typeof conv.minutes_without_reply === "number" ? Number(conv.minutes_without_reply) : null,
+          responseAlertLevel: conv.response_alert_level ?? null,
+          reminderDueAt: conv.reminder_due_at ?? null,
+          reminderDescription: conv.reminder_description ?? null,
+          lastMessageType: conv.last_message_type ?? "text"
+        }
+      })
 
       setConversations(mapped)
     } catch (error) {
@@ -294,6 +313,7 @@ export default function ConversationsList({
   useEffect(() => {
     if (!selectedConnectionId) {
       setConversations([])
+      setSelectedBotConversationIds([])
       return
     }
 
@@ -301,6 +321,12 @@ export default function ConversationsList({
     const interval = setInterval(() => fetchConversations(selectedConnectionId), 3000)
     return () => clearInterval(interval)
   }, [selectedConnectionId])
+
+  useEffect(() => {
+    if (serviceFilter !== "bot") {
+      setSelectedBotConversationIds([])
+    }
+  }, [serviceFilter])
 
   useEffect(() => {
     if (!selectedConnectionId || isDiretoria) {
@@ -371,6 +397,11 @@ export default function ConversationsList({
     return conversations.filter((conversation) => {
       if (conversation.serviceState === "bot") return true
       return conversation.assignedUserId === currentUser.id
+        || (
+          Boolean(currentUser.email) &&
+          Boolean(conversation.assignedUserEmail) &&
+          String(conversation.assignedUserEmail).toLowerCase() === String(currentUser.email).toLowerCase()
+        )
     })
   }, [conversations, currentUser.id, isDiretoria])
 
@@ -425,6 +456,23 @@ export default function ConversationsList({
       return bTime - aTime
     })
   }, [visibleConversations, search, serviceFilter, isDiretoria, onlyUnreadForOperator, alertColorFilter])
+
+  const allVisibleBotIds = useMemo(
+    () =>
+      filteredConversations
+        .filter((conversation) => conversation.serviceState === "bot")
+        .map((conversation) => conversation.id),
+    [filteredConversations]
+  )
+
+  const allVisibleBotsSelected =
+    allVisibleBotIds.length > 0 &&
+    allVisibleBotIds.every((id) => selectedBotConversationIds.includes(id))
+
+  useEffect(() => {
+    if (serviceFilter !== "bot") return
+    setSelectedBotConversationIds((prev) => prev.filter((id) => allVisibleBotIds.includes(id)))
+  }, [allVisibleBotIds, serviceFilter])
 
   const unreadVisibleCount = useMemo(
     () => visibleConversations.filter((conversation) => (conversation.unreadCount ?? 0) > 0).length,
@@ -562,6 +610,52 @@ export default function ConversationsList({
       console.error("Erro ao puxar conversa para atendimento:", error)
     } finally {
       setPullingConversationId(null)
+    }
+  }
+
+  const toggleSelectAllVisibleBots = () => {
+    if (allVisibleBotIds.length === 0) return
+    setSelectedBotConversationIds((prev) => {
+      const alreadyAllSelected = allVisibleBotIds.every((id) => prev.includes(id))
+      if (alreadyAllSelected) return []
+      return [...allVisibleBotIds]
+    })
+  }
+
+  const toggleSelectSingleBot = (conversationId: string) => {
+    setSelectedBotConversationIds((prev) =>
+      prev.includes(conversationId) ? prev.filter((id) => id !== conversationId) : [...prev, conversationId]
+    )
+  }
+
+  const handleCloseSelectedBots = async () => {
+    if (selectedBotConversationIds.length === 0 || closingSelectedBots) return
+
+    const confirmed = window.confirm(
+      `Finalizar ${selectedBotConversationIds.length} conversa(s) da fila do bot agora?`
+    )
+
+    if (!confirmed) return
+
+    try {
+      setClosingSelectedBots(true)
+
+      for (const conversationId of selectedBotConversationIds) {
+        await fetch(`/api/whatsapp-meta/conversations/${conversationId}/close`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            byUserId: currentUser.id
+          })
+        })
+      }
+
+      setSelectedBotConversationIds([])
+      await fetchConversations(selectedConnectionId)
+    } catch (error) {
+      console.error("Erro ao finalizar conversas selecionadas:", error)
+    } finally {
+      setClosingSelectedBots(false)
     }
   }
 
@@ -713,6 +807,32 @@ export default function ConversationsList({
             ) : null}
           </div>
         ) : null}
+
+        {serviceFilter === "bot" && selectedConnectionId ? (
+          <div className="px-1 flex items-center justify-between gap-2">
+            <label className="inline-flex items-center gap-2 text-xs text-gray-600 select-none">
+              <input
+                type="checkbox"
+                checked={allVisibleBotsSelected}
+                onChange={toggleSelectAllVisibleBots}
+                className="rounded border-gray-300"
+              />
+              Selecionar todas ({allVisibleBotIds.length})
+            </label>
+
+            <button
+              type="button"
+              onClick={handleCloseSelectedBots}
+              disabled={selectedBotConversationIds.length === 0 || closingSelectedBots}
+              className="h-7 px-2.5 rounded-full border text-[11px] font-medium bg-red-50 text-red-700 border-red-200 hover:bg-red-100 disabled:opacity-60"
+              title="Finalizar todas as conversas selecionadas"
+            >
+              {closingSelectedBots
+                ? "Finalizando..."
+                : `Finalizar selecionadas (${selectedBotConversationIds.length})`}
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div className="min-h-0">
@@ -813,17 +933,30 @@ export default function ConversationsList({
                         </div>
 
                         {serviceFilter === "bot" && conv.serviceState === "bot" ? (
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              handlePullToOperator(conv)
-                            }}
-                            className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 disabled:opacity-60"
-                            disabled={pullingConversationId === conv.id}
-                          >
-                            {pullingConversationId === conv.id ? "Puxando..." : "Puxar"}
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <label
+                              className="inline-flex items-center gap-1 text-[10px] text-gray-500 select-none"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedBotConversationIds.includes(conv.id)}
+                                onChange={() => toggleSelectSingleBot(conv.id)}
+                                className="rounded border-gray-300"
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                handlePullToOperator(conv)
+                              }}
+                              className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 disabled:opacity-60"
+                              disabled={pullingConversationId === conv.id}
+                            >
+                              {pullingConversationId === conv.id ? "Puxando..." : "Puxar"}
+                            </button>
+                          </div>
                         ) : null}
                         {conv.reminderDueAt ? (
                           <div
