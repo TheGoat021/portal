@@ -33,6 +33,15 @@ function isOperatorOutbound(rawPayload: unknown) {
   return Boolean(nestedAgentId || nestedAgentEmail)
 }
 
+function chunkArray<T>(items: T[], size: number) {
+  if (size <= 0) return [items]
+  const chunks: T[][] = []
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size))
+  }
+  return chunks
+}
+
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url)
@@ -70,7 +79,7 @@ export async function GET(req: NextRequest) {
 
     const conversationIds = (data ?? []).map((conversation) => String(conversation.id))
 
-    let managementRows: Array<{
+    const managementRows: Array<{
       conversation_id: string
       status: string | null
       assigned_user_id: string | null
@@ -78,29 +87,32 @@ export async function GET(req: NextRequest) {
       assigned_department: string | null
       updated_at: string | null
     }> = []
-    let managementRowsError: { message: string } | null = null
 
     if (conversationIds.length > 0) {
-      const managementResponse = await supabaseAdmin
-        .from('meta_conversation_management')
-        .select('conversation_id, status, assigned_user_id, assigned_user_email, assigned_department, updated_at')
-        .eq('connection_id', connectionId)
-        .in('conversation_id', conversationIds)
-        .order('updated_at', { ascending: false })
+      const idChunks = chunkArray(conversationIds, 200)
+      for (const chunk of idChunks) {
+        const managementResponse = await supabaseAdmin
+          .from('meta_conversation_management')
+          .select('conversation_id, status, assigned_user_id, assigned_user_email, assigned_department, updated_at')
+          .eq('connection_id', connectionId)
+          .in('conversation_id', chunk)
+          .order('updated_at', { ascending: false })
 
-      managementRows = (managementResponse.data ?? []) as Array<{
-        conversation_id: string
-        status: string | null
-        assigned_user_id: string | null
-        assigned_user_email: string | null
-        assigned_department: string | null
-        updated_at: string | null
-      }>
-      managementRowsError = managementResponse.error
-    }
+        if (managementResponse.error) {
+          return NextResponse.json({ error: managementResponse.error.message }, { status: 500 })
+        }
 
-    if (managementRowsError) {
-      return NextResponse.json({ error: managementRowsError.message }, { status: 500 })
+        managementRows.push(
+          ...((managementResponse.data ?? []) as Array<{
+            conversation_id: string
+            status: string | null
+            assigned_user_id: string | null
+            assigned_user_email: string | null
+            assigned_department: string | null
+            updated_at: string | null
+          }>)
+        )
+      }
     }
 
     const { data: queueSettings } = await supabaseAdmin
@@ -133,52 +145,62 @@ export async function GET(req: NextRequest) {
     const latestOperatorEmailByConversation = new Map<string, string>()
 
     if (conversationIds.length > 0) {
-      const [{ data: inboundRows }, { data: outboundRowsRaw }] = await Promise.all([
-        supabaseAdmin
-          .from('meta_messages')
-          .select('conversation_id, created_at')
-          .in('conversation_id', conversationIds)
-          .eq('direction', 'inbound')
-          .order('created_at', { ascending: false }),
-        supabaseAdmin
-          .from('meta_messages')
-          .select('conversation_id, created_at, raw_payload')
-          .in('conversation_id', conversationIds)
-          .eq('direction', 'outbound')
-          .neq('type', 'system')
-          .order('created_at', { ascending: false })
-      ])
+      const idChunks = chunkArray(conversationIds, 200)
+      for (const chunk of idChunks) {
+        const [{ data: inboundRows, error: inboundError }, { data: outboundRowsRaw, error: outboundError }] =
+          await Promise.all([
+            supabaseAdmin
+              .from('meta_messages')
+              .select('conversation_id, created_at')
+              .in('conversation_id', chunk)
+              .eq('direction', 'inbound')
+              .order('created_at', { ascending: false }),
+            supabaseAdmin
+              .from('meta_messages')
+              .select('conversation_id, created_at, raw_payload')
+              .in('conversation_id', chunk)
+              .eq('direction', 'outbound')
+              .neq('type', 'system')
+              .order('created_at', { ascending: false })
+          ])
 
-      for (const row of inboundRows ?? []) {
-        const conversationId = String(row.conversation_id)
-        if (!latestInboundByConversation.has(conversationId)) {
-          latestInboundByConversation.set(conversationId, String(row.created_at))
+        if (inboundError) {
+          return NextResponse.json({ error: inboundError.message }, { status: 500 })
         }
-      }
-
-      for (const row of outboundRowsRaw ?? []) {
-        if (!isOperatorOutbound((row as { raw_payload?: unknown }).raw_payload)) continue
-
-        const conversationId = String(row.conversation_id)
-        if (!latestOutboundByConversation.has(conversationId)) {
-          latestOutboundByConversation.set(conversationId, String(row.created_at))
+        if (outboundError) {
+          return NextResponse.json({ error: outboundError.message }, { status: 500 })
         }
 
-        if (!latestOperatorEmailByConversation.has(conversationId)) {
-          const parsed = parseRawPayload((row as { raw_payload?: unknown }).raw_payload)
-          const directEmail = String(parsed?.agentEmail ?? parsed?.agent_email ?? '').trim()
-          const nestedSend =
-            parsed?.send && typeof parsed.send === 'object'
-              ? (parsed.send as Record<string, unknown>)
-              : null
-          const nestedEmail = String(nestedSend?.agentEmail ?? nestedSend?.agent_email ?? '').trim()
-          const agentEmail = directEmail || nestedEmail
-          if (agentEmail) {
-            latestOperatorEmailByConversation.set(conversationId, agentEmail)
+        for (const row of inboundRows ?? []) {
+          const conversationId = String(row.conversation_id)
+          if (!latestInboundByConversation.has(conversationId)) {
+            latestInboundByConversation.set(conversationId, String(row.created_at))
+          }
+        }
+
+        for (const row of outboundRowsRaw ?? []) {
+          if (!isOperatorOutbound((row as { raw_payload?: unknown }).raw_payload)) continue
+
+          const conversationId = String(row.conversation_id)
+          if (!latestOutboundByConversation.has(conversationId)) {
+            latestOutboundByConversation.set(conversationId, String(row.created_at))
+          }
+
+          if (!latestOperatorEmailByConversation.has(conversationId)) {
+            const parsed = parseRawPayload((row as { raw_payload?: unknown }).raw_payload)
+            const directEmail = String(parsed?.agentEmail ?? parsed?.agent_email ?? '').trim()
+            const nestedSend =
+              parsed?.send && typeof parsed.send === 'object'
+                ? (parsed.send as Record<string, unknown>)
+                : null
+            const nestedEmail = String(nestedSend?.agentEmail ?? nestedSend?.agent_email ?? '').trim()
+            const agentEmail = directEmail || nestedEmail
+            if (agentEmail) {
+              latestOperatorEmailByConversation.set(conversationId, agentEmail)
+            }
           }
         }
       }
-
     }
 
     const latestManagementByConversation = new Map<
