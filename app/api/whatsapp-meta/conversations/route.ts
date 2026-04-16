@@ -55,6 +55,7 @@ export async function GET(req: NextRequest) {
       .select('*')
       .eq('connection_id', connectionId)
       .order('last_message_at', { ascending: false, nullsFirst: false })
+      .limit(5000)
 
     if (search) {
       query = query.or(
@@ -67,11 +68,36 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const { data: managementRows, error: managementRowsError } = await supabaseAdmin
-      .from('meta_conversation_management')
-      .select('conversation_id, status, assigned_user_id, assigned_user_email, assigned_department, updated_at')
-      .eq('connection_id', connectionId)
-      .order('updated_at', { ascending: false })
+    const conversationIds = (data ?? []).map((conversation) => String(conversation.id))
+
+    let managementRows: Array<{
+      conversation_id: string
+      status: string | null
+      assigned_user_id: string | null
+      assigned_user_email: string | null
+      assigned_department: string | null
+      updated_at: string | null
+    }> = []
+    let managementRowsError: { message: string } | null = null
+
+    if (conversationIds.length > 0) {
+      const managementResponse = await supabaseAdmin
+        .from('meta_conversation_management')
+        .select('conversation_id, status, assigned_user_id, assigned_user_email, assigned_department, updated_at')
+        .eq('connection_id', connectionId)
+        .in('conversation_id', conversationIds)
+        .order('updated_at', { ascending: false })
+
+      managementRows = (managementResponse.data ?? []) as Array<{
+        conversation_id: string
+        status: string | null
+        assigned_user_id: string | null
+        assigned_user_email: string | null
+        assigned_department: string | null
+        updated_at: string | null
+      }>
+      managementRowsError = managementResponse.error
+    }
 
     if (managementRowsError) {
       return NextResponse.json({ error: managementRowsError.message }, { status: 500 })
@@ -102,15 +128,12 @@ export async function GET(req: NextRequest) {
     const warningMinutes = Number(queueSettings?.response_alert_warning_minutes ?? 10)
     const dangerMinutes = Number(queueSettings?.response_alert_danger_minutes ?? 30)
 
-    const conversationIds = (data ?? []).map((conversation) => String(conversation.id))
     const latestInboundByConversation = new Map<string, string>()
     const latestOutboundByConversation = new Map<string, string>()
     const latestOperatorEmailByConversation = new Map<string, string>()
-    const hasTransferEventByConversation = new Map<string, boolean>()
-    const transferTargetEmailByConversation = new Map<string, string>()
 
     if (conversationIds.length > 0) {
-      const [{ data: inboundRows }, { data: outboundRowsRaw }, { data: systemRowsRaw }] = await Promise.all([
+      const [{ data: inboundRows }, { data: outboundRowsRaw }] = await Promise.all([
         supabaseAdmin
           .from('meta_messages')
           .select('conversation_id, created_at')
@@ -123,13 +146,6 @@ export async function GET(req: NextRequest) {
           .in('conversation_id', conversationIds)
           .eq('direction', 'outbound')
           .neq('type', 'system')
-          .order('created_at', { ascending: false }),
-        supabaseAdmin
-          .from('meta_messages')
-          .select('conversation_id, created_at, raw_payload')
-          .in('conversation_id', conversationIds)
-          .eq('direction', 'outbound')
-          .eq('type', 'system')
           .order('created_at', { ascending: false })
       ])
 
@@ -163,25 +179,6 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      for (const row of systemRowsRaw ?? []) {
-        const conversationId = String(row.conversation_id)
-        const parsed = parseRawPayload((row as { raw_payload?: unknown }).raw_payload)
-        const eventName = String(parsed?.event || '').trim().toLowerCase()
-
-        const isTransferEvent = eventName === 'transfer' || eventName === 'auto_transfer'
-        if (!isTransferEvent) continue
-
-        if (!hasTransferEventByConversation.has(conversationId)) {
-          hasTransferEventByConversation.set(conversationId, true)
-        }
-
-        if (!transferTargetEmailByConversation.has(conversationId)) {
-          const targetEmail = String(parsed?.toUserEmail ?? parsed?.targetEmail ?? '').trim()
-          if (targetEmail) {
-            transferTargetEmailByConversation.set(conversationId, targetEmail)
-          }
-        }
-      }
     }
 
     const latestManagementByConversation = new Map<
@@ -213,15 +210,13 @@ export async function GET(req: NextRequest) {
       const conversationId = String(conversation.id)
       const management = latestManagementByConversation.get(conversationId)
       const fallbackAgentEmail = latestOperatorEmailByConversation.get(conversationId) ?? null
-      const fallbackTransferEmail = transferTargetEmailByConversation.get(conversationId) ?? null
-      const hasTransferEvent = hasTransferEventByConversation.get(conversationId) === true
 
       const isClosed = management?.status === 'closed'
+      // Regra de negocio: "em atendimento" apenas quando houver operador atribuido.
+      // Bot fica somente para entrada/fila sem atribuicao.
       const hasOperator = Boolean(
         management?.assigned_user_id ||
-          management?.assigned_user_email ||
-          latestOutboundByConversation.get(conversationId) ||
-          hasTransferEvent
+          management?.assigned_user_email
       )
       const service_state = isClosed ? 'closed' : hasOperator ? 'operator' : 'bot'
 
@@ -257,7 +252,7 @@ export async function GET(req: NextRequest) {
         ...conversation,
         service_state,
         assigned_user_id: management?.assigned_user_id ?? null,
-        assigned_user_email: management?.assigned_user_email ?? fallbackAgentEmail ?? fallbackTransferEmail,
+        assigned_user_email: management?.assigned_user_email ?? fallbackAgentEmail,
         waiting_for_reply: waitingForReply,
         minutes_without_reply: minutesWithoutReply,
         response_alert_level: responseAlertLevel,
