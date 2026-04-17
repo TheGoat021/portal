@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { BarChart3, Chrome, BadgeDollarSign } from 'lucide-react'
+import { BarChart3, Chrome, BadgeDollarSign, Headset } from 'lucide-react'
 
 const items = [
   {
@@ -19,6 +19,11 @@ const items = [
     href: '/portal/relatorios/meta',
     label: 'Meta',
     icon: BadgeDollarSign
+  },
+  {
+    href: '/portal/relatorios/meta-atendimento',
+    label: 'Meta Atendimento',
+    icon: Headset
   }
 ]
 

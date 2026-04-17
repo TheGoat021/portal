@@ -68,6 +68,22 @@ interface BackendConversation {
   reminder_description?: string | null
 }
 
+interface BackendConversationsResponse {
+  ok?: boolean
+  data?: BackendConversation[]
+  counts?: {
+    bot?: number
+    operator?: number
+    closed?: number
+  }
+  pagination?: {
+    total?: number
+    limit?: number
+    offset?: number
+    hasMore?: boolean
+  }
+}
+
 interface Conversation {
   id: string
   phone: string
@@ -190,6 +206,7 @@ export default function ConversationsList({
   onSelectConversation,
   currentUser
 }: Props) {
+  const PAGE_SIZE = 50
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [connections, setConnections] = useState<MetaConnection[]>([])
   const [selectedConnectionId, setSelectedConnectionId] = useState<string>("")
@@ -208,6 +225,14 @@ export default function ConversationsList({
   const [savingAvailability, setSavingAvailability] = useState(false)
   const [selectedBotConversationIds, setSelectedBotConversationIds] = useState<string[]>([])
   const [closingSelectedBots, setClosingSelectedBots] = useState(false)
+  const [serviceCounts, setServiceCounts] = useState<{ bot: number; operator: number; closed: number }>({
+    bot: 0,
+    operator: 0,
+    closed: 0
+  })
+  const [currentOffset, setCurrentOffset] = useState(0)
+  const [hasMoreConversations, setHasMoreConversations] = useState(false)
+  const [loadingMoreConversations, setLoadingMoreConversations] = useState(false)
   const roleUpper = (currentUser.role || "").toUpperCase()
   const isDiretoria =
     roleUpper === "DIRETORIA" ||
@@ -244,17 +269,25 @@ export default function ConversationsList({
     }
   }
 
-  const fetchConversations = async (connectionId?: string) => {
+  const fetchConversations = async (
+    connectionId?: string,
+    options?: { append?: boolean }
+  ) => {
     try {
       const activeConnectionId = connectionId || selectedConnectionId
+      const append = Boolean(options?.append)
+      const nextOffset = append ? currentOffset : 0
 
       if (!activeConnectionId) {
         setConversations([])
+        setServiceCounts({ bot: 0, operator: 0, closed: 0 })
+        setCurrentOffset(0)
+        setHasMoreConversations(false)
         return
       }
 
       const res = await fetch(
-        `/api/whatsapp-meta/conversations?connectionId=${encodeURIComponent(activeConnectionId)}&userId=${encodeURIComponent(currentUser.id)}&userRole=${encodeURIComponent(currentUser.role || "")}`,
+        `/api/whatsapp-meta/conversations?connectionId=${encodeURIComponent(activeConnectionId)}&userId=${encodeURIComponent(currentUser.id)}&userRole=${encodeURIComponent(currentUser.role || "")}&serviceFilter=${encodeURIComponent(serviceFilter)}&search=${encodeURIComponent(search)}&limit=${PAGE_SIZE}&offset=${nextOffset}`,
         { cache: "no-store" }
       )
 
@@ -263,7 +296,7 @@ export default function ConversationsList({
         return
       }
 
-      const payload = await res.json()
+      const payload = (await res.json()) as BackendConversationsResponse
       const data: BackendConversation[] = payload?.data ?? []
 
       const mapped: Conversation[] = (data ?? []).map((conv) => {
@@ -300,7 +333,26 @@ export default function ConversationsList({
         }
       })
 
-      setConversations(mapped)
+      setConversations((prev) => {
+        if (!append) return mapped
+        const seen = new Set(prev.map((item) => item.id))
+        const merged = [...prev]
+        for (const item of mapped) {
+          if (!seen.has(item.id)) {
+            merged.push(item)
+            seen.add(item.id)
+          }
+        }
+        return merged
+      })
+
+      setServiceCounts({
+        bot: Number(payload?.counts?.bot ?? 0),
+        operator: Number(payload?.counts?.operator ?? 0),
+        closed: Number(payload?.counts?.closed ?? 0)
+      })
+      setCurrentOffset(nextOffset + mapped.length)
+      setHasMoreConversations(Boolean(payload?.pagination?.hasMore))
     } catch (error) {
       console.error("Erro ao buscar conversas meta", error)
     }
@@ -314,13 +366,18 @@ export default function ConversationsList({
     if (!selectedConnectionId) {
       setConversations([])
       setSelectedBotConversationIds([])
+      setServiceCounts({ bot: 0, operator: 0, closed: 0 })
+      setCurrentOffset(0)
+      setHasMoreConversations(false)
       return
     }
 
-    fetchConversations(selectedConnectionId)
-    const interval = setInterval(() => fetchConversations(selectedConnectionId), 3000)
+    setCurrentOffset(0)
+    setHasMoreConversations(false)
+    fetchConversations(selectedConnectionId, { append: false })
+    const interval = setInterval(() => fetchConversations(selectedConnectionId, { append: false }), 3000)
     return () => clearInterval(interval)
-  }, [selectedConnectionId])
+  }, [selectedConnectionId, serviceFilter, search])
 
   useEffect(() => {
     if (serviceFilter !== "bot") {
@@ -479,20 +536,9 @@ export default function ConversationsList({
     [visibleConversations]
   )
 
-  const botCount = useMemo(
-    () => visibleConversations.filter((conversation) => conversation.serviceState === "bot").length,
-    [visibleConversations]
-  )
-
-  const operatorCount = useMemo(
-    () => visibleConversations.filter((conversation) => conversation.serviceState === "operator").length,
-    [visibleConversations]
-  )
-
-  const closedCount = useMemo(
-    () => visibleConversations.filter((conversation) => conversation.serviceState === "closed").length,
-    [visibleConversations]
-  )
+  const botCount = serviceCounts.bot
+  const operatorCount = serviceCounts.operator
+  const closedCount = serviceCounts.closed
 
   const handleCreateConversation = async () => {
     if (!selectedConnectionId || !newPhone.trim() || !newMessage.trim() || creatingConversation) {
@@ -656,6 +702,16 @@ export default function ConversationsList({
       console.error("Erro ao finalizar conversas selecionadas:", error)
     } finally {
       setClosingSelectedBots(false)
+    }
+  }
+
+  const handleLoadMoreConversations = async () => {
+    if (!selectedConnectionId || loadingMoreConversations || !hasMoreConversations) return
+    try {
+      setLoadingMoreConversations(true)
+      await fetchConversations(selectedConnectionId, { append: true })
+    } finally {
+      setLoadingMoreConversations(false)
     }
   }
 
@@ -849,7 +905,8 @@ export default function ConversationsList({
                 : "Nenhum atendimento encerrado."}
           </div>
         ) : (
-          filteredConversations.map((conv) => {
+          <>
+          {filteredConversations.map((conv) => {
             const isSelected = selectedConversationId === conv.id
 
             const title =
@@ -988,7 +1045,20 @@ export default function ConversationsList({
                 </div>
               </div>
             )
-          })
+          })}
+          {hasMoreConversations ? (
+            <div className="p-3 border-t border-gray-100 bg-white">
+              <button
+                type="button"
+                onClick={handleLoadMoreConversations}
+                disabled={loadingMoreConversations}
+                className="w-full h-9 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-60"
+              >
+                {loadingMoreConversations ? "Carregando..." : "Carregar mais"}
+              </button>
+            </div>
+          ) : null}
+          </>
         )}
       </div>
 

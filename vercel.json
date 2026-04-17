@@ -11,6 +11,10 @@
     {
       "path": "/api/jobs/meta-auto-close-inactive",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/jobs/leads-sync-whatsapp",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

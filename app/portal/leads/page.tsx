@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Users } from 'lucide-react'
-import { getLeads, updateLeadStatus } from '@/services/leads'
+import { updateLeadStatus } from '@/services/leads'
 import LeadCard from './LeadCard'
 import { Lead } from '@/types/lead'
 import NovoLeadModal from './NovoLeadModal'
+
+const PAGE_SIZE = 50
 
 const colunas = [
   { key: 'novo', label: 'Novo' },
@@ -14,6 +16,8 @@ const colunas = [
   { key: 'ganho', label: 'Ganho' },
   { key: 'perdido', label: 'Perdido' }
 ] as const
+
+type LeadStatus = (typeof colunas)[number]['key']
 
 function normalizePhone(phone?: string | null) {
   if (!phone) return ''
@@ -24,30 +28,40 @@ type LeadWithAgent = Lead & {
   conversation_agent_name?: string | null
 }
 
+type StageState = {
+  items: LeadWithAgent[]
+  offset: number
+  total: number
+  hasMore: boolean
+  loading: boolean
+}
+
+function initialStages(): Record<LeadStatus, StageState> {
+  return {
+    novo: { items: [], offset: 0, total: 0, hasMore: false, loading: false },
+    em_contato: { items: [], offset: 0, total: 0, hasMore: false, loading: false },
+    proposta: { items: [], offset: 0, total: 0, hasMore: false, loading: false },
+    ganho: { items: [], offset: 0, total: 0, hasMore: false, loading: false },
+    perdido: { items: [], offset: 0, total: 0, hasMore: false, loading: false }
+  }
+}
+
 export default function LeadsPage() {
-  const [leads, setLeads] = useState<LeadWithAgent[]>([])
+  const [stages, setStages] = useState<Record<LeadStatus, StageState>>(initialStages())
   const [showNovoLead, setShowNovoLead] = useState(false)
   const [loading, setLoading] = useState(true)
   const [selectedAgent, setSelectedAgent] = useState('all')
 
   useEffect(() => {
-    loadLeads()
+    loadAllStages(true).finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function syncWhatsAppLeads() {
     try {
-      const res = await fetch('/api/leads/sync-whatsapp', {
+      await fetch('/api/leads/sync-whatsapp', {
         method: 'POST'
       })
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => null)
-        console.error('Erro ao sincronizar leads do WhatsApp:', err)
-        return
-      }
-
-      const data = await res.json()
-      console.log('✅ Sync WhatsApp:', data)
     } catch (error) {
       console.error('Erro ao sincronizar leads do WhatsApp:', error)
     }
@@ -62,82 +76,133 @@ export default function LeadsPage() {
       )
     )
 
-    const agentMap = new Map<string, string | null>()
+    if (uniquePhones.length === 0) {
+      return data.map((lead) => ({ ...lead, conversation_agent_name: null }))
+    }
 
-    await Promise.all(
-      uniquePhones.map(async (phone) => {
-        try {
-          const res = await fetch(
-            `/api/whatsapp/assigned-agent-by-phone?phone=${encodeURIComponent(phone)}`,
-            { cache: 'no-store' }
-          )
+    try {
+      const query = encodeURIComponent(uniquePhones.join(','))
+      const res = await fetch(`/api/whatsapp/assigned-agent-by-phone?phones=${query}`, {
+        cache: 'no-store'
+      })
 
-          if (!res.ok) {
-            agentMap.set(phone, null)
-            return
-          }
+      if (!res.ok) {
+        return data.map((lead) => ({ ...lead, conversation_agent_name: null }))
+      }
 
-          const json = await res.json()
-          agentMap.set(phone, json?.agent_name || null)
-        } catch {
-          agentMap.set(phone, null)
+      const json = await res.json()
+      const agentsMap = (json?.agents ?? {}) as Record<string, string | null>
+
+      return data.map((lead) => {
+        const phone = normalizePhone(lead.cliente?.telefone)
+        return {
+          ...lead,
+          conversation_agent_name: phone ? agentsMap[phone] || null : null
         }
       })
-    )
-
-    return data.map((lead) => {
-      const phone = normalizePhone(lead.cliente?.telefone)
-
-      return {
-        ...lead,
-        conversation_agent_name: phone ? agentMap.get(phone) || null : null
-      }
-    })
+    } catch {
+      return data.map((lead) => ({ ...lead, conversation_agent_name: null }))
+    }
   }
 
-  async function loadLeads() {
+  async function loadStage(status: LeadStatus, reset = false) {
+    const current = stages[status]
+    const nextOffset = reset ? 0 : current.offset
+
+    setStages((prev) => ({
+      ...prev,
+      [status]: {
+        ...prev[status],
+        loading: true
+      }
+    }))
+
     try {
-      setLoading(true)
+      const params = new URLSearchParams({
+        status,
+        limit: String(PAGE_SIZE),
+        offset: String(nextOffset)
+      })
 
-      await syncWhatsAppLeads()
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 15000)
+      const res = await fetch(`/api/leads?${params.toString()}`, {
+        cache: 'no-store',
+        signal: controller.signal
+      }).finally(() => clearTimeout(timeout))
+      if (!res.ok) throw new Error('Erro ao carregar leads da etapa')
 
-      const data = await getLeads()
-      const enriched = await enrichLeadsWithAssignedAgent(data || [])
-      setLeads(enriched)
+      const payload = await res.json()
+      const rows: Lead[] = Array.isArray(payload?.data) ? payload.data : []
+      const pagination = payload?.pagination ?? {}
+      const enriched = await enrichLeadsWithAssignedAgent(rows)
+
+      setStages((prev) => {
+        const prevItems = reset ? [] : prev[status].items
+        const seenIds = new Set(prevItems.map((item) => item.id))
+        const merged = [...prevItems, ...enriched.filter((item) => !seenIds.has(item.id))]
+
+        return {
+          ...prev,
+          [status]: {
+            items: merged,
+            offset: nextOffset + rows.length,
+            total: Number(pagination?.total ?? merged.length),
+            hasMore: Boolean(pagination?.hasMore),
+            loading: false
+          }
+        }
+      })
     } catch (error) {
-      console.error('Erro ao carregar leads:', error)
-      setLeads([])
-    } finally {
-      setLoading(false)
+      console.error(`Erro ao carregar etapa ${status}:`, error)
+      setStages((prev) => ({
+        ...prev,
+        [status]: {
+          ...prev[status],
+          loading: false
+        }
+      }))
+    }
+  }
+
+  async function loadAllStages(reset = false) {
+    try {
+      // O sync pode levar bastante tempo em bases grandes.
+      // Rodamos em paralelo sem bloquear a renderização da pipeline.
+      syncWhatsAppLeads().catch((error) => {
+        console.error('Erro no sync em background:', error)
+      })
+
+      await Promise.allSettled(colunas.map((coluna) => loadStage(coluna.key, reset)))
+    } catch (error) {
+      console.error('Erro ao carregar pipeline:', error)
+      setStages(initialStages())
     }
   }
 
   async function moverLead(id: string, status: Lead['status']) {
     try {
       await updateLeadStatus(id, status)
-      await loadLeads()
+      await loadAllStages(true)
     } catch (error) {
       console.error('Erro ao mover lead:', error)
     }
   }
 
+  const allLoadedLeads = useMemo(
+    () => colunas.flatMap((coluna) => stages[coluna.key].items),
+    [stages]
+  )
+
   const agentes = useMemo(() => {
     return Array.from(
       new Set(
-        leads
+        allLoadedLeads
           .map((lead) => lead.conversation_agent_name?.trim())
           .filter((value): value is string => Boolean(value))
       )
     ).sort((a, b) => a.localeCompare(b, 'pt-BR'))
-  }, [leads])
-
-  const leadsFiltrados = useMemo(() => {
-    if (selectedAgent === 'all') return leads
-
-    return leads.filter(
-      (lead) => (lead.conversation_agent_name || '') === selectedAgent
-    )
-  }, [leads, selectedAgent])
+  }, [allLoadedLeads])
 
   return (
     <div className="h-full bg-[#f8fafc] p-6">
@@ -185,9 +250,18 @@ export default function LeadsPage() {
       ) : (
         <div className="grid h-[calc(100vh-180px)] grid-cols-5 gap-4">
           {colunas.map((coluna) => {
-            const leadsDaColuna = leadsFiltrados.filter(
-              (l) => l.status === coluna.key
-            )
+            const stage = stages[coluna.key]
+            const leadsDaColuna =
+              selectedAgent === 'all'
+                ? stage.items
+                : stage.items.filter(
+                    (lead) => (lead.conversation_agent_name || '') === selectedAgent
+                  )
+
+            const badgeCount =
+              selectedAgent === 'all'
+                ? stage.total
+                : leadsDaColuna.length
 
             return (
               <div
@@ -200,7 +274,7 @@ export default function LeadsPage() {
                   </h2>
 
                   <span className="flex h-7 min-w-7 items-center justify-center rounded-full border border-gray-200 bg-gray-50 px-2 text-xs font-medium text-gray-600">
-                    {leadsDaColuna.length}
+                    {badgeCount}
                   </span>
                 </div>
 
@@ -211,13 +285,23 @@ export default function LeadsPage() {
                         key={lead.id}
                         lead={lead}
                         onMove={moverLead}
-                        onUpdated={loadLeads}
+                        onUpdated={() => loadAllStages(true)}
                       />
                     ))
                   ) : (
                     <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-gray-200 text-sm text-gray-400">
                       Nenhum lead
                     </div>
+                  )}
+
+                  {stage.hasMore && (
+                    <button
+                      onClick={() => loadStage(coluna.key, false)}
+                      disabled={stage.loading}
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 transition hover:bg-gray-50 disabled:opacity-60"
+                    >
+                      {stage.loading ? 'Carregando...' : 'Carregar mais'}
+                    </button>
                   )}
                 </div>
               </div>
@@ -229,7 +313,7 @@ export default function LeadsPage() {
       {showNovoLead && (
         <NovoLeadModal
           onClose={() => setShowNovoLead(false)}
-          onSaved={loadLeads}
+          onSaved={() => loadAllStages(true)}
         />
       )}
     </div>

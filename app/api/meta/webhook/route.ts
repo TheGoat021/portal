@@ -11,6 +11,7 @@ import {
 import { uploadMetaInboundMedia } from '@/lib/metaStorage'
 import { runMetaChatbotForInbound } from '@/lib/metaChatbot'
 import { getMetaConversationManagement, upsertMetaConversationManagement } from '@/lib/metaConversationManagement'
+import { syncLeadFromMetaConversationId } from "@/lib/leadSync"
 import {
   downloadMediaFile,
   extractWebhookEntries,
@@ -85,6 +86,15 @@ async function handleInboundMessage({
     contactName: contact?.profile?.name || null,
     profileName: value?.metadata?.display_phone_number || null
   })
+
+  try {
+    await syncLeadFromMetaConversationId(String(conversation.id))
+  } catch (syncError) {
+    console.error("Erro ao sincronizar lead da conversa Meta:", {
+      conversationId: conversation.id,
+      error: syncError instanceof Error ? syncError.message : String(syncError)
+    })
+  }
 
   let restartByInactivity = false
   try {

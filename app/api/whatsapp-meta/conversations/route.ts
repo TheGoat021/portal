@@ -47,6 +47,15 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url)
     const connectionId = url.searchParams.get('connectionId')
     const search = url.searchParams.get('search')?.trim() || ''
+    const serviceFilterRaw = (url.searchParams.get('serviceFilter') || '').trim().toLowerCase()
+    const serviceFilter =
+      serviceFilterRaw === 'bot' || serviceFilterRaw === 'operator' || serviceFilterRaw === 'closed'
+        ? serviceFilterRaw
+        : null
+    const limitParam = Number.parseInt(url.searchParams.get('limit') || '50', 10)
+    const offsetParam = Number.parseInt(url.searchParams.get('offset') || '0', 10)
+    const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 200) : 50
+    const offset = Number.isFinite(offsetParam) ? Math.max(offsetParam, 0) : 0
     const userId = url.searchParams.get('userId')?.trim() || ''
     const userRole = (url.searchParams.get('userRole')?.trim() || '').toUpperCase()
     const isDiretoria =
@@ -59,12 +68,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'connectionId é obrigatório' }, { status: 400 })
     }
 
+    const IN_FILTER_CHUNK_SIZE = 50
+
     let query = supabaseAdmin
       .from('meta_conversations')
       .select('*')
       .eq('connection_id', connectionId)
       .order('last_message_at', { ascending: false, nullsFirst: false })
-      .limit(5000)
+      .limit(3000)
 
     if (search) {
       query = query.or(
@@ -89,7 +100,7 @@ export async function GET(req: NextRequest) {
     }> = []
 
     if (conversationIds.length > 0) {
-      const idChunks = chunkArray(conversationIds, 200)
+      const idChunks = chunkArray(conversationIds, IN_FILTER_CHUNK_SIZE)
       for (const chunk of idChunks) {
         const managementResponse = await supabaseAdmin
           .from('meta_conversation_management')
@@ -145,7 +156,7 @@ export async function GET(req: NextRequest) {
     const latestOperatorEmailByConversation = new Map<string, string>()
 
     if (conversationIds.length > 0) {
-      const idChunks = chunkArray(conversationIds, 200)
+      const idChunks = chunkArray(conversationIds, IN_FILTER_CHUNK_SIZE)
       for (const chunk of idChunks) {
         const [{ data: inboundRows, error: inboundError }, { data: outboundRowsRaw, error: outboundError }] =
           await Promise.all([
@@ -292,7 +303,30 @@ export async function GET(req: NextRequest) {
           })
         : conversationsWithServiceState
 
-    return NextResponse.json({ ok: true, data: visibleConversations })
+    const counts = {
+      bot: visibleConversations.filter((conversation) => conversation.service_state === 'bot').length,
+      operator: visibleConversations.filter((conversation) => conversation.service_state === 'operator').length,
+      closed: visibleConversations.filter((conversation) => conversation.service_state === 'closed').length
+    }
+
+    const conversationsByFilter = serviceFilter
+      ? visibleConversations.filter((conversation) => conversation.service_state === serviceFilter)
+      : visibleConversations
+
+    const total = conversationsByFilter.length
+    const pagedData = conversationsByFilter.slice(offset, offset + limit)
+
+    return NextResponse.json({
+      ok: true,
+      data: pagedData,
+      counts,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + pagedData.length < total
+      }
+    })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Erro ao listar conversas'
     return NextResponse.json({ ok: false, error: message }, { status: 500 })

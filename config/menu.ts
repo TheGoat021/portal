@@ -73,6 +73,11 @@ export const menuConfig: MenuSection[] = [
     roles: ["COMERCIAL", "AGENDAMENTO", "EXAMES", "DIRETORIA"],
     items: [
       {
+        label: "WhatsApp Oficial",
+        href: "/portal/conversas-meta",
+      },
+
+      {
         label: "WhatsApp",
         href: "/portal/conversas",
       },

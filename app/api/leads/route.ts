@@ -1,21 +1,42 @@
-import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { NextRequest, NextResponse } from "next/server"
+import { supabaseAdmin } from "@/lib/supabaseAdmin"
 
-type LeadStatus =
-  | 'novo'
-  | 'em_contato'
-  | 'proposta'
-  | 'ganho'
-  | 'perdido'
+type LeadStatus = "novo" | "em_contato" | "proposta" | "ganho" | "perdido"
 
-const DEFAULT_LEAD_STATUS: LeadStatus = 'novo'
+const DEFAULT_LEAD_STATUS: LeadStatus = "novo"
+
+function normalizeLeadRow(lead: any) {
+  return {
+    ...lead,
+    status: (lead.status as LeadStatus) || DEFAULT_LEAD_STATUS,
+    cliente: lead.cliente ?? {
+      id: "",
+      nome: "Cliente não informado",
+      telefone: "",
+      email: null
+    },
+    origem: lead.origem ?? {
+      id: "",
+      nome: "Sem origem",
+      plataforma: null
+    }
+  }
+}
 
 /**
  * LISTAR LEADS (PIPELINE)
  */
-export async function GET() {
-  const { data, error } = await supabaseAdmin
-    .from('leads')
+export async function GET(req: NextRequest) {
+  const status = (req.nextUrl.searchParams.get("status") || "").trim() as LeadStatus | ""
+  const limitParam = Number.parseInt(req.nextUrl.searchParams.get("limit") || "0", 10)
+  const offsetParam = Number.parseInt(req.nextUrl.searchParams.get("offset") || "0", 10)
+  const hasPagination = Number.isFinite(limitParam) && limitParam > 0
+  const limit = hasPagination ? Math.min(Math.max(limitParam, 1), 200) : 0
+  const offset = hasPagination ? Math.max(offsetParam, 0) : 0
+  const validStatus = ["novo", "em_contato", "proposta", "ganho", "perdido"].includes(status)
+
+  let query = supabaseAdmin
+    .from("leads")
     .select(`
       id,
       conversation_id,
@@ -33,29 +54,45 @@ export async function GET() {
         plataforma
       )
     `)
-    .order('created_at', { ascending: false })
+    .order("created_at", { ascending: false })
 
+  if (validStatus) {
+    query = query.eq("status", status)
+  }
+
+  if (hasPagination) {
+    query = query.range(offset, offset + limit - 1)
+  }
+
+  const { data, error } = await query
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  const normalized = (data ?? []).map((lead) => ({
-    ...lead,
-    status: (lead.status as LeadStatus) || DEFAULT_LEAD_STATUS,
-    cliente: lead.cliente ?? {
-      id: '',
-      nome: 'Cliente não informado',
-      telefone: '',
-      email: null
-    },
-    origem: lead.origem ?? {
-      id: '',
-      nome: 'Sem origem',
-      plataforma: null
-    }
-  }))
+  const normalized = (data ?? []).map(normalizeLeadRow)
+  if (!hasPagination) {
+    return NextResponse.json(normalized)
+  }
 
-  return NextResponse.json(normalized)
+  let countQuery = supabaseAdmin.from("leads").select("id", { count: "exact", head: true })
+  if (validStatus) {
+    countQuery = countQuery.eq("status", status)
+  }
+
+  const { count, error: countError } = await countQuery
+  if (countError) {
+    return NextResponse.json({ error: countError.message }, { status: 500 })
+  }
+
+  return NextResponse.json({
+    data: normalized,
+    pagination: {
+      total: Number(count ?? 0),
+      limit,
+      offset,
+      hasMore: offset + normalized.length < Number(count ?? 0)
+    }
+  })
 }
 
 /**
@@ -68,28 +105,23 @@ export async function POST(req: Request) {
 
     if (!nome || !telefone || !origem_id) {
       return NextResponse.json(
-        { error: 'nome, telefone e origem_id são obrigatórios' },
+        { error: "nome, telefone e origem_id são obrigatórios" },
         { status: 400 }
       )
     }
 
-    /** 1️⃣ Buscar origem */
     const { data: origem, error: origemError } = await supabaseAdmin
-      .from('origens')
-      .select('id, nome, plataforma')
-      .eq('id', origem_id)
+      .from("origens")
+      .select("id, nome, plataforma")
+      .eq("id", origem_id)
       .single()
 
     if (origemError || !origem) {
-      return NextResponse.json(
-        { error: 'Origem inválida' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: "Origem inválida" }, { status: 400 })
     }
 
-    /** 2️⃣ Criar cliente */
     const { data: cliente, error: clienteError } = await supabaseAdmin
-      .from('clientes')
+      .from("clientes")
       .insert({
         nome,
         telefone,
@@ -105,20 +137,19 @@ export async function POST(req: Request) {
 
     if (clienteError || !cliente) {
       return NextResponse.json(
-        { error: clienteError?.message || 'Erro ao criar cliente' },
+        { error: clienteError?.message || "Erro ao criar cliente" },
         { status: 500 }
       )
     }
 
-    /** 3️⃣ Criar lead */
     const { data: lead, error: leadError } = await supabaseAdmin
-      .from('leads')
+      .from("leads")
       .insert({
         cliente_id: cliente.id,
         origem_id: origem.id,
         conversation_id: conversation_id || null,
         status: DEFAULT_LEAD_STATUS,
-        plataforma: 'manual'
+        plataforma: "manual"
       })
       .select(`
         id,
@@ -141,7 +172,7 @@ export async function POST(req: Request) {
 
     if (leadError || !lead) {
       return NextResponse.json(
-        { error: leadError?.message || 'Erro ao criar lead' },
+        { error: leadError?.message || "Erro ao criar lead" },
         { status: 500 }
       )
     }
@@ -162,11 +193,8 @@ export async function POST(req: Request) {
       }
     })
   } catch (error) {
-    console.error('Erro ao criar lead:', error)
+    console.error("Erro ao criar lead:", error)
 
-    return NextResponse.json(
-      { error: 'Erro interno ao criar lead' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Erro interno ao criar lead" }, { status: 500 })
   }
 }
