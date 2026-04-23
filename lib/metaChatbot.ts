@@ -89,11 +89,11 @@ function resolveNodeKind(node: ChatbotNode): ChatbotNodeType {
   if (nodeId.startsWith("end-")) return "end"
 
   const title = normalizeText(node.data?.title || "")
-  if (title === "inicio" || title === "início") return "start"
+  if (title === "inicio" || title === "inÃ­cio") return "start"
   if (title === "mensagem") return "message"
   if (title === "pergunta") return "question"
-  if (title === "condicao" || title === "condição") return "condition"
-  if (title === "acao" || title === "ação") return "action"
+  if (title === "condicao" || title === "condiÃ§Ã£o") return "condition"
+  if (title === "acao" || title === "aÃ§Ã£o") return "action"
   if (title === "fim") return "end"
 
   return "message"
@@ -163,7 +163,7 @@ async function sendBotMessage({
 }) {
   const connection = await getMetaConnectionById(connectionId)
   if (!connection?.phone_number_id || !connection?.business_token) {
-    throw new Error("Conexão Meta inválida para envio do chatbot")
+    throw new Error("ConexÃ£o Meta invÃ¡lida para envio do chatbot")
   }
 
   const normalizedTo = normalizePhone(to)
@@ -218,7 +218,7 @@ async function sendBotMedia({
 }) {
   const connection = await getMetaConnectionById(connectionId)
   if (!connection?.phone_number_id || !connection?.business_token) {
-    throw new Error("Conexão Meta inválida para envio de mídia do chatbot")
+    throw new Error("ConexÃ£o Meta invÃ¡lida para envio de mÃ­dia do chatbot")
   }
 
   const normalizedTo = normalizePhone(to)
@@ -275,7 +275,7 @@ async function sendBotQuestionButtons({
 }) {
   const connection = await getMetaConnectionById(connectionId)
   if (!connection?.phone_number_id || !connection?.business_token) {
-    throw new Error("Conexão Meta inválida para envio do menu clicável")
+    throw new Error("ConexÃ£o Meta invÃ¡lida para envio do menu clicÃ¡vel")
   }
 
   const normalizedTo = normalizePhone(to)
@@ -522,7 +522,7 @@ export async function runMetaChatbotForInbound({
       const questionMode = node.data?.questionMode || "text"
 
       if (!remainingInput) {
-        const promptText = message || "Escolha uma op��o:"
+        const promptText = message || "Escolha uma opção:"
         if (questionMode === "buttons" && options.length > 0 && options.length <= 3) {
           await sendBotQuestionButtons({
             connectionId,
@@ -542,7 +542,7 @@ export async function runMetaChatbotForInbound({
 
       const matchedOption = matchQuestionOption(options, remainingInput)
       if (!matchedOption) {
-        const promptText = message || "Op��o inv�lida. Tente novamente:"
+        const promptText = message || "Opção inválida. Tente novamente:"
         if (questionMode === "buttons" && options.length > 0 && options.length <= 3) {
           await sendBotQuestionButtons({
             connectionId,
