@@ -2,7 +2,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin"
 import { getMetaConnectionById, insertMetaMessage, touchMetaConversation } from "@/lib/metaDb"
 import { upsertMetaConversationManagement } from "@/lib/metaConversationManagement"
 import { logMetaQueueDistributionEvent, tryAutoAssignConversation } from "@/lib/metaQueueDistribution"
-import { normalizePhone, sendTextMessage } from "@/lib/whatsappMeta"
+import { MetaMediaType, normalizePhone, sendInteractiveButtonsMessage, sendMediaMessage, sendTextMessage } from "@/lib/whatsappMeta"
 
 export type ChatbotNodeType = "start" | "message" | "question" | "condition" | "action" | "end"
 
@@ -15,6 +15,10 @@ export type ChatbotNode = {
     title?: string
     message?: string
     options?: string[]
+    questionMode?: "text" | "buttons"
+    messageType?: "text" | "image" | "video" | "document"
+    mediaLink?: string
+    fileName?: string
     actionType?: "tag" | "route" | "handoff" | "note"
     actionValue?: string
   }
@@ -195,6 +199,165 @@ async function sendBotMessage({
   })
 }
 
+async function sendBotMedia({
+  connectionId,
+  conversationId,
+  to,
+  mediaType,
+  mediaLink,
+  caption,
+  fileName
+}: {
+  connectionId: string
+  conversationId: string
+  to: string
+  mediaType: MetaMediaType
+  mediaLink: string
+  caption?: string
+  fileName?: string
+}) {
+  const connection = await getMetaConnectionById(connectionId)
+  if (!connection?.phone_number_id || !connection?.business_token) {
+    throw new Error("Conexão Meta inválida para envio de mídia do chatbot")
+  }
+
+  const normalizedTo = normalizePhone(to)
+  if (!normalizedTo) return
+
+  const response = await sendMediaMessage({
+    phoneNumberId: connection.phone_number_id,
+    token: connection.business_token,
+    to: normalizedTo,
+    type: mediaType,
+    mediaLink,
+    caption: caption || null,
+    fileName: fileName || null
+  })
+
+  const metaMessageId = response?.messages?.[0]?.id ?? null
+
+  await insertMetaMessage({
+    conversationId,
+    connectionId: connection.id,
+    companyId: connection.company_id,
+    metaMessageId,
+    direction: "outbound",
+    status: "sent",
+    fromPhone: connection.display_phone_number || null,
+    toPhone: normalizedTo,
+    type: mediaType,
+    message: (caption || "").trim() || `Bot enviou ${mediaType}`,
+    caption: caption || null,
+    mediaUrl: mediaLink,
+    fileName: fileName || null,
+    rawPayload: response
+  })
+
+  await touchMetaConversation({
+    conversationId,
+    lastMessage: (caption || "").trim() || mediaType,
+    lastMessageType: mediaType
+  })
+}
+
+async function sendBotQuestionButtons({
+  connectionId,
+  conversationId,
+  to,
+  text,
+  options
+}: {
+  connectionId: string
+  conversationId: string
+  to: string
+  text: string
+  options: string[]
+}) {
+  const connection = await getMetaConnectionById(connectionId)
+  if (!connection?.phone_number_id || !connection?.business_token) {
+    throw new Error("Conexão Meta inválida para envio do menu clicável")
+  }
+
+  const normalizedTo = normalizePhone(to)
+  if (!normalizedTo) return
+
+  const response = await sendInteractiveButtonsMessage({
+    phoneNumberId: connection.phone_number_id,
+    token: connection.business_token,
+    to: normalizedTo,
+    bodyText: text,
+    buttons: options
+  })
+
+  const metaMessageId = response?.messages?.[0]?.id ?? null
+  const messageText = buildQuestionText(text, options)
+
+  await insertMetaMessage({
+    conversationId,
+    connectionId: connection.id,
+    companyId: connection.company_id,
+    metaMessageId,
+    direction: "outbound",
+    status: "sent",
+    fromPhone: connection.display_phone_number || null,
+    toPhone: normalizedTo,
+    type: "text",
+    message: messageText,
+    rawPayload: response
+  })
+
+  await touchMetaConversation({
+    conversationId,
+    lastMessage: messageText,
+    lastMessageType: "text"
+  })
+}
+
+async function sendNodeContent({
+  connectionId,
+  conversationId,
+  to,
+  message,
+  messageType,
+  mediaLink,
+  fileName
+}: {
+  connectionId: string
+  conversationId: string
+  to: string
+  message: string
+  messageType?: "text" | "image" | "video" | "document"
+  mediaLink?: string
+  fileName?: string
+}) {
+  const contentType = messageType || "text"
+
+  if (contentType === "text") {
+    if (message) {
+      await sendBotMessage({ connectionId, conversationId, to, text: message })
+    }
+    return
+  }
+
+  const link = (mediaLink || "").trim()
+  if (!link) {
+    if (message) {
+      await sendBotMessage({ connectionId, conversationId, to, text: message })
+    }
+    return
+  }
+
+  await sendBotMedia({
+    connectionId,
+    conversationId,
+    to,
+    mediaType: contentType,
+    mediaLink: link,
+    caption: message || undefined,
+    fileName: fileName || undefined
+  })
+}
+
 async function getAvailableFlow(connectionId: string): Promise<ChatbotFlow | null> {
   const { data, error } = await supabaseAdmin
     .from("meta_chatbot_flows")
@@ -329,11 +492,20 @@ export async function runMetaChatbotForInbound({
     const outgoing = getOutgoingEdges(flow, node.id)
     const message = (node.data?.message || "").trim()
     const nodeKind = resolveNodeKind(node)
+    const messageType = node.data?.messageType || "text"
+    const mediaLink = node.data?.mediaLink || ""
+    const fileName = node.data?.fileName || ""
 
     if (nodeKind === "start" || nodeKind === "message") {
-      if (message) {
-        await sendBotMessage({ connectionId, conversationId, to, text: message })
-      }
+      await sendNodeContent({
+        connectionId,
+        conversationId,
+        to,
+        message,
+        messageType,
+        mediaLink,
+        fileName
+      })
 
       const next = outgoing[0]?.target
       if (!next) {
@@ -347,18 +519,43 @@ export async function runMetaChatbotForInbound({
 
     if (nodeKind === "question") {
       const options = (node.data?.options ?? []).map((item) => item.trim()).filter(Boolean)
+      const questionMode = node.data?.questionMode || "text"
 
       if (!remainingInput) {
-        const prompt = buildQuestionText(message || "Escolha uma opção:", options)
-        await sendBotMessage({ connectionId, conversationId, to, text: prompt })
+        const promptText = message || "Escolha uma op��o:"
+        if (questionMode === "buttons" && options.length > 0 && options.length <= 3) {
+          await sendBotQuestionButtons({
+            connectionId,
+            conversationId,
+            to,
+            text: promptText,
+            options
+          })
+        } else {
+          const prompt = buildQuestionText(promptText, options)
+          await sendBotMessage({ connectionId, conversationId, to, text: prompt })
+        }
+
         await updateSession(session.id, { current_node_id: node.id, state: "active", context })
         return
       }
 
       const matchedOption = matchQuestionOption(options, remainingInput)
       if (!matchedOption) {
-        const prompt = buildQuestionText(message || "Opção inválida. Tente novamente:", options)
-        await sendBotMessage({ connectionId, conversationId, to, text: prompt })
+        const promptText = message || "Op��o inv�lida. Tente novamente:"
+        if (questionMode === "buttons" && options.length > 0 && options.length <= 3) {
+          await sendBotQuestionButtons({
+            connectionId,
+            conversationId,
+            to,
+            text: promptText,
+            options
+          })
+        } else {
+          const prompt = buildQuestionText(promptText, options)
+          await sendBotMessage({ connectionId, conversationId, to, text: prompt })
+        }
+
         await updateSession(session.id, { current_node_id: node.id, state: "active", context })
         return
       }
@@ -393,7 +590,7 @@ export async function runMetaChatbotForInbound({
       continue
     }
 
-    if (nodeKind === "action") {
+    if (nodeKind === "action" || nodeKind === "end") {
       const actionValue = (node.data?.actionValue || "").trim()
       const actionType = node.data?.actionType || (actionValue ? "route" : "note")
 
@@ -406,25 +603,24 @@ export async function runMetaChatbotForInbound({
         }
       }
 
-      if (message) {
-        await sendBotMessage({ connectionId, conversationId, to, text: message })
-      }
+      await sendNodeContent({
+        connectionId,
+        conversationId,
+        to,
+        message,
+        messageType,
+        mediaLink,
+        fileName
+      })
 
       if (actionType === "route" && actionValue) {
         const department = actionValue
-        console.log("META CHATBOT ROUTE ACTION:", {
-          connectionId,
-          conversationId,
-          nodeId: node.id,
-          nodeKind,
-          department
-        })
         await logMetaQueueDistributionEvent({
           connectionId,
           conversationId,
           department,
           status: "route_action_entered",
-          reason: "chatbot_action_node"
+          reason: nodeKind === "end" ? "chatbot_end_node" : "chatbot_action_node"
         })
 
         await upsertMetaConversationManagement({
@@ -443,13 +639,6 @@ export async function runMetaChatbotForInbound({
             connectionId,
             conversationId,
             department
-          })
-          console.log("META CHATBOT ROUTE RESULT:", {
-            connectionId,
-            conversationId,
-            department,
-            assignedAgentId: assignedAgent?.id ?? null,
-            assignedAgentEmail: assignedAgent?.email ?? null
           })
 
           if (assignedAgent) {
@@ -504,7 +693,6 @@ export async function runMetaChatbotForInbound({
             })
           }
         } catch (distributionError) {
-          console.error("Erro ao distribuir conversa automaticamente:", distributionError)
           const transferText = "Erro ao transferir atendimento automaticamente pelo chatbot."
           await insertMetaMessage({
             conversationId,
@@ -528,6 +716,11 @@ export async function runMetaChatbotForInbound({
           })
         }
 
+        await updateSession(session.id, { current_node_id: null, state: "completed", context })
+        return
+      }
+
+      if (nodeKind === "end") {
         await updateSession(session.id, { current_node_id: null, state: "completed", context })
         return
       }
@@ -540,137 +733,6 @@ export async function runMetaChatbotForInbound({
 
       node = getNode(flow, next)
       continue
-    }
-
-    if (nodeKind === "end") {
-      const actionValue = (node.data?.actionValue || "").trim()
-      const actionType = node.data?.actionType || (actionValue ? "route" : "note")
-
-      if (message) {
-        await sendBotMessage({ connectionId, conversationId, to, text: message })
-      }
-
-      if (actionType === "route" && actionValue) {
-        const department = actionValue
-        console.log("META CHATBOT ROUTE ACTION:", {
-          connectionId,
-          conversationId,
-          nodeId: node.id,
-          nodeKind,
-          department
-        })
-        await logMetaQueueDistributionEvent({
-          connectionId,
-          conversationId,
-          department,
-          status: "route_action_entered",
-          reason: "chatbot_end_node"
-        })
-
-        await upsertMetaConversationManagement({
-          conversation_id: conversationId,
-          connection_id: connectionId,
-          status: "open",
-          assigned_user_id: null,
-          assigned_user_email: null,
-          assigned_department: department,
-          closed_at: null,
-          closed_by_user_id: null
-        })
-
-        try {
-          const assignedAgent = await tryAutoAssignConversation({
-            connectionId,
-            conversationId,
-            department
-          })
-          console.log("META CHATBOT ROUTE RESULT:", {
-            connectionId,
-            conversationId,
-            department,
-            assignedAgentId: assignedAgent?.id ?? null,
-            assignedAgentEmail: assignedAgent?.email ?? null
-          })
-
-          if (assignedAgent) {
-            const target = assignedAgent.email || assignedAgent.id
-            const transferText = `Atendimento transferido por chatbot para ${target}.`
-
-            await insertMetaMessage({
-              conversationId,
-              connectionId,
-              direction: "outbound",
-              status: "sent",
-              fromPhone: null,
-              toPhone: null,
-              type: "system",
-              message: transferText,
-              rawPayload: {
-                event: "auto_transfer",
-                by: "chatbot",
-                toUserId: assignedAgent.id,
-                toUserEmail: assignedAgent.email
-              }
-            })
-
-            await touchMetaConversation({
-              conversationId,
-              lastMessage: transferText,
-              lastMessageType: "system"
-            })
-          } else {
-            const transferText = "Chatbot concluiu o fluxo, mas nenhum operador elegivel foi encontrado para transferencia."
-
-            await insertMetaMessage({
-              conversationId,
-              connectionId,
-              direction: "outbound",
-              status: "sent",
-              fromPhone: null,
-              toPhone: null,
-              type: "system",
-              message: transferText,
-              rawPayload: {
-                event: "auto_transfer_not_assigned",
-                by: "chatbot",
-                department
-              }
-            })
-
-            await touchMetaConversation({
-              conversationId,
-              lastMessage: transferText,
-              lastMessageType: "system"
-            })
-          }
-        } catch (distributionError) {
-          console.error("Erro ao distribuir conversa automaticamente:", distributionError)
-          const transferText = "Erro ao transferir atendimento automaticamente pelo chatbot."
-          await insertMetaMessage({
-            conversationId,
-            connectionId,
-            direction: "outbound",
-            status: "sent",
-            fromPhone: null,
-            toPhone: null,
-            type: "system",
-            message: transferText,
-            rawPayload: {
-              event: "auto_transfer_error",
-              by: "chatbot",
-              details: distributionError instanceof Error ? distributionError.message : String(distributionError)
-            }
-          })
-          await touchMetaConversation({
-            conversationId,
-            lastMessage: transferText,
-            lastMessageType: "system"
-          })
-        }
-      }
-
-      await updateSession(session.id, { current_node_id: null, state: "completed", context })
-      return
     }
 
     break

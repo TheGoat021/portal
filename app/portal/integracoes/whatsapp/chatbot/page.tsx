@@ -27,6 +27,10 @@ type FlowNodeData = {
   title?: string
   message?: string
   options?: string[]
+  questionMode?: "text" | "buttons"
+  messageType?: "text" | "image" | "video" | "document"
+  mediaLink?: string
+  fileName?: string
   actionType?: "tag" | "route" | "handoff" | "note"
   actionValue?: string
 }
@@ -404,6 +408,72 @@ export default function MetaChatbotBuilderPage() {
               placeholder="Opções da pergunta (uma por linha)"
               className="w-full border rounded-lg px-3 py-2 text-sm min-h-[88px]"
             />
+
+            <select
+              value={selectedNode.data?.questionMode || "text"}
+              onChange={(e) =>
+                updateNode(selectedNode.id, (node) => ({
+                  ...node,
+                  data: {
+                    ...node.data,
+                    questionMode: e.target.value as FlowNodeData["questionMode"]
+                  }
+                }))
+              }
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+            >
+              <option value="text">Pergunta: resposta por texto</option>
+              <option value="buttons">Pergunta: menu clicável (até 3 opções)</option>
+            </select>
+
+            <select
+              value={selectedNode.data?.messageType || "text"}
+              onChange={(e) =>
+                updateNode(selectedNode.id, (node) => ({
+                  ...node,
+                  data: {
+                    ...node.data,
+                    messageType: e.target.value as FlowNodeData["messageType"]
+                  }
+                }))
+              }
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+            >
+              <option value="text">Conteúdo: Texto</option>
+              <option value="image">Conteúdo: Imagem (link)</option>
+              <option value="video">Conteúdo: Vídeo (link)</option>
+              <option value="document">Conteúdo: Arquivo (link)</option>
+            </select>
+
+            {(selectedNode.data?.messageType || "text") !== "text" && (
+              <>
+                <input
+                  value={selectedNode.data?.mediaLink || ""}
+                  onChange={(e) =>
+                    updateNode(selectedNode.id, (node) => ({
+                      ...node,
+                      data: { ...node.data, mediaLink: e.target.value }
+                    }))
+                  }
+                  placeholder="Link público da mídia (https://...)"
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                />
+
+                {(selectedNode.data?.messageType || "text") === "document" && (
+                  <input
+                    value={selectedNode.data?.fileName || ""}
+                    onChange={(e) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        data: { ...node.data, fileName: e.target.value }
+                      }))
+                    }
+                    placeholder="Nome do arquivo (opcional)"
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                  />
+                )}
+              </>
+            )}
 
             <select
               value={selectedNode.data?.actionType || "route"}

@@ -13,13 +13,19 @@ import { menuConfig } from "@/config/menu";
 import { usePortalStore } from "@/store/portalStore";
 import { useTrainingStore } from "@/store/trainingStore";
 import { supabase } from "@/lib/supabaseClient";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/store/authStore";
+
+type TrainingProgressItem = {
+  module: string;
+  approved: boolean;
+};
 
 export function Sidebar() {
   const { role } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const setActiveHref = usePortalStore((state) => state.setActiveHref);
   const { setProgress, isUnlocked, progress } = useTrainingStore();
@@ -46,15 +52,15 @@ export function Sidebar() {
         .from("training_modules")
         .select("id, slug");
 
-      const normalized = progressData
+      const normalized: TrainingProgressItem[] = progressData
         .map((p) => {
           const mod = modules?.find((m) => m.id === p.module_id);
           if (!mod) return null;
           return { module: mod.slug, approved: p.approved };
         })
-        .filter(Boolean);
+        .filter((item): item is TrainingProgressItem => Boolean(item));
 
-      setProgress(normalized as any);
+      setProgress(normalized);
     }
 
     loadProgress();
@@ -84,8 +90,15 @@ export function Sidebar() {
 
   function isActiveRoute(href?: string) {
     if (!href || href.startsWith("http")) return false;
-    if (href === "/portal") return pathname === "/portal";
-    return pathname === href || pathname.startsWith(`${href}/`);
+    const [targetPath, targetQuery] = href.split("?");
+    if (targetPath === "/portal") return pathname === "/portal";
+    if (pathname !== targetPath && !pathname.startsWith(`${targetPath}/`)) return false;
+    if (!targetQuery) return true;
+
+    const targetParams = new URLSearchParams(targetQuery);
+    return Array.from(targetParams.entries()).every(
+      ([key, value]) => searchParams.get(key) === value
+    );
   }
 
   async function handleLogout() {

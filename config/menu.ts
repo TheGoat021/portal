@@ -68,10 +68,73 @@ export const menuConfig: MenuSection[] = [
   },
 
   {
-    title: "Comercial Leads",
+    title: "Comercial",
+    icon: DollarSign,
+    roles: ["COMERCIAL", "DIRETORIA"],
+    items: [
+      {
+        label: "Novo Registro",
+        href: "/portal/agendamento/gestao-teste?tab=novo",
+      },
+      {
+        label: "Metas Geral",
+        href: "https://glittering-dieffenbachia-ed9bc9.netlify.app/",
+        allowExternal: true,
+      },
+      {
+        label: "Equipe A",
+        href: "https://docs.google.com/spreadsheets/d/1x5vfTy5datDHqFq2HJtMxVfBXTG0l4gSaJjh4RxjL7o/edit?gid=0#gid=0",
+        allowExternal: true,
+      },
+      {
+        label: "Equipe B",
+        href: "https://docs.google.com/spreadsheets/d/1kp8WvwvDNMQZHW3jRAUGAzp4oXtqvjGtk4oIclCGhi0/edit?gid=1570139612#gid=1570139612",
+        allowExternal: true,
+      },
+      {
+        label: "Consulta CPF ",
+        href: "https://servicos.receita.fazenda.gov.br/Servicos/CPF/ConsultaSituacao/ConsultaPublica.asp",
+        allowExternal: true,
+      },
+      {
+        label: "Agendas",
+        href: "https://sage-macaron-e8a43f.netlify.app/",
+        allowExternal: true,
+      },
+      {
+        label: "Credênciadas",
+        href: "https://docs.google.com/spreadsheets/d/1R0UVojq0po_O0YFcywHANnK4-zEEK_pz7M3oftLgJNk/edit?usp=sharing",
+        allowExternal: true,
+      },
+      {
+        label: "Fic",
+        href: "https://docs.google.com/forms/d/e/1FAIpQLSegsWrwcEw9DalA_NzueAbPJzquyPQ6Owy04OHhlSZh_3MEYg/viewform",
+        allowExternal: true,
+      },
+      {
+        label: "Elev",
+        href: "http://179.125.68.164:9000/nxt3000/login.php",
+        allowExternal: true,
+      },
+      {
+        label: "Gestão",
+        href: "https://gestao.drdetodos.com.br/",
+        allowExternal: true,
+      },
+      {
+        label: "Duotalk",
+        href: "https://app.duotalk.io/login?to=&acc=687fdae2b21652ca230157e5",
+        allowExternal: true,
+      },
+    ],
+  },
+
+  {
+    title: "Leads",
     icon: DollarSign,
     roles: ["COMERCIAL", "AGENDAMENTO", "EXAMES", "DIRETORIA"],
     items: [
+      
       {
         label: "WhatsApp Oficial",
         href: "/portal/conversas-meta",
@@ -98,6 +161,10 @@ export const menuConfig: MenuSection[] = [
     icon: Calendar,
     roles: ["AGENDAMENTO", "EXAMES", "DIRETORIA"],
     items: [
+      {
+        label: "Dashboard",
+        href: "/portal/agendamento/gestao-teste?tab=dashboard",
+      },
       {
         label: "WhatsApp",
         href: "/portal/conversas",
@@ -166,68 +233,14 @@ export const menuConfig: MenuSection[] = [
   },
 
   {
-    title: "Comercial",
-    icon: DollarSign,
-    roles: ["COMERCIAL", "DIRETORIA"],
-    items: [
-      {
-        label: "Metas Geral",
-        href: "https://glittering-dieffenbachia-ed9bc9.netlify.app/",
-        allowExternal: true,
-      },
-      {
-        label: "Equipe A",
-        href: "https://docs.google.com/spreadsheets/d/1x5vfTy5datDHqFq2HJtMxVfBXTG0l4gSaJjh4RxjL7o/edit?gid=0#gid=0",
-        allowExternal: true,
-      },
-      {
-        label: "Equipe B",
-        href: "https://docs.google.com/spreadsheets/d/1kp8WvwvDNMQZHW3jRAUGAzp4oXtqvjGtk4oIclCGhi0/edit?gid=1570139612#gid=1570139612",
-        allowExternal: true,
-      },
-      {
-        label: "Consulta CPF ",
-        href: "https://servicos.receita.fazenda.gov.br/Servicos/CPF/ConsultaSituacao/ConsultaPublica.asp",
-        allowExternal: true,
-      },
-      {
-        label: "Agendas",
-        href: "https://sage-macaron-e8a43f.netlify.app/",
-        allowExternal: true,
-      },
-      {
-        label: "Credênciadas",
-        href: "https://docs.google.com/spreadsheets/d/1R0UVojq0po_O0YFcywHANnK4-zEEK_pz7M3oftLgJNk/edit?usp=sharing",
-        allowExternal: true,
-      },
-      {
-        label: "Fic",
-        href: "https://docs.google.com/forms/d/e/1FAIpQLSegsWrwcEw9DalA_NzueAbPJzquyPQ6Owy04OHhlSZh_3MEYg/viewform",
-        allowExternal: true,
-      },
-      {
-        label: "Elev",
-        href: "http://179.125.68.164:9000/nxt3000/login.php",
-        allowExternal: true,
-      },
-      {
-        label: "Gestão",
-        href: "https://gestao.drdetodos.com.br/",
-        allowExternal: true,
-      },
-      {
-        label: "Duotalk",
-        href: "https://app.duotalk.io/login?to=&acc=687fdae2b21652ca230157e5",
-        allowExternal: true,
-      },
-    ],
-  },
-
-  {
     title: "Exames",
     icon: Stethoscope,
     roles: ["EXAMES", "DIRETORIA"],
     items: [
+      {
+        label: "Novo Registro",
+        href: "/portal/agendamento/gestao-teste?tab=novo",
+      },
       {
         label: "TN Cancelamento",
         href: "https://docs.google.com/document/d/15gOYw1BFQ6F6TmmTNdLqhEvl7hmL1QjQaSR82DDoxOE/edit?usp=sharing",

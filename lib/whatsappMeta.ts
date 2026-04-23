@@ -123,6 +123,7 @@ export async function sendMediaMessage({
   token,
   to,
   mediaId,
+  mediaLink,
   type,
   caption,
   fileName,
@@ -131,7 +132,8 @@ export async function sendMediaMessage({
   phoneNumberId: string
   token: string
   to: string
-  mediaId: string
+  mediaId?: string
+  mediaLink?: string
   type: MetaMediaType
   caption?: string | null
   fileName?: string | null
@@ -142,8 +144,13 @@ export async function sendMediaMessage({
     to,
     type,
     [type]: {
-      id: mediaId
+      ...(mediaId ? { id: mediaId } : {}),
+      ...(mediaLink ? { link: mediaLink } : {})
     }
+  }
+
+  if (!mediaId && !mediaLink) {
+    throw new Error("mediaId ou mediaLink é obrigatório para enviar mídia")
   }
 
   if (caption && type !== 'audio') {
@@ -172,6 +179,69 @@ export async function sendMediaMessage({
 
   if (!res.ok) {
     throw new Error(data?.error?.message || 'Erro ao enviar mídia')
+  }
+
+  return data
+}
+
+export async function sendInteractiveButtonsMessage({
+  phoneNumberId,
+  token,
+  to,
+  bodyText,
+  buttons,
+  replyToMessageId
+}: {
+  phoneNumberId: string
+  token: string
+  to: string
+  bodyText: string
+  buttons: string[]
+  replyToMessageId?: string | null
+}) {
+  const cleanButtons = buttons.map((item) => item.trim()).filter(Boolean).slice(0, 3)
+  if (cleanButtons.length === 0) {
+    throw new Error("Pelo menos um botão é obrigatório")
+  }
+
+  const payload: any = {
+    messaging_product: "whatsapp",
+    to,
+    type: "interactive",
+    interactive: {
+      type: "button",
+      body: {
+        text: bodyText?.trim() || "Escolha uma opção:"
+      },
+      action: {
+        buttons: cleanButtons.map((label, index) => ({
+          type: "reply",
+          reply: {
+            id: `opt_${index + 1}`,
+            title: label.slice(0, 20)
+          }
+        }))
+      }
+    }
+  }
+
+  if (replyToMessageId) {
+    payload.context = { message_id: replyToMessageId }
+  }
+
+  const res = await fetch(`${GRAPH_BASE}/${phoneNumberId}/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store"
+  })
+
+  const data = await res.json()
+  if (!res.ok) {
+    throw new Error(data?.error?.message || "Erro ao enviar menu clicável")
   }
 
   return data

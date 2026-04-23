@@ -244,6 +244,35 @@ export function getInboundTypeAndContent(message: any) {
     }
   }
 
+  if (type === 'interactive') {
+    const buttonReply = message?.interactive?.button_reply
+    const listReply = message?.interactive?.list_reply
+    const replyText = buttonReply?.title || listReply?.title || listReply?.description || ""
+
+    return {
+      type: 'text',
+      text: String(replyText || "").trim(),
+      caption: null,
+      mediaId: null,
+      mimeType: null,
+      fileName: null,
+      contextMessageId
+    }
+  }
+
+  if (type === 'button') {
+    const replyText = message?.button?.text || message?.button?.payload || ""
+    return {
+      type: 'text',
+      text: String(replyText || "").trim(),
+      caption: null,
+      mediaId: null,
+      mimeType: null,
+      fileName: null,
+      contextMessageId
+    }
+  }
+
   if (type === 'image') {
     return {
       type: 'image',
