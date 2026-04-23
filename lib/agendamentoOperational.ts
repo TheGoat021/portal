@@ -38,8 +38,10 @@ export type OperationalRecordPayload = {
   patient_name?: unknown;
   patient_phone?: unknown;
   patient_cpf?: unknown;
+  patient_birth_date?: unknown;
   patient_email?: unknown;
   patient_city?: unknown;
+  contract_id?: unknown;
   plan_name?: unknown;
   record_type?: unknown;
   status?: unknown;
@@ -67,8 +69,10 @@ export type NormalizedOperationalRecord = {
   patient_name: string;
   patient_phone: string;
   patient_cpf: string | null;
+  patient_birth_date: string | null;
   patient_email: string | null;
   patient_city: string | null;
+  contract_id: string | null;
   plan_name: string;
   record_type: RecordType;
   status: string;
@@ -145,7 +149,7 @@ export function normalizeOperationalPayload(
     return { error: "record_type invalido" };
   }
 
-  if (!STATUS_BY_TYPE[record_type_raw].includes(status)) {
+  if (!(STATUS_BY_TYPE[record_type_raw] as readonly string[]).includes(status)) {
     return { error: "status invalido para o record_type informado" };
   }
 
@@ -175,8 +179,10 @@ export function normalizeOperationalPayload(
       patient_name,
       patient_phone,
       patient_cpf: asNullableString(payload.patient_cpf),
+      patient_birth_date: asNullableString(payload.patient_birth_date),
       patient_email: normalizeEmail(payload.patient_email),
       patient_city: asNullableString(payload.patient_city),
+      contract_id: asNullableString(payload.contract_id),
       plan_name,
       record_type: record_type_raw,
       status,

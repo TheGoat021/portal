@@ -40,9 +40,11 @@ type CallStatus = "venda_feita" | "venda_nao_realizada";
 type OperationalRecord = {
   id: string;
   patientName: string;
+  contractId?: string;
   plan: string;
   phone: string;
   cpf?: string;
+  birthDate?: string;
   email?: string;
   city?: string;
   type: RecordType;
@@ -89,6 +91,8 @@ const tabs: { key: TabKey; label: string }[] = [
   { key: "novo", label: "Novo Registro" },
 ];
 
+const PLAN_OPTIONS = ["Plano Light", "Plus R$ 9,90", "Plus Gratuito"] as const;
+
 const tabKeys = new Set<TabKey>(tabs.map((tab) => tab.key));
 
 function resolveTab(value: string | null): TabKey {
@@ -128,8 +132,10 @@ type ApiOperationalRecord = {
   patient_name: string;
   patient_phone: string;
   patient_cpf?: string | null;
+  patient_birth_date?: string | null;
   patient_email?: string | null;
   patient_city?: string | null;
+  contract_id?: string | null;
   plan_name: string;
   record_type: RecordType;
   status: string;
@@ -165,9 +171,11 @@ function mapApiRecordToUi(record: ApiOperationalRecord): OperationalRecord {
   return {
     id: record.id,
     patientName: record.patient_name,
+    contractId: record.contract_id || "",
     plan: record.plan_name,
     phone: formatPhone(record.patient_phone),
     cpf: formatCpf(record.patient_cpf || ""),
+    birthDate: record.patient_birth_date || "",
     email: record.patient_email || "",
     city: record.patient_city || "",
     type: record.record_type,
@@ -197,8 +205,10 @@ function mapUiRecordToApi(record: OperationalRecord) {
     patient_name: record.patientName,
     patient_phone: record.phone,
     patient_cpf: record.cpf || null,
+    patient_birth_date: record.birthDate || null,
     patient_email: record.email || null,
     patient_city: record.city || null,
+    contract_id: record.contractId || null,
     plan_name: record.plan,
     record_type: record.type,
     status: record.status,
@@ -849,10 +859,12 @@ function NewRecordView({
     const record: OperationalRecord = {
       id: `op-${Date.now()}`,
       patientName: String(form.get("patientName") || "Novo paciente"),
+      contractId: String(form.get("contractId") || ""),
       phone: String(form.get("phone") || ""),
       cpf: String(form.get("cpf") || ""),
+      birthDate: String(form.get("birthDate") || ""),
       email: String(form.get("email") || ""),
-      plan: String(form.get("plan") || "Essencial"),
+      plan: String(form.get("plan") || PLAN_OPTIONS[0]),
       city: String(form.get("city") || ""),
       type,
       date: String(form.get("date") || ""),
@@ -892,6 +904,7 @@ function NewRecordView({
         <h3 className="mb-3 mt-6 text-sm font-semibold text-slate-500">Dados do paciente</h3>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <input name="patientName" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="Nome do paciente" />
+          <input name="contractId" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="ID do contrato" />
           <input
             name="phone"
             className="rounded-xl border border-slate-200 px-3 py-3 text-sm"
@@ -908,12 +921,14 @@ function NewRecordView({
               event.currentTarget.value = formatCpf(event.currentTarget.value);
             }}
           />
+          <input name="birthDate" type="date" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" />
           <input name="email" type="email" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="E-mail" />
-          <select name="plan" className="rounded-xl border border-slate-200 px-3 py-3 text-sm">
-            <option>Essencial</option>
-            <option>Premium</option>
-            <option>Platinum</option>
-            <option>Empresarial</option>
+          <select name="plan" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" defaultValue={PLAN_OPTIONS[0]}>
+            {PLAN_OPTIONS.map((plan) => (
+              <option key={plan} value={plan}>
+                {plan}
+              </option>
+            ))}
           </select>
           <input name="city" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="Cidade / Unidade" />
         </div>
@@ -1028,6 +1043,7 @@ function PatientDrawer({
         <h4 className="mb-3 text-sm font-semibold text-slate-500">Dados pessoais</h4>
         <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-2">
           <input className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.patientName} onChange={(event) => patch({ patientName: event.target.value })} />
+          <input className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.contractId || ""} onChange={(event) => patch({ contractId: event.target.value })} placeholder="ID do contrato" />
           <input
             className="rounded-xl border border-slate-200 px-3 py-3 text-sm"
             value={draft.phone}
@@ -1038,12 +1054,14 @@ function PatientDrawer({
             value={draft.cpf || ""}
             onChange={(event) => patch({ cpf: formatCpf(event.target.value) })}
           />
+          <input type="date" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.birthDate || ""} onChange={(event) => patch({ birthDate: event.target.value })} />
           <input className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.email || ""} onChange={(event) => patch({ email: event.target.value })} />
           <select className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.plan} onChange={(event) => patch({ plan: event.target.value })}>
-            <option>Essencial</option>
-            <option>Premium</option>
-            <option>Platinum</option>
-            <option>Empresarial</option>
+            {PLAN_OPTIONS.map((plan) => (
+              <option key={plan} value={plan}>
+                {plan}
+              </option>
+            ))}
           </select>
           <input className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.city || ""} onChange={(event) => patch({ city: event.target.value })} />
         </div>
