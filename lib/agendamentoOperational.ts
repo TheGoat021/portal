@@ -160,10 +160,11 @@ export function normalizeOperationalPayload(
     return { error: "payment_status invalido" };
   }
 
-  const call_status_raw = asTrimmedString(payload.call_status);
-  if (call_status_raw && !isValidCallStatus(call_status_raw)) {
+  const call_status_input = asTrimmedString(payload.call_status);
+  if (call_status_input && !isValidCallStatus(call_status_input)) {
     return { error: "call_status invalido" };
   }
+  const call_status_raw: CallStatus | null = call_status_input ? call_status_input : null;
 
   const payment_amount_raw = asTrimmedString(payload.payment_amount);
   const payment_amount = payment_amount_raw
@@ -196,7 +197,7 @@ export function normalizeOperationalPayload(
       payment_amount: payment_amount === null ? null : Number(payment_amount),
       payment_due_date: asNullableString(payload.payment_due_date),
       payment_due_time: asNullableString(payload.payment_due_time),
-      call_status: call_status_raw ? call_status_raw : null,
+      call_status: call_status_raw,
       cancellation_reason: asNullableString(payload.cancellation_reason),
       observation: asTrimmedString(payload.observation),
       source_lead_id: asNullableString(payload.source_lead_id),
