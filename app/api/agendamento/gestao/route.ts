@@ -133,8 +133,8 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (error && isMissingPaymentDueTimeColumn(error.message)) {
-      const fallbackPayload = { ...insertPayload };
-      delete fallbackPayload.payment_due_time;
+      const { payment_due_time, ...fallbackPayload } = insertPayload;
+      void payment_due_time;
       const retry = await supabaseAdmin
         .from("agendamento_operational_records")
         .insert(fallbackPayload)

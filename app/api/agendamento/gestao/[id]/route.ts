@@ -121,8 +121,8 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       .single();
 
     if (error && isMissingPaymentDueTimeColumn(error.message)) {
-      const fallbackPayload = { ...updatePayload };
-      delete fallbackPayload.payment_due_time;
+      const { payment_due_time, ...fallbackPayload } = updatePayload;
+      void payment_due_time;
       const retry = await supabaseAdmin
         .from("agendamento_operational_records")
         .update(fallbackPayload)
