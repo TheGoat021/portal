@@ -164,7 +164,10 @@ export function normalizeOperationalPayload(
   if (call_status_input && !isValidCallStatus(call_status_input)) {
     return { error: "call_status invalido" };
   }
-  const call_status_raw: CallStatus | null = call_status_input ? call_status_input : null;
+  let call_status_raw: CallStatus | null = null;
+  if (call_status_input) {
+    call_status_raw = call_status_input as CallStatus;
+  }
 
   const payment_amount_raw = asTrimmedString(payload.payment_amount);
   const payment_amount = payment_amount_raw
