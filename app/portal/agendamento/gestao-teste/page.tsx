@@ -16,6 +16,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useAuth } from "@/store/authStore";
 
 type RecordType =
   | "agendamento"
@@ -51,6 +52,7 @@ type OperationalRecord = {
   date: string;
   time?: string;
   clinic?: string;
+  specialty?: string;
   attendant: string;
   commercialOwner?: string;
   status: string;
@@ -142,6 +144,7 @@ type ApiOperationalRecord = {
   appointment_date?: string | null;
   appointment_time?: string | null;
   clinic_name?: string | null;
+  specialty_name?: string | null;
   attendant_email: string;
   commercial_owner_email?: string | null;
   needs_payment: boolean;
@@ -182,6 +185,7 @@ function mapApiRecordToUi(record: ApiOperationalRecord): OperationalRecord {
     date: record.appointment_date || "",
     time: record.appointment_time || "",
     clinic: record.clinic_name || "",
+    specialty: record.specialty_name || "",
     attendant: record.attendant_email,
     commercialOwner: record.commercial_owner_email || "",
     status: record.status,
@@ -200,7 +204,7 @@ function mapApiRecordToUi(record: ApiOperationalRecord): OperationalRecord {
   };
 }
 
-function mapUiRecordToApi(record: OperationalRecord) {
+function mapUiRecordToApi(record: OperationalRecord, actorUserEmail?: string) {
   return {
     patient_name: record.patientName,
     patient_phone: record.phone,
@@ -215,6 +219,7 @@ function mapUiRecordToApi(record: OperationalRecord) {
     appointment_date: record.date || null,
     appointment_time: record.time || null,
     clinic_name: record.clinic || null,
+    specialty_name: record.specialty || null,
     attendant_email: record.attendant || null,
     commercial_owner_email: record.commercialOwner || null,
     needs_payment: record.needsPayment,
@@ -225,6 +230,7 @@ function mapUiRecordToApi(record: OperationalRecord) {
     call_status: record.callStatus || null,
     cancellation_reason: record.cancellationReason || null,
     observation: record.observation || "",
+    actor_user_email: actorUserEmail || null,
   };
 }
 
@@ -236,11 +242,11 @@ async function loadOperationalRecords() {
   return rows.map(mapApiRecordToUi);
 }
 
-async function saveOperationalRecord(payload: OperationalRecord) {
+async function saveOperationalRecord(payload: OperationalRecord, actorUserEmail?: string) {
   const response = await fetch("/api/agendamento/gestao", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(mapUiRecordToApi(payload)),
+    body: JSON.stringify(mapUiRecordToApi(payload, actorUserEmail)),
   });
 
   if (!response.ok) {
@@ -252,11 +258,11 @@ async function saveOperationalRecord(payload: OperationalRecord) {
   return mapApiRecordToUi(data);
 }
 
-async function updateOperationalRecord(id: string, payload: Partial<OperationalRecord>) {
+async function updateOperationalRecord(id: string, payload: Partial<OperationalRecord>, actorUserEmail?: string) {
   const response = await fetch(`/api/agendamento/gestao/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(mapUiRecordToApi(payload as OperationalRecord)),
+    body: JSON.stringify(mapUiRecordToApi(payload as OperationalRecord, actorUserEmail)),
   });
 
   if (!response.ok) {
@@ -580,6 +586,7 @@ function RecordsTable({
               {mode === "standard" && <th className="px-3 py-3">Horario</th>}
               {mode === "payment" && <th className="px-3 py-3">Horario</th>}
               {(mode === "standard" || mode === "payment") && <th className="px-3 py-3">Clinica</th>}
+              <th className="px-3 py-3">Especialidade</th>
               <th className="px-3 py-3">Atendente</th>
               {mode === "payment" && <th className="px-3 py-3">Valor</th>}
               {mode === "payment" && <th className="px-3 py-3">Pagamento</th>}
@@ -604,6 +611,7 @@ function RecordsTable({
                 {mode === "standard" && <td className="whitespace-nowrap px-3 py-3">{record.time || "-"}</td>}
                 {mode === "payment" && <td className="whitespace-nowrap px-3 py-3">{record.paymentDueTime || "-"}</td>}
                 {(mode === "standard" || mode === "payment") && <td className="whitespace-nowrap px-3 py-3">{record.clinic || "-"}</td>}
+                <td className="whitespace-nowrap px-3 py-3">{record.specialty || "-"}</td>
                 <td className="whitespace-nowrap px-3 py-3">{record.attendant}</td>
                 {mode === "payment" && <td className="whitespace-nowrap px-3 py-3">{record.paymentAmount || "-"}</td>}
                 {mode === "payment" && (
@@ -841,14 +849,12 @@ function DashboardView({
 
 function NewRecordView({
   onSave,
-  users,
+  currentUserEmail,
 }: {
   onSave: (record: OperationalRecord) => Promise<void>;
-  users: UserOption[];
+  currentUserEmail: string;
 }) {
   const [saving, setSaving] = useState(false);
-  const [attendantEmail, setAttendantEmail] = useState("");
-  const [commercialOwnerEmail, setCommercialOwnerEmail] = useState("");
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -868,10 +874,10 @@ function NewRecordView({
       city: String(form.get("city") || ""),
       type,
       date: String(form.get("date") || ""),
-      time: String(form.get("time") || ""),
+      time: String(form.get("consultationTime") || form.get("time") || ""),
       clinic: String(form.get("clinic") || ""),
-      attendant: String(form.get("attendant") || ""),
-      commercialOwner: String(form.get("commercialOwner") || ""),
+      specialty: String(form.get("specialty") || ""),
+      attendant: currentUserEmail,
       status: statusOptionsByType[type][0],
       observation: String(form.get("observation") || ""),
       cancellationReason: String(form.get("cancellationReason") || ""),
@@ -888,8 +894,6 @@ function NewRecordView({
     try {
       await onSave(record);
       formElement.reset();
-      setAttendantEmail("");
-      setCommercialOwnerEmail("");
     } finally {
       setSaving(false);
     }
@@ -947,21 +951,26 @@ function NewRecordView({
             <option>Sim</option>
           </select>
           <input name="date" type="date" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" />
-          <input name="time" type="time" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" />
+          <input name="time" type="time" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="Horario da consulta" />
           <input name="clinic" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="Clinica" />
-          <UserEmailSelect
-            name="attendant"
-            value={attendantEmail}
-            onChange={setAttendantEmail}
-            users={users}
+          <input name="specialty" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="Especialidade" />
+          <input
+            readOnly
+            value={currentUserEmail}
+            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600"
             placeholder="Email do atendente"
           />
-          <UserEmailSelect
-            name="commercialOwner"
-            value={commercialOwnerEmail}
-            onChange={setCommercialOwnerEmail}
-            users={users}
-            placeholder="Email comercial/responsavel"
+          <input
+            readOnly
+            value={getTodayInSaoPaulo()}
+            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600"
+            placeholder="Data do registro"
+          />
+          <input
+            readOnly
+            value={new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600"
+            placeholder="Horario do registro"
           />
         </div>
 
@@ -969,7 +978,8 @@ function NewRecordView({
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <input name="paymentAmount" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="Valor da consulta" />
           <input name="paymentDueDate" type="date" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" />
-          <input name="paymentDueTime" type="time" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" />
+          <input name="consultationTime" type="time" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="Horario da consulta" />
+          <input name="paymentDueTime" type="time" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="Horario do pagamento" />
           <select name="callStatus" className="rounded-xl border border-slate-200 px-3 py-3 text-sm">
             <option>Venda feita</option>
             <option>Venda nao realizada</option>
@@ -1096,6 +1106,7 @@ function PatientDrawer({
           <input type="date" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.date} onChange={(event) => patch({ date: event.target.value })} />
           <input type="time" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.time || ""} onChange={(event) => patch({ time: event.target.value })} />
           <input className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.clinic || ""} onChange={(event) => patch({ clinic: event.target.value })} />
+          <input className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.specialty || ""} onChange={(event) => patch({ specialty: event.target.value })} placeholder="Especialidade" />
           <UserEmailSelect value={draft.attendant} onChange={(value) => patch({ attendant: value })} users={users} placeholder="Email do atendente" />
           <UserEmailSelect value={draft.commercialOwner || ""} onChange={(value) => patch({ commercialOwner: value })} users={users} placeholder="Email comercial/responsavel" />
         </div>
@@ -1135,6 +1146,7 @@ function PatientDrawer({
 export default function GestaoAgendamentosTestePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useAuth();
   const activeTab = resolveTab(searchParams.get("tab"));
   const [records, setRecords] = useState<OperationalRecord[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
@@ -1161,14 +1173,14 @@ export default function GestaoAgendamentosTestePage() {
     const currentRecord = records.find((record) => record.id === id);
     if (!currentRecord) return;
 
-    updateOperationalRecord(id, { ...currentRecord, ...patch }).catch((error) => {
+    updateOperationalRecord(id, { ...currentRecord, ...patch }, String(user?.email || "")).catch((error) => {
       console.error(error);
       loadOperationalRecords().then(setRecords).catch(console.error);
     });
   }
 
   async function createRecord(record: OperationalRecord) {
-    const saved = await saveOperationalRecord(record);
+    const saved = await saveOperationalRecord(record, String(user?.email || ""));
     setRecords((current) => [saved, ...current]);
     router.push("/portal/agendamento/gestao-teste?tab=dashboard");
   }
@@ -1287,7 +1299,7 @@ export default function GestaoAgendamentosTestePage() {
             <RecordsTable title="Clientes atendidos em exames" records={recordsForTab} mode="call" onOpen={setSelectedRecord} onPatch={updateRecord} />
           </>
         )}
-        {activeTab === "novo" && <NewRecordView onSave={createRecord} users={users} />}
+        {activeTab === "novo" && <NewRecordView onSave={createRecord} currentUserEmail={String(user?.email || "")} />}
       </div>
 
       <PatientDrawer record={selectedRecord} onClose={() => setSelectedRecord(null)} onSave={updateRecord} users={users} />

@@ -98,6 +98,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       appointment_date: payload.appointment_date,
       appointment_time: payload.appointment_time,
       clinic_name: payload.clinic_name,
+      specialty_name: payload.specialty_name,
       attendant_email: payload.attendant_email,
       commercial_owner_email: payload.commercial_owner_email,
       needs_payment: payload.needs_payment,

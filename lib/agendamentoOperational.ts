@@ -48,6 +48,7 @@ export type OperationalRecordPayload = {
   appointment_date?: unknown;
   appointment_time?: unknown;
   clinic_name?: unknown;
+  specialty_name?: unknown;
   attendant_email?: unknown;
   commercial_owner_email?: unknown;
   needs_payment?: unknown;
@@ -79,6 +80,7 @@ export type NormalizedOperationalRecord = {
   appointment_date: string | null;
   appointment_time: string | null;
   clinic_name: string | null;
+  specialty_name: string | null;
   attendant_email: string;
   commercial_owner_email: string | null;
   needs_payment: boolean;
@@ -193,6 +195,7 @@ export function normalizeOperationalPayload(
       appointment_date: asNullableString(payload.appointment_date),
       appointment_time: asNullableString(payload.appointment_time),
       clinic_name: asNullableString(payload.clinic_name),
+      specialty_name: asNullableString(payload.specialty_name),
       attendant_email: attendant_email || "",
       commercial_owner_email,
       needs_payment,
