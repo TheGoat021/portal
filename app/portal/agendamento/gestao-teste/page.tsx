@@ -337,6 +337,15 @@ function getTodayInSaoPaulo() {
   return formatter.format(new Date());
 }
 
+function getCurrentTimeInSaoPaulo() {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date());
+}
+
 function typeLabel(type: RecordType) {
   const labels: Record<RecordType, string> = {
     agendamento: "Agendamento",
@@ -874,7 +883,7 @@ function NewRecordView({
       city: String(form.get("city") || ""),
       type,
       date: String(form.get("date") || ""),
-      time: String(form.get("consultationTime") || form.get("time") || ""),
+      time: String(form.get("time") || ""),
       clinic: String(form.get("clinic") || ""),
       specialty: String(form.get("specialty") || ""),
       attendant: currentUserEmail,
@@ -950,8 +959,19 @@ function NewRecordView({
             <option>Nao</option>
             <option>Sim</option>
           </select>
-          <input name="date" type="date" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" />
-          <input name="time" type="time" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="Horario da consulta" />
+          <input
+            name="date"
+            type="date"
+            defaultValue={getTodayInSaoPaulo()}
+            className="rounded-xl border border-slate-200 px-3 py-3 text-sm"
+          />
+          <input
+            name="time"
+            type="time"
+            defaultValue={getCurrentTimeInSaoPaulo()}
+            className="rounded-xl border border-slate-200 px-3 py-3 text-sm"
+            placeholder="Horario da consulta"
+          />
           <input name="clinic" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="Clinica" />
           <input name="specialty" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="Especialidade" />
           <input
@@ -960,25 +980,12 @@ function NewRecordView({
             className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600"
             placeholder="Email do atendente"
           />
-          <input
-            readOnly
-            value={getTodayInSaoPaulo()}
-            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600"
-            placeholder="Data do registro"
-          />
-          <input
-            readOnly
-            value={new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600"
-            placeholder="Horario do registro"
-          />
         </div>
 
         <h3 className="mb-3 mt-6 text-sm font-semibold text-slate-500">Campos operacionais</h3>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <input name="paymentAmount" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="Valor da consulta" />
           <input name="paymentDueDate" type="date" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" />
-          <input name="consultationTime" type="time" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="Horario da consulta" />
           <input name="paymentDueTime" type="time" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="Horario do pagamento" />
           <select name="callStatus" className="rounded-xl border border-slate-200 px-3 py-3 text-sm">
             <option>Venda feita</option>
