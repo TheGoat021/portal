@@ -596,6 +596,7 @@ function RecordsTable({
               {mode === "payment" && <th className="px-3 py-3">Horario</th>}
               {(mode === "standard" || mode === "payment") && <th className="px-3 py-3">Clinica</th>}
               <th className="px-3 py-3">Especialidade</th>
+              {mode === "standard" && <th className="px-3 py-3">Unidade/Cidade</th>}
               <th className="px-3 py-3">Atendente</th>
               {mode === "payment" && <th className="px-3 py-3">Valor</th>}
               {mode === "payment" && <th className="px-3 py-3">Pagamento</th>}
@@ -621,6 +622,7 @@ function RecordsTable({
                 {mode === "payment" && <td className="whitespace-nowrap px-3 py-3">{record.paymentDueTime || "-"}</td>}
                 {(mode === "standard" || mode === "payment") && <td className="whitespace-nowrap px-3 py-3">{record.clinic || "-"}</td>}
                 <td className="whitespace-nowrap px-3 py-3">{record.specialty || "-"}</td>
+                {mode === "standard" && <td className="whitespace-nowrap px-3 py-3">{record.city || "-"}</td>}
                 <td className="whitespace-nowrap px-3 py-3">{record.attendant}</td>
                 {mode === "payment" && <td className="whitespace-nowrap px-3 py-3">{record.paymentAmount || "-"}</td>}
                 {mode === "payment" && (
@@ -661,7 +663,7 @@ function RecordsTable({
             ))}
             {records.length === 0 && (
               <tr>
-                <td colSpan={12} className="px-3 py-8 text-center text-sm text-slate-500">
+                <td colSpan={14} className="px-3 py-8 text-center text-sm text-slate-500">
                   Nenhum registro encontrado para os filtros atuais.
                 </td>
               </tr>
