@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     if (search) {
       const escaped = search.replace(/[%(),]/g, " ");
       query = query.or(
-        `patient_name.ilike.%${escaped}%,patient_phone.ilike.%${escaped}%,patient_email.ilike.%${escaped}%,observation.ilike.%${escaped}%`
+        `patient_name.ilike.%${escaped}%,contract_id.ilike.%${escaped}%,patient_phone.ilike.%${escaped}%,patient_email.ilike.%${escaped}%,observation.ilike.%${escaped}%`
       );
     }
 

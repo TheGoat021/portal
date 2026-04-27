@@ -337,6 +337,31 @@ function getTodayInSaoPaulo() {
   return formatter.format(new Date());
 }
 
+function getYesterdayInSaoPaulo() {
+  const now = new Date();
+  const saoPauloDate = new Date(
+    now.toLocaleString("en-US", {
+      timeZone: "America/Sao_Paulo",
+    })
+  );
+  saoPauloDate.setDate(saoPauloDate.getDate() - 1);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(saoPauloDate);
+}
+
+function formatDailyComparison(current: number, previous: number) {
+  if (previous === 0 && current === 0) return "0% vs ontem";
+  if (previous === 0) return "+100% vs ontem";
+
+  const percent = Math.round(((current - previous) / previous) * 100);
+  if (percent === 0) return "0% vs ontem";
+  return `${percent > 0 ? "+" : ""}${percent}% vs ontem`;
+}
+
 function getCurrentTimeInSaoPaulo() {
   return new Intl.DateTimeFormat("pt-BR", {
     timeZone: "America/Sao_Paulo",
@@ -367,6 +392,7 @@ function matchesFilters(record: OperationalRecord, filters: Filters) {
   const haystack = normalize(
     [
       record.patientName,
+      record.contractId,
       record.phone,
       record.plan,
       record.clinic,
@@ -511,7 +537,7 @@ function FiltersPanel({
             className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-3 text-sm outline-none focus:border-blue-400"
             value={filters.search}
             onChange={(event) => patch({ search: event.target.value })}
-            placeholder="Buscar por nome ou telefone"
+            placeholder="Buscar por Id, nome ou telefone"
           />
         </label>
         <select className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none" value={filters.status} onChange={(event) => patch({ status: event.target.value })}>
@@ -683,28 +709,20 @@ function DashboardView({
   onOpen: (record: OperationalRecord) => void;
 }) {
   const today = getTodayInSaoPaulo();
+  const yesterday = getYesterdayInSaoPaulo();
   const agendamentosHoje = records.filter((record) => record.type === "agendamento" && record.date === today);
+  const agendamentosOntem = records.filter((record) => record.type === "agendamento" && record.date === yesterday);
   const ficticiosHoje = records.filter((record) => record.type === "ficticio" && record.date === today);
+  const ficticiosOntem = records.filter((record) => record.type === "ficticio" && record.date === yesterday);
   const payments = records.filter((record) => record.needsPayment && record.paymentStatus === "a_pagar");
   const cancelamentos = records.filter((record) => record.type === "cancelamento");
+  const cancelamentosHoje = cancelamentos.filter((record) => record.date === today);
+  const cancelamentosOntem = cancelamentos.filter((record) => record.date === yesterday);
   const comercial = records.filter((record) => record.type === "comercial_ligacoes");
   const exames = records.filter((record) => record.type === "exames_ligacoes");
   const pagamentosVencemHoje = payments.filter((record) => (record.paymentDueDate || "") === today).length;
-  const ficticiosPrecisamConfirmacao = ficticiosHoje.filter((record) =>
-    ["Verificando agendamento", "Aguardando agenda abrir", "Reagendado, falta enviar o voucher"].includes(record.status)
-  ).length;
   const vendasComercialFeitas = comercial.filter((record) => record.status === "Venda feita").length;
   const vendasExamesNaoRealizadas = exames.filter((record) => record.status === "Venda nao realizada").length;
-
-  const cancelReasonCounts = cancelamentos.reduce<Record<string, number>>((acc, record) => {
-    const reason = (record.cancellationReason || "").trim();
-    if (!reason) return acc;
-    acc[reason] = (acc[reason] || 0) + 1;
-    return acc;
-  }, {});
-
-  const principalMotivoCancelamento =
-    Object.entries(cancelReasonCounts).sort((left, right) => right[1] - left[1])[0]?.[0] || "Sem motivo informado";
 
   const sortedAgendamentos = [...records.filter((record) => record.type === "agendamento")].sort((left, right) =>
     compareDateTimeAsc(left.date, left.time, right.date, right.time)
@@ -749,18 +767,14 @@ function DashboardView({
         <MetricCard
           label="Agendamentos do dia"
           value={agendamentosHoje.length}
-          hint={agendamentosHoje.length > 0 ? `${agendamentosHoje.length} agendado(s) hoje` : "Nenhum agendamento hoje"}
+          hint={formatDailyComparison(agendamentosHoje.length, agendamentosOntem.length)}
           tone="green"
           icon={CalendarDays}
         />
         <MetricCard
           label="Ficticios hoje"
           value={ficticiosHoje.length}
-          hint={
-            ficticiosPrecisamConfirmacao > 0
-              ? `${ficticiosPrecisamConfirmacao} precisam confirmacao`
-              : "Nenhum ficticio pendente"
-          }
+          hint={formatDailyComparison(ficticiosHoje.length, ficticiosOntem.length)}
           tone="blue"
           icon={FileText}
         />
@@ -773,8 +787,8 @@ function DashboardView({
         />
         <MetricCard
           label="Cancelamentos"
-          value={cancelamentos.length}
-          hint={`Principal motivo: ${principalMotivoCancelamento}`}
+          value={cancelamentosHoje.length}
+          hint={formatDailyComparison(cancelamentosHoje.length, cancelamentosOntem.length)}
           tone="red"
           icon={XCircle}
         />
