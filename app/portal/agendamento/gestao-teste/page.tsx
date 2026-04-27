@@ -350,6 +350,7 @@ function formatCpf(value?: string) {
 }
 
 function sanitizeAmountInput(value?: string) {
+  // Keep the amount field predictable before it reaches the API.
   const sanitized = String(value || "").replace(/[^\d.,]/g, "");
   const firstSeparatorIndex = sanitized.search(/[.,]/);
 
