@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   CheckCircle2,
@@ -81,6 +81,15 @@ type UserOption = {
   email: string;
   role: string;
 };
+
+type PaginationState = {
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+};
+
+const PAGE_SIZE = 10;
 
 const tabs: { key: TabKey; label: string }[] = [
   { key: "dashboard", label: "Dashboard" },
@@ -240,6 +249,24 @@ async function loadOperationalRecords() {
   const payload = await response.json();
   const rows = Array.isArray(payload?.data) ? payload.data : [];
   return rows.map(mapApiRecordToUi);
+}
+
+async function loadPaginatedOperationalRecords(params: Record<string, string>) {
+  const searchParams = new URLSearchParams(params);
+  const response = await fetch(`/api/agendamento/gestao?${searchParams.toString()}`, { cache: "no-store" });
+  if (!response.ok) throw new Error("Erro ao carregar registros operacionais");
+  const payload = await response.json();
+  const rows = Array.isArray(payload?.data) ? payload.data : [];
+
+  return {
+    data: rows.map(mapApiRecordToUi),
+    pagination: {
+      total: Number(payload?.pagination?.total ?? 0),
+      limit: Number(payload?.pagination?.limit ?? PAGE_SIZE),
+      offset: Number(payload?.pagination?.offset ?? 0),
+      hasMore: Boolean(payload?.pagination?.hasMore),
+    } satisfies PaginationState,
+  };
 }
 
 async function saveOperationalRecord(payload: OperationalRecord, actorUserEmail?: string) {
@@ -491,7 +518,7 @@ function MetricCard({
   };
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="mb-4 flex items-start justify-between gap-3">
         <small className="text-sm font-medium text-slate-500">{label}</small>
         <span className={cn("rounded-xl border p-2", tones[tone])}>
@@ -592,22 +619,32 @@ function RecordsTable({
   mode,
   onOpen,
   onPatch,
+  loading = false,
+  pagination,
+  currentPage,
+  onPageChange,
 }: {
   title: string;
   records: OperationalRecord[];
   mode: "standard" | "payment" | "cancelamento" | "call";
   onOpen: (record: OperationalRecord) => void;
   onPatch: (id: string, patch: Partial<OperationalRecord>) => void;
+  loading?: boolean;
+  pagination?: PaginationState;
+  currentPage?: number;
+  onPageChange?: (page: number) => void;
 }) {
+  const totalPages = pagination ? Math.max(1, Math.ceil(pagination.total / pagination.limit)) : 1;
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
         <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-          {records.length} registros
+          {pagination ? `${pagination.total} registros` : `${records.length} registros`}
         </span>
       </div>
-      <div className="overflow-x-auto">
+      <div className="w-full overflow-x-auto">
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
@@ -687,7 +724,14 @@ function RecordsTable({
                 </td>
               </tr>
             ))}
-            {records.length === 0 && (
+            {loading && (
+              <tr>
+                <td colSpan={14} className="px-3 py-8 text-center text-sm text-slate-500">
+                  Carregando registros...
+                </td>
+              </tr>
+            )}
+            {!loading && records.length === 0 && (
               <tr>
                 <td colSpan={14} className="px-3 py-8 text-center text-sm text-slate-500">
                   Nenhum registro encontrado para os filtros atuais.
@@ -697,6 +741,31 @@ function RecordsTable({
           </tbody>
         </table>
       </div>
+      {pagination && onPageChange && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+          <span className="text-sm text-slate-500">
+            Pagina {currentPage || 1} de {totalPages}
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => onPageChange(Math.max(1, (currentPage || 1) - 1))}
+              disabled={(currentPage || 1) <= 1 || loading}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              onClick={() => onPageChange(Math.min(totalPages, (currentPage || 1) + 1))}
+              disabled={!pagination.hasMore || loading}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Proxima
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1172,15 +1241,99 @@ export default function GestaoAgendamentosTestePage() {
   const { user } = useAuth();
   const activeTab = resolveTab(searchParams.get("tab"));
   const [records, setRecords] = useState<OperationalRecord[]>([]);
+  const [listRecords, setListRecords] = useState<OperationalRecord[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [selectedRecord, setSelectedRecord] = useState<OperationalRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [listLoading, setListLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationState>({
+    total: 0,
+    limit: PAGE_SIZE,
+    offset: 0,
+    hasMore: false,
+  });
+
+  const isServerPaginatedTab =
+    activeTab === "agendamentos" ||
+    activeTab === "ficticios" ||
+    activeTab === "pagamentos" ||
+    activeTab === "cancelamentos" ||
+    activeTab === "comercial-ligacoes" ||
+    activeTab === "exames-ligacoes";
+
+  async function refreshDashboardRecords() {
+    const nextRecords = await loadOperationalRecords();
+    setRecords(nextRecords);
+  }
+
+  const refreshListRecords = useCallback(async (page = currentPage) => {
+    if (!isServerPaginatedTab) return;
+
+    const params: Record<string, string> = {
+      limit: String(PAGE_SIZE),
+      offset: String((page - 1) * PAGE_SIZE),
+    };
+
+    if (filters.search) params.search = filters.search;
+    if (filters.attendant) params.attendant_email = filters.attendant;
+    if (filters.clinic) params.clinic_name = filters.clinic;
+    if (filters.plan) params.plan_name = filters.plan;
+    if (filters.date) params.appointment_date = filters.date;
+
+    if (activeTab === "agendamentos") {
+      params.record_type = "agendamento";
+      if (filters.status) params.status = filters.status;
+    }
+
+    if (activeTab === "ficticios") {
+      params.record_type = "ficticio";
+      if (filters.status) params.status = filters.status;
+    }
+
+    if (activeTab === "pagamentos") {
+      params.needs_payment = "true";
+      if (filters.status) params.payment_status = filters.status;
+    }
+
+    if (activeTab === "cancelamentos") {
+      params.record_type = "cancelamento";
+      if (filters.status) params.status = filters.status;
+    }
+
+    if (activeTab === "comercial-ligacoes") {
+      params.record_type = "comercial_ligacoes";
+      if (filters.status) params.status = filters.status;
+    }
+
+    if (activeTab === "exames-ligacoes") {
+      params.record_type = "exames_ligacoes";
+      if (filters.status) params.status = filters.status;
+    }
+
+    setListLoading(true);
+    try {
+      const response = await loadPaginatedOperationalRecords(params);
+      setListRecords(response.data);
+      setPagination(response.pagination);
+    } catch (error) {
+      console.error(error);
+      setListRecords([]);
+      setPagination({
+        total: 0,
+        limit: PAGE_SIZE,
+        offset: 0,
+        hasMore: false,
+      });
+    } finally {
+      setListLoading(false);
+    }
+  }, [activeTab, currentPage, filters, isServerPaginatedTab]);
 
   useEffect(() => {
     loadUserOptions().then(setUsers).catch(console.error);
-    loadOperationalRecords()
-      .then(setRecords)
+    refreshDashboardRecords()
       .catch((error) => {
         console.error(error);
         setRecords([]);
@@ -1188,18 +1341,32 @@ export default function GestaoAgendamentosTestePage() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (!isServerPaginatedTab) return;
+    refreshListRecords(currentPage).catch(console.error);
+  }, [currentPage, isServerPaginatedTab, refreshListRecords]);
+
   function updateRecord(id: string, patch: Partial<OperationalRecord>) {
     setRecords((current) =>
+      current.map((record) => (record.id === id ? { ...record, ...patch, updatedAt: "Agora" } : record))
+    );
+    setListRecords((current) =>
       current.map((record) => (record.id === id ? { ...record, ...patch, updatedAt: "Agora" } : record))
     );
 
     const currentRecord = records.find((record) => record.id === id);
     if (!currentRecord) return;
 
-    updateOperationalRecord(id, { ...currentRecord, ...patch }, String(user?.email || "")).catch((error) => {
-      console.error(error);
-      loadOperationalRecords().then(setRecords).catch(console.error);
-    });
+    updateOperationalRecord(id, { ...currentRecord, ...patch }, String(user?.email || ""))
+      .then((saved) => {
+        setRecords((current) => current.map((record) => (record.id === id ? saved : record)));
+        setListRecords((current) => current.map((record) => (record.id === id ? saved : record)));
+      })
+      .catch((error) => {
+        console.error(error);
+        refreshDashboardRecords().catch(console.error);
+        refreshListRecords(currentPage).catch(console.error);
+      });
   }
 
   async function createRecord(record: OperationalRecord) {
@@ -1211,27 +1378,21 @@ export default function GestaoAgendamentosTestePage() {
   const recordsForTab = useMemo(() => {
     const byTab: Record<TabKey, OperationalRecord[]> = {
       dashboard: records,
-      agendamentos: records.filter((record) => record.type === "agendamento"),
-      ficticios: records.filter((record) => record.type === "ficticio"),
-      pagamentos: [...records.filter((record) => record.needsPayment)].sort((left, right) => {
-        if (left.paymentStatus !== right.paymentStatus) {
-          return left.paymentStatus === "a_pagar" ? -1 : 1;
-        }
-        return compareDateTimeAsc(
-          left.paymentDueDate || left.date,
-          left.paymentDueTime || left.time,
-          right.paymentDueDate || right.date,
-          right.paymentDueTime || right.time
-        );
-      }),
-      cancelamentos: records.filter((record) => record.type === "cancelamento"),
-      "comercial-ligacoes": records.filter((record) => record.type === "comercial_ligacoes"),
-      "exames-ligacoes": records.filter((record) => record.type === "exames_ligacoes"),
+      agendamentos: listRecords,
+      ficticios: listRecords,
+      pagamentos: listRecords,
+      cancelamentos: listRecords,
+      "comercial-ligacoes": listRecords,
+      "exames-ligacoes": listRecords,
       novo: records,
     };
 
-    return byTab[activeTab].filter((record) => matchesFilters(record, filters));
-  }, [activeTab, filters, records]);
+    if (activeTab === "dashboard" || activeTab === "novo") {
+      return byTab[activeTab].filter((record) => matchesFilters(record, filters));
+    }
+
+    return byTab[activeTab];
+  }, [activeTab, filters, listRecords, records]);
 
   if (loading) {
     return (
@@ -1245,8 +1406,8 @@ export default function GestaoAgendamentosTestePage() {
   }
 
   return (
-    <div className="min-h-full bg-slate-50">
-      <div className="mx-auto flex max-w-450 flex-col gap-5">
+    <div className="min-h-full overflow-x-hidden bg-slate-50">
+      <div className="mx-auto flex min-w-0 max-w-450 flex-col gap-5">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex gap-2 overflow-x-auto pb-1">
@@ -1256,6 +1417,7 @@ export default function GestaoAgendamentosTestePage() {
                   active={activeTab === tab.key}
                   onClick={() => {
                     setFilters(initialFilters);
+                    setCurrentPage(1);
                     router.push(`/portal/agendamento/gestao-teste?tab=${tab.key}`);
                   }}
                 >
@@ -1288,38 +1450,38 @@ export default function GestaoAgendamentosTestePage() {
         )}
         {activeTab === "agendamentos" && (
           <>
-            <FiltersPanel records={records} filters={filters} onChange={setFilters} statuses={statusOptionsByType.agendamento} />
-            <RecordsTable title="Lista de agendamentos" records={recordsForTab} mode="standard" onOpen={setSelectedRecord} onPatch={updateRecord} />
+            <FiltersPanel records={records} filters={filters} onChange={(next) => { setFilters(next); setCurrentPage(1); }} statuses={statusOptionsByType.agendamento} />
+            <RecordsTable title="Lista de agendamentos" records={recordsForTab} mode="standard" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} />
           </>
         )}
         {activeTab === "ficticios" && (
           <>
-            <FiltersPanel records={records} filters={filters} onChange={setFilters} statuses={statusOptionsByType.ficticio} />
-            <RecordsTable title="Lista de ficticios" records={recordsForTab} mode="standard" onOpen={setSelectedRecord} onPatch={updateRecord} />
+            <FiltersPanel records={records} filters={filters} onChange={(next) => { setFilters(next); setCurrentPage(1); }} statuses={statusOptionsByType.ficticio} />
+            <RecordsTable title="Lista de ficticios" records={recordsForTab} mode="standard" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} />
           </>
         )}
         {activeTab === "pagamentos" && (
           <>
-            <FiltersPanel records={records} filters={filters} onChange={setFilters} statuses={["a_pagar", "pago"]} />
-            <RecordsTable title="Consultas a pagar" records={recordsForTab} mode="payment" onOpen={setSelectedRecord} onPatch={updateRecord} />
+            <FiltersPanel records={records} filters={filters} onChange={(next) => { setFilters(next); setCurrentPage(1); }} statuses={["a_pagar", "pago"]} />
+            <RecordsTable title="Consultas a pagar" records={recordsForTab} mode="payment" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} />
           </>
         )}
         {activeTab === "cancelamentos" && (
           <>
-            <FiltersPanel records={records} filters={filters} onChange={setFilters} statuses={["Cancelado"]} showClinic={false} />
-            <RecordsTable title="Motivos registrados" records={recordsForTab} mode="cancelamento" onOpen={setSelectedRecord} onPatch={updateRecord} />
+            <FiltersPanel records={records} filters={filters} onChange={(next) => { setFilters(next); setCurrentPage(1); }} statuses={["Cancelado"]} showClinic={false} />
+            <RecordsTable title="Motivos registrados" records={recordsForTab} mode="cancelamento" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} />
           </>
         )}
         {activeTab === "comercial-ligacoes" && (
           <>
-            <FiltersPanel records={records} filters={filters} onChange={setFilters} statuses={statusOptionsByType.comercial_ligacoes} showClinic={false} />
-            <RecordsTable title="Clientes atendidos pelo comercial" records={recordsForTab} mode="call" onOpen={setSelectedRecord} onPatch={updateRecord} />
+            <FiltersPanel records={records} filters={filters} onChange={(next) => { setFilters(next); setCurrentPage(1); }} statuses={statusOptionsByType.comercial_ligacoes} showClinic={false} />
+            <RecordsTable title="Clientes atendidos pelo comercial" records={recordsForTab} mode="call" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} />
           </>
         )}
         {activeTab === "exames-ligacoes" && (
           <>
-            <FiltersPanel records={records} filters={filters} onChange={setFilters} statuses={statusOptionsByType.exames_ligacoes} showClinic={false} />
-            <RecordsTable title="Clientes atendidos em exames" records={recordsForTab} mode="call" onOpen={setSelectedRecord} onPatch={updateRecord} />
+            <FiltersPanel records={records} filters={filters} onChange={(next) => { setFilters(next); setCurrentPage(1); }} statuses={statusOptionsByType.exames_ligacoes} showClinic={false} />
+            <RecordsTable title="Clientes atendidos em exames" records={recordsForTab} mode="call" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} />
           </>
         )}
         {activeTab === "novo" && <NewRecordView onSave={createRecord} currentUserEmail={String(user?.email || "")} />}

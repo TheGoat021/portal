@@ -111,7 +111,7 @@ export function Sidebar() {
     <aside
       onMouseEnter={() => setCollapsed(false)}
       onMouseLeave={() => setCollapsed(true)}
-      className={`bg-slate-900 text-white p-4 flex flex-col transition-all duration-300 ${
+      className={`shrink-0 bg-slate-900 text-white p-4 flex flex-col transition-all duration-300 ${
         collapsed ? "w-[72px]" : "w-64"
       }`}
     >

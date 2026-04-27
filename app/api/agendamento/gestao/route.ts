@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
     const planName = params.get("plan_name")?.trim() || "";
     const appointmentDate = params.get("appointment_date")?.trim() || "";
     const paymentStatus = params.get("payment_status")?.trim() || "";
+    const needsPayment = params.get("needs_payment")?.trim() || "";
     const search = params.get("search")?.trim() || "";
     const limit = Math.min(Math.max(Number.parseInt(params.get("limit") || "50", 10) || 50, 1), 200);
     const offset = Math.max(Number.parseInt(params.get("offset") || "0", 10) || 0, 0);
@@ -42,6 +43,7 @@ export async function GET(req: NextRequest) {
     if (planName) query = query.ilike("plan_name", planName);
     if (appointmentDate) query = query.eq("appointment_date", appointmentDate);
     if (paymentStatus) query = query.eq("payment_status", paymentStatus);
+    if (needsPayment) query = query.eq("needs_payment", needsPayment === "true");
     if (search) {
       const escaped = search.replace(/[%(),]/g, " ");
       query = query.or(
