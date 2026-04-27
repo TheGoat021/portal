@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
     const attendantEmail = normalizeEmail(params.get("attendant_email"));
     const commercialOwnerEmail = normalizeEmail(params.get("commercial_owner_email"));
     const clinicName = params.get("clinic_name")?.trim() || "";
+    const patientCity = params.get("patient_city")?.trim() || "";
     const planName = params.get("plan_name")?.trim() || "";
     const appointmentDate = params.get("appointment_date")?.trim() || "";
     const paymentStatus = params.get("payment_status")?.trim() || "";
@@ -40,6 +41,7 @@ export async function GET(req: NextRequest) {
     if (attendantEmail) query = query.ilike("attendant_email", attendantEmail);
     if (commercialOwnerEmail) query = query.ilike("commercial_owner_email", commercialOwnerEmail);
     if (clinicName) query = query.ilike("clinic_name", clinicName);
+    if (patientCity) query = query.ilike("patient_city", patientCity);
     if (planName) query = query.ilike("plan_name", planName);
     if (appointmentDate) query = query.eq("appointment_date", appointmentDate);
     if (paymentStatus) query = query.eq("payment_status", paymentStatus);

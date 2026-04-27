@@ -72,6 +72,7 @@ type Filters = {
   status: string;
   attendant: string;
   clinic: string;
+  city: string;
   plan: string;
   date: string;
 };
@@ -134,6 +135,7 @@ const initialFilters: Filters = {
   status: "",
   attendant: "",
   clinic: "",
+  city: "",
   plan: "",
   date: "",
 };
@@ -347,6 +349,23 @@ function formatCpf(value?: string) {
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }
 
+function sanitizeAmountInput(value?: string) {
+  const sanitized = String(value || "").replace(/[^\d.,]/g, "");
+  const firstSeparatorIndex = sanitized.search(/[.,]/);
+
+  if (firstSeparatorIndex === -1) {
+    return sanitized;
+  }
+
+  const integerPart = sanitized.slice(0, firstSeparatorIndex).replace(/[^\d]/g, "");
+  const decimalPart = sanitized
+    .slice(firstSeparatorIndex + 1)
+    .replace(/[^\d]/g, "")
+    .slice(0, 2);
+
+  return `${integerPart},${decimalPart}`;
+}
+
 function compareDateTimeAsc(dateA?: string, timeA?: string, dateB?: string, timeB?: string) {
   const left = `${dateA || "9999-12-31"}T${timeA || "23:59:59"}`;
   const right = `${dateB || "9999-12-31"}T${timeB || "23:59:59"}`;
@@ -415,6 +434,20 @@ function uniqueValues(records: OperationalRecord[], selector: (record: Operation
   );
 }
 
+function uniqueNormalizedValues(records: OperationalRecord[], selector: (record: OperationalRecord) => string | undefined) {
+  const map = new Map<string, string>();
+
+  for (const value of records.map(selector).filter((item): item is string => Boolean(item?.trim()))) {
+    const trimmed = value.trim();
+    const key = normalize(trimmed);
+    if (!map.has(key)) {
+      map.set(key, trimmed);
+    }
+  }
+
+  return Array.from(map.values()).sort((a, b) => a.localeCompare(b, "pt-BR"));
+}
+
 function matchesFilters(record: OperationalRecord, filters: Filters) {
   const haystack = normalize(
     [
@@ -435,6 +468,7 @@ function matchesFilters(record: OperationalRecord, filters: Filters) {
   if (filters.status && record.status !== filters.status) return false;
   if (filters.attendant && record.attendant !== filters.attendant) return false;
   if (filters.clinic && record.clinic !== filters.clinic) return false;
+  if (filters.city && normalize(record.city || "") !== normalize(filters.city)) return false;
   if (filters.plan && record.plan !== filters.plan) return false;
   if (filters.date && record.date !== filters.date) return false;
   return true;
@@ -537,17 +571,20 @@ function FiltersPanel({
   onChange,
   statuses,
   showClinic = true,
+  showCity = true,
   showPlan = true,
 }: {
   records: OperationalRecord[];
   filters: Filters;
   statuses: string[];
   showClinic?: boolean;
+  showCity?: boolean;
   showPlan?: boolean;
   onChange: (filters: Filters) => void;
 }) {
   const attendants = uniqueValues(records, (record) => record.attendant);
   const clinics = uniqueValues(records, (record) => record.clinic);
+  const cities = uniqueNormalizedValues(records, (record) => record.city);
   const plans = uniqueValues(records, (record) => record.plan);
   const patch = (next: Partial<Filters>) => onChange({ ...filters, ...next });
 
@@ -579,6 +616,12 @@ function FiltersPanel({
           <select className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none" value={filters.clinic} onChange={(event) => patch({ clinic: event.target.value })}>
             <option value="">Clinica</option>
             {clinics.map((clinic) => <option key={clinic} value={clinic}>{clinic}</option>)}
+          </select>
+        )}
+        {showCity && (
+          <select className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none" value={filters.city} onChange={(event) => patch({ city: event.target.value })}>
+            <option value="">Unidade/Cidade</option>
+            {cities.map((city) => <option key={city} value={city}>{city}</option>)}
           </select>
         )}
         {showPlan && (
@@ -1069,7 +1112,15 @@ function NewRecordView({
 
         <h3 className="mb-3 mt-6 text-sm font-semibold text-slate-500">Campos operacionais</h3>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <input name="paymentAmount" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="Valor da consulta" />
+          <input
+            name="paymentAmount"
+            inputMode="decimal"
+            className="rounded-xl border border-slate-200 px-3 py-3 text-sm"
+            placeholder="Valor da consulta"
+            onChange={(event) => {
+              event.currentTarget.value = sanitizeAmountInput(event.currentTarget.value);
+            }}
+          />
           <input name="paymentDueDate" type="date" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" />
           <input name="paymentDueTime" type="time" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="Horario do pagamento" />
           <select name="callStatus" className="rounded-xl border border-slate-200 px-3 py-3 text-sm">
@@ -1205,7 +1256,12 @@ function PatientDrawer({
 
         <h4 className="mb-3 text-sm font-semibold text-slate-500">Acompanhamento</h4>
         <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-2">
-          <input className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.paymentAmount || ""} onChange={(event) => patch({ paymentAmount: event.target.value })} />
+          <input
+            inputMode="decimal"
+            className="rounded-xl border border-slate-200 px-3 py-3 text-sm"
+            value={draft.paymentAmount || ""}
+            onChange={(event) => patch({ paymentAmount: sanitizeAmountInput(event.target.value) })}
+          />
           <input type="date" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.paymentDueDate || ""} onChange={(event) => patch({ paymentDueDate: event.target.value })} />
           <input type="time" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.paymentDueTime || ""} onChange={(event) => patch({ paymentDueTime: event.target.value })} />
           <select className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.status} onChange={(event) => patch({ status: event.target.value })}>
@@ -1279,6 +1335,7 @@ export default function GestaoAgendamentosTestePage() {
     if (filters.search) params.search = filters.search;
     if (filters.attendant) params.attendant_email = filters.attendant;
     if (filters.clinic) params.clinic_name = filters.clinic;
+    if (filters.city) params.patient_city = filters.city;
     if (filters.plan) params.plan_name = filters.plan;
     if (filters.date) params.appointment_date = filters.date;
 

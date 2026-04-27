@@ -125,6 +125,30 @@ function isValidCallStatus(value: string): value is CallStatus {
   return (CALL_STATUSES as readonly string[]).includes(value);
 }
 
+function parseCurrencyInput(value: unknown) {
+  const raw = asTrimmedString(value);
+  if (!raw) return { raw: "", value: null as number | null };
+
+  const sanitized = raw.replace(/[^\d,.-]/g, "").trim();
+  if (!sanitized) return { raw, value: null as number | null };
+
+  const lastComma = sanitized.lastIndexOf(",");
+  const lastDot = sanitized.lastIndexOf(".");
+
+  let normalized = sanitized;
+
+  if (lastComma > lastDot) {
+    normalized = sanitized.replace(/\./g, "").replace(",", ".");
+  } else if (lastDot > lastComma) {
+    normalized = sanitized.replace(/,/g, "");
+  } else {
+    normalized = sanitized.replace(",", ".");
+  }
+
+  const parsed = Number.parseFloat(normalized);
+  return { raw, value: Number.isFinite(parsed) ? parsed : Number.NaN };
+}
+
 export function normalizeOperationalPayload(
   payload: OperationalRecordPayload,
   mode: "create" | "update" = "create"
@@ -171,10 +195,7 @@ export function normalizeOperationalPayload(
     call_status_raw = call_status_input as CallStatus;
   }
 
-  const payment_amount_raw = asTrimmedString(payload.payment_amount);
-  const payment_amount = payment_amount_raw
-    ? Number.parseFloat(payment_amount_raw.replace(/\./g, "").replace(",", ".").replace(/[^\d.-]/g, ""))
-    : null;
+  const { raw: payment_amount_raw, value: payment_amount } = parseCurrencyInput(payload.payment_amount);
 
   if (payment_amount_raw && (!Number.isFinite(payment_amount) || Number(payment_amount) < 0)) {
     return { error: "payment_amount invalido" };
