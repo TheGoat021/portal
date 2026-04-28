@@ -1243,12 +1243,15 @@ function PatientDrawer({
   };
 
   async function handleDelete() {
+    if (!record) return;
+
     const confirmed = window.confirm("Voce realmente deseja realizar a exclusao desse registro?");
     if (!confirmed) return;
 
+    const recordId = record.id;
     setDeleting(true);
     try {
-      await onDelete(record.id);
+      await onDelete(recordId);
       onClose();
     } finally {
       setDeleting(false);
