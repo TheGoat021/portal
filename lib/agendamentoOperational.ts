@@ -14,6 +14,7 @@ export const CALL_STATUSES = ["venda_feita", "venda_nao_realizada"] as const;
 export const STATUS_BY_TYPE = {
   agendamento: [
     "Verificando agendamento",
+    "Aguardando pagamento",
     "Agendado, falta enviar voucher",
     "Voucher enviado",
     "Aguardando agenda abrir",
@@ -25,7 +26,7 @@ export const STATUS_BY_TYPE = {
     "Voucher enviado",
     "Aguardando agenda abrir",
   ],
-  cancelamento: ["Cancelado"],
+  cancelamento: ["Revertido", "Nao revertido", "Em tratativa"],
   comercial_ligacoes: ["Venda feita", "Venda nao realizada"],
   exames_ligacoes: ["Venda feita", "Venda nao realizada"],
 } as const;

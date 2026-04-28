@@ -106,33 +106,13 @@ export const menuConfig: MenuSection[] = [
         href: "https://docs.google.com/spreadsheets/d/1R0UVojq0po_O0YFcywHANnK4-zEEK_pz7M3oftLgJNk/edit?usp=sharing",
         allowExternal: true,
       },
-      {
-        label: "Fic",
-        href: "https://docs.google.com/forms/d/e/1FAIpQLSegsWrwcEw9DalA_NzueAbPJzquyPQ6Owy04OHhlSZh_3MEYg/viewform",
-        allowExternal: true,
-      },
-      {
-        label: "Elev",
-        href: "http://179.125.68.164:9000/nxt3000/login.php",
-        allowExternal: true,
-      },
-      {
-        label: "Gestão",
-        href: "https://gestao.drdetodos.com.br/",
-        allowExternal: true,
-      },
-      {
-        label: "Duotalk",
-        href: "https://app.duotalk.io/login?to=&acc=687fdae2b21652ca230157e5",
-        allowExternal: true,
-      },
     ],
   },
 
   {
     title: "Leads",
     icon: DollarSign,
-    roles: ["COMERCIAL", "AGENDAMENTO", "EXAMES", "DIRETORIA"],
+    roles: ["COMERCIAL", "DIRETORIA"],
     items: [
       
       {
@@ -159,7 +139,7 @@ export const menuConfig: MenuSection[] = [
   {
     title: "Agendamento",
     icon: Calendar,
-    roles: ["AGENDAMENTO", "EXAMES", "DIRETORIA"],
+    roles: ["AGENDAMENTO", "DIRETORIA"],
     items: [
       {
         label: "Dashboard",
@@ -190,16 +170,6 @@ export const menuConfig: MenuSection[] = [
         allowExternal: true,
       },
       {
-        label: "Metas",
-        href: "https://docs.google.com/spreadsheets/d/11yDILj0SU1j-oHeIsMQUAT12GDy5lKilPB7U_m9v_TU/edit?gid=1777785698#gid=1777785698",
-        allowExternal: true,
-      },
-      {
-        label: "agendamentos",
-        href: "https://docs.google.com/spreadsheets/d/19Sue6E0GVWMPJ5xscnbjEEmn9yvqeGojQqB8eV0d6HI/edit?gid=2034801768#gid=2034801768",
-        allowExternal: true,
-      },
-      {
         label: "Voucher",
         href: "https://docs.google.com/document/d/1aM0bShwqJEP5nf1eXgoPwDCJYmYU4vTDi2IpOvqCOy0/edit?tab=t.0",
         allowExternal: true,
@@ -207,26 +177,6 @@ export const menuConfig: MenuSection[] = [
       {
         label: "Declaração",
         href: "https://docs.google.com/document/d/1MMYLt9PC_4sJ58wHwUVGoLo_uT-tpgpd1k8IdETp9RM/edit?tab=t.0",
-        allowExternal: true,
-      },
-      {
-        label: "Ficticio",
-        href: "https://docs.google.com/spreadsheets/d/18RGJdJKcZiDA5k5bnuqVV_2fDNSUqlVwfZlYhdjoD9E/edit?gid=191968330#gid=191968330",
-        allowExternal: true,
-      },
-      {
-        label: "Elev",
-        href: "http://179.125.68.164:9000/nxt3000/login.php",
-        allowExternal: true,
-      },
-      {
-        label: "Gestão",
-        href: "https://gestao.drdetodos.com.br/",
-        allowExternal: true,
-      },
-      {
-        label: "Duotalk",
-        href: "https://app.duotalk.io/login?to=&acc=687fdae2b21652ca230157e5",
         allowExternal: true,
       },
     ],
@@ -272,21 +222,6 @@ export const menuConfig: MenuSection[] = [
         allowExternal: true,
       },
       {
-        label: "Elev",
-        href: "http://179.125.68.164:9000/nxt3000/login.php",
-        allowExternal: true,
-      },
-      {
-        label: "Gestão",
-        href: "https://gestao.drdetodos.com.br/",
-        allowExternal: true,
-      },
-      {
-        label: "Duotalk",
-        href: "https://app.duotalk.io/login?to=&acc=687fdae2b21652ca230157e5",
-        allowExternal: true,
-      },
-      {
         label: "Voucher",
         href: "https://docs.google.com/forms/d/e/1FAIpQLSf7skQvwV4oTecTaIahCLjLMwHsXFmoI8_SaF21rOwAm-pFAg/viewform?usp=header",
         allowExternal: true,
@@ -314,51 +249,6 @@ export const menuConfig: MenuSection[] = [
       {
         label: "Geral Empresa",
         href: "https://docs.google.com/spreadsheets/d/1UTz8gqUmWQH_E2LgwZqZro31APchbT-BodexzcZZEjs/edit?gid=1536522903#gid=1536522903",
-        allowExternal: true,
-      },
-      {
-        label: "Enel",
-        href: "https://docs.google.com/spreadsheets/d/1NEp86R1RJY-T_9Q27EY4wHiKmgBkeCmi6VdJBWaylmI/edit?gid=1422568270#gid=1422568270",
-        allowExternal: true,
-      },
-      {
-        label: "Boleto",
-        href: "https://docs.google.com/spreadsheets/d/1ckPdHqETORG6D1iwdUB60qQxDVFYmrnxxUaV_ludW8o/edit?gid=337204937#gid=337204937",
-        allowExternal: true,
-      },
-      {
-        label: "Google",
-        href: "https://ads.google.com/aw/campaigns?ocid=260112867&workspaceId=-1748819828&euid=548870555&__u=4420376195&uscid=260112867&__c=3514259083&authuser=0",
-        allowExternal: true,
-      },
-      {
-        label: "Facebook",
-        href: "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1471558083175379&business_id=2873022919602848&selected_campaign_ids=120219409538060243&selected_adset_ids=120219409538110243",
-        allowExternal: true,
-      },
-      {
-        label: "Procon",
-        href: "https://docs.google.com/spreadsheets/d/18h5JlAcHZHG4My6Oq5tRyPai_h0Sg7H0vukLYaiMgUE/edit?gid=0#gid=0",
-        allowExternal: true,
-      },
-      {
-        label: "Parcial",
-        href: "https://docs.google.com/spreadsheets/d/1zJ3yWflaC_r2hnc5Zh97Iq4M8LoeiypE4gvtrdjiUX0/edit?gid=0#gid=0",
-        allowExternal: true,
-      },
-      {
-        label: "Bonificação",
-        href: "https://docs.google.com/spreadsheets/d/12EiH6UxsH9CHBTzSY0qNkMWopDWiwxpBh6ZYh8PUzIw/edit?gid=0#gid=0",
-        allowExternal: true,
-      },
-      {
-        label: "Calendário",
-        href: "https://docs.google.com/spreadsheets/d/12EiH6UxsH9CHBTzSY0qNkMWopDWiwxpBh6ZYh8PUzIw/edit?gid=0#gid=0",
-        allowExternal: true,
-      },
-      {
-        label: "Recados",
-        href: "https://docs.google.com/spreadsheets/d/1H7yH9Y7Q0Ywmm78U9FuhS2nbzimyIm5olDS2YH-ehTM/edit?gid=0#gid=0",
         allowExternal: true,
       },
       {

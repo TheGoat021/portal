@@ -13,6 +13,13 @@ function isMissingPaymentDueTimeColumn(message?: string) {
   return String(message || "").includes("payment_due_time");
 }
 
+function nextDate(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  const value = new Date(Date.UTC(year, (month || 1) - 1, day || 1));
+  value.setUTCDate(value.getUTCDate() + 1);
+  return value.toISOString().slice(0, 10);
+}
+
 export async function GET(req: NextRequest) {
   try {
     const params = req.nextUrl.searchParams;
@@ -24,6 +31,8 @@ export async function GET(req: NextRequest) {
     const patientCity = params.get("patient_city")?.trim() || "";
     const planName = params.get("plan_name")?.trim() || "";
     const appointmentDate = params.get("appointment_date")?.trim() || "";
+    const consultationDate = params.get("consultation_date")?.trim() || "";
+    const createdDate = params.get("created_date")?.trim() || "";
     const paymentStatus = params.get("payment_status")?.trim() || "";
     const needsPayment = params.get("needs_payment")?.trim() || "";
     const search = params.get("search")?.trim() || "";
@@ -44,6 +53,10 @@ export async function GET(req: NextRequest) {
     if (patientCity) query = query.ilike("patient_city", patientCity);
     if (planName) query = query.ilike("plan_name", planName);
     if (appointmentDate) query = query.eq("appointment_date", appointmentDate);
+    if (consultationDate) query = query.eq("payment_due_date", consultationDate);
+    if (createdDate) {
+      query = query.gte("created_at", `${createdDate}T00:00:00-03:00`).lt("created_at", `${nextDate(createdDate)}T00:00:00-03:00`);
+    }
     if (paymentStatus) query = query.eq("payment_status", paymentStatus);
     if (needsPayment) query = query.eq("needs_payment", needsPayment === "true");
     if (search) {

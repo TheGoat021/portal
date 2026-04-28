@@ -64,6 +64,7 @@ type OperationalRecord = {
   paymentDueDate?: string;
   paymentDueTime?: string;
   callStatus?: CallStatus;
+  createdAtRaw?: string;
   updatedAt: string;
 };
 
@@ -74,7 +75,8 @@ type Filters = {
   clinic: string;
   city: string;
   plan: string;
-  date: string;
+  consultationDate: string;
+  registrationDate: string;
 };
 
 type UserOption = {
@@ -103,7 +105,7 @@ const tabs: { key: TabKey; label: string }[] = [
   { key: "novo", label: "Novo Registro" },
 ];
 
-const PLAN_OPTIONS = ["Plano Light", "Plus R$ 9,90", "Plus Gratuito"] as const;
+const PLAN_OPTIONS = ["Plano Light", "Plus R$ 9,90", "Plus Gratuito", "Particular"] as const;
 
 const tabKeys = new Set<TabKey>(tabs.map((tab) => tab.key));
 
@@ -114,6 +116,7 @@ function resolveTab(value: string | null): TabKey {
 const statusOptionsByType: Record<RecordType, string[]> = {
   agendamento: [
     "Verificando agendamento",
+    "Aguardando pagamento",
     "Agendado, falta enviar voucher",
     "Voucher enviado",
     "Aguardando agenda abrir",
@@ -125,7 +128,7 @@ const statusOptionsByType: Record<RecordType, string[]> = {
     "Voucher enviado",
     "Aguardando agenda abrir",
   ],
-  cancelamento: ["Cancelado"],
+  cancelamento: ["Revertido", "Nao revertido", "Em tratativa"],
   comercial_ligacoes: ["Venda feita", "Venda nao realizada"],
   exames_ligacoes: ["Venda feita", "Venda nao realizada"],
 };
@@ -137,7 +140,8 @@ const initialFilters: Filters = {
   clinic: "",
   city: "",
   plan: "",
-  date: "",
+  consultationDate: "",
+  registrationDate: "",
 };
 
 type ApiOperationalRecord = {
@@ -166,6 +170,7 @@ type ApiOperationalRecord = {
   call_status?: CallStatus | null;
   cancellation_reason?: string | null;
   observation?: string | null;
+  created_at?: string | null;
   updated_at?: string | null;
 };
 
@@ -211,6 +216,7 @@ function mapApiRecordToUi(record: ApiOperationalRecord): OperationalRecord {
     paymentDueDate: record.payment_due_date || "",
     paymentDueTime: record.payment_due_time || "",
     callStatus: record.call_status || undefined,
+    createdAtRaw: record.created_at || "",
     updatedAt: formatRelativeDateTime(record.updated_at) || "Agora",
   };
 }
@@ -303,6 +309,21 @@ async function updateOperationalRecord(id: string, payload: Partial<OperationalR
   return mapApiRecordToUi(data);
 }
 
+async function deleteOperationalRecord(id: string, actorUserEmail?: string) {
+  const response = await fetch(`/api/agendamento/gestao/${id}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      actor_user_email: actorUserEmail || null,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorPayload = await response.json().catch(() => null);
+    throw new Error(errorPayload?.error || "Erro ao excluir registro");
+  }
+}
+
 async function loadUserOptions() {
   const response = await fetch("/api/users", { cache: "no-store" });
   if (!response.ok) throw new Error("Erro ao carregar usuarios");
@@ -382,6 +403,18 @@ function getTodayInSaoPaulo() {
   });
 
   return formatter.format(new Date());
+}
+
+function getDatePartInSaoPaulo(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
 }
 
 function getYesterdayInSaoPaulo() {
@@ -471,7 +504,8 @@ function matchesFilters(record: OperationalRecord, filters: Filters) {
   if (filters.clinic && record.clinic !== filters.clinic) return false;
   if (filters.city && normalize(record.city || "") !== normalize(filters.city)) return false;
   if (filters.plan && record.plan !== filters.plan) return false;
-  if (filters.date && record.date !== filters.date) return false;
+  if (filters.consultationDate && record.paymentDueDate !== filters.consultationDate) return false;
+  if (filters.registrationDate && getDatePartInSaoPaulo(record.createdAtRaw) !== filters.registrationDate) return false;
   return true;
 }
 
@@ -574,6 +608,8 @@ function FiltersPanel({
   showClinic = true,
   showCity = true,
   showPlan = true,
+  showConsultationDate = false,
+  showRegistrationDate = true,
 }: {
   records: OperationalRecord[];
   filters: Filters;
@@ -581,6 +617,8 @@ function FiltersPanel({
   showClinic?: boolean;
   showCity?: boolean;
   showPlan?: boolean;
+  showConsultationDate?: boolean;
+  showRegistrationDate?: boolean;
   onChange: (filters: Filters) => void;
 }) {
   const attendants = uniqueValues(records, (record) => record.attendant);
@@ -631,7 +669,18 @@ function FiltersPanel({
             {plans.map((plan) => <option key={plan} value={plan}>{plan}</option>)}
           </select>
         )}
-        <input className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none" type="date" value={filters.date} onChange={(event) => patch({ date: event.target.value })} />
+        {showConsultationDate && (
+          <label className="flex flex-col gap-1 text-xs font-semibold text-slate-500">
+            <span>Data da consulta (acompanhamento)</span>
+            <input className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-normal text-slate-700 outline-none" type="date" value={filters.consultationDate} onChange={(event) => patch({ consultationDate: event.target.value })} />
+          </label>
+        )}
+        {showRegistrationDate && (
+          <label className="flex flex-col gap-1 text-xs font-semibold text-slate-500">
+            <span>Data do registro</span>
+            <input className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-normal text-slate-700 outline-none" type="date" value={filters.registrationDate} onChange={(event) => patch({ registrationDate: event.target.value })} />
+          </label>
+        )}
       </div>
     </div>
   );
@@ -692,6 +741,7 @@ function RecordsTable({
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+              <th className="px-3 py-3">Acao</th>
               <th className="px-3 py-3">Paciente</th>
               <th className="px-3 py-3">Plano</th>
               {mode !== "payment" && <th className="px-3 py-3">Telefone</th>}
@@ -710,12 +760,16 @@ function RecordsTable({
               {mode === "cancelamento" && <th className="px-3 py-3">Motivo</th>}
               {mode !== "payment" && mode !== "cancelamento" && <th className="px-3 py-3">Status</th>}
               {mode !== "payment" && mode !== "cancelamento" && <th className="px-3 py-3">Observacao</th>}
-              <th className="px-3 py-3">Acao</th>
             </tr>
           </thead>
           <tbody>
             {records.map((record) => (
               <tr key={record.id} className="border-b border-slate-100 text-sm text-slate-700">
+                <td className="whitespace-nowrap px-3 py-3">
+                  <button type="button" onClick={() => onOpen(record)} className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">
+                    Abrir ficha
+                  </button>
+                </td>
                 <td className="whitespace-nowrap px-3 py-3 font-semibold text-slate-900">{record.patientName}</td>
                 <td className="whitespace-nowrap px-3 py-3">{record.plan}</td>
                 {mode !== "payment" && <td className="whitespace-nowrap px-3 py-3">{record.phone}</td>}
@@ -761,11 +815,6 @@ function RecordsTable({
                     <input className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none" value={record.observation} onChange={(event) => onPatch(record.id, { observation: event.target.value })} />
                   </td>
                 )}
-                <td className="whitespace-nowrap px-3 py-3">
-                  <button type="button" onClick={() => onOpen(record)} className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">
-                    Abrir ficha
-                  </button>
-                </td>
               </tr>
             ))}
             {loading && (
@@ -998,7 +1047,7 @@ function NewRecordView({
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    const type = String(form.get("type") || "agendamento") as RecordType;
+    const type = String(form.get("type") || "") as RecordType;
     const needsPayment = form.get("needsPayment") === "Sim";
     const record: OperationalRecord = {
       id: `op-${Date.now()}`,
@@ -1008,7 +1057,7 @@ function NewRecordView({
       cpf: String(form.get("cpf") || ""),
       birthDate: String(form.get("birthDate") || ""),
       email: String(form.get("email") || ""),
-      plan: String(form.get("plan") || PLAN_OPTIONS[0]),
+      plan: String(form.get("plan") || ""),
       city: String(form.get("city") || ""),
       type,
       date: String(form.get("date") || ""),
@@ -1065,7 +1114,10 @@ function NewRecordView({
           />
           <input name="birthDate" type="date" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" />
           <input name="email" type="email" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="E-mail" />
-          <select name="plan" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" defaultValue={PLAN_OPTIONS[0]}>
+          <select name="plan" required className="rounded-xl border border-slate-200 px-3 py-3 text-sm" defaultValue="">
+            <option value="" disabled>
+              Selecione o tipo de plano
+            </option>
             {PLAN_OPTIONS.map((plan) => (
               <option key={plan} value={plan}>
                 {plan}
@@ -1077,15 +1129,21 @@ function NewRecordView({
 
         <h3 className="mb-3 mt-6 text-sm font-semibold text-slate-500">Tipo principal do registro</h3>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <select name="type" className="rounded-xl border border-slate-200 px-3 py-3 text-sm">
+          <select name="type" required className="rounded-xl border border-slate-200 px-3 py-3 text-sm" defaultValue="">
+            <option value="" disabled>
+              Selecione o tipo de registro
+            </option>
             <option value="agendamento">Agendamento</option>
             <option value="ficticio">Ficticio</option>
             <option value="cancelamento">Cancelamento</option>
             <option value="comercial_ligacoes">Comercial Ligacoes</option>
             <option value="exames_ligacoes">Exames Ligacoes</option>
           </select>
-          <select name="needsPayment" className="rounded-xl border border-slate-200 px-3 py-3 text-sm">
-            <option>Nao</option>
+          <select name="needsPayment" required className="rounded-xl border border-slate-200 px-3 py-3 text-sm" defaultValue="">
+            <option value="" disabled>
+              Pagar a consulta?
+            </option>
+            <option>Não</option>
             <option>Sim</option>
           </select>
           <input
@@ -1162,14 +1220,17 @@ function PatientDrawer({
   record,
   onClose,
   onSave,
+  onDelete,
   users,
 }: {
   record: OperationalRecord | null;
   onClose: () => void;
   onSave: (id: string, patch: Partial<OperationalRecord>) => void;
+  onDelete: (id: string) => Promise<void>;
   users: UserOption[];
 }) {
   const [draft, setDraft] = useState<OperationalRecord | null>(record);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     setDraft(record);
@@ -1180,6 +1241,19 @@ function PatientDrawer({
   const patch = (next: Partial<OperationalRecord>) => {
     setDraft((current) => (current ? { ...current, ...next } : current));
   };
+
+  async function handleDelete() {
+    const confirmed = window.confirm("Voce realmente deseja realizar a exclusao desse registro?");
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      await onDelete(record.id);
+      onClose();
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/45" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
@@ -1249,7 +1323,7 @@ function PatientDrawer({
           </select>
           <input type="date" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.date} onChange={(event) => patch({ date: event.target.value })} />
           <input type="time" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.time || ""} onChange={(event) => patch({ time: event.target.value })} />
-          <input className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.clinic || ""} onChange={(event) => patch({ clinic: event.target.value })} />
+          <input className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.clinic || ""} onChange={(event) => patch({ clinic: event.target.value })} placeholder="Clinica" />
           <input className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.specialty || ""} onChange={(event) => patch({ specialty: event.target.value })} placeholder="Especialidade" />
           <UserEmailSelect value={draft.attendant} onChange={(value) => patch({ attendant: value })} users={users} placeholder="Email do atendente" />
           <UserEmailSelect value={draft.commercialOwner || ""} onChange={(value) => patch({ commercialOwner: value })} users={users} placeholder="Email comercial/responsavel" />
@@ -1262,6 +1336,7 @@ function PatientDrawer({
             className="rounded-xl border border-slate-200 px-3 py-3 text-sm"
             value={draft.paymentAmount || ""}
             onChange={(event) => patch({ paymentAmount: sanitizeAmountInput(event.target.value) })}
+            placeholder="Valor da consulta"
           />
           <input type="date" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.paymentDueDate || ""} onChange={(event) => patch({ paymentDueDate: event.target.value })} />
           <input type="time" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.paymentDueTime || ""} onChange={(event) => patch({ paymentDueTime: event.target.value })} />
@@ -1269,7 +1344,7 @@ function PatientDrawer({
             {statusOptionsByType[draft.type].map((status) => <option key={status}>{status}</option>)}
           </select>
           <input className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.cancellationReason || ""} onChange={(event) => patch({ cancellationReason: event.target.value })} placeholder="Motivo do cancelamento" />
-          <textarea rows={4} className="rounded-xl border border-slate-200 px-3 py-3 text-sm md:col-span-2" value={draft.observation} onChange={(event) => patch({ observation: event.target.value })} />
+          <textarea rows={4} className="rounded-xl border border-slate-200 px-3 py-3 text-sm md:col-span-2" value={draft.observation} onChange={(event) => patch({ observation: event.target.value })} placeholder="Observacao do operador sobre o atendimento" />
         </div>
 
         <div className="flex flex-wrap gap-3">
@@ -1285,6 +1360,17 @@ function PatientDrawer({
           </button>
           <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">
             Fechar
+          </button>
+        </div>
+
+        <div className="mt-8 border-t border-slate-200 pt-6">
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleting}
+            className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {deleting ? "Excluindo..." : "Excluir registro"}
           </button>
         </div>
       </aside>
@@ -1338,7 +1424,8 @@ export default function GestaoAgendamentosTestePage() {
     if (filters.clinic) params.clinic_name = filters.clinic;
     if (filters.city) params.patient_city = filters.city;
     if (filters.plan) params.plan_name = filters.plan;
-    if (filters.date) params.appointment_date = filters.date;
+    if (filters.consultationDate) params.consultation_date = filters.consultationDate;
+    if (filters.registrationDate) params.created_date = filters.registrationDate;
 
     if (activeTab === "agendamentos") {
       params.record_type = "agendamento";
@@ -1427,6 +1514,15 @@ export default function GestaoAgendamentosTestePage() {
       });
   }
 
+  async function removeRecord(id: string) {
+    await deleteOperationalRecord(id, String(user?.email || ""));
+    setRecords((current) => current.filter((record) => record.id !== id));
+    setListRecords((current) => current.filter((record) => record.id !== id));
+    setSelectedRecord((current) => (current?.id === id ? null : current));
+    refreshDashboardRecords().catch(console.error);
+    refreshListRecords(currentPage).catch(console.error);
+  }
+
   async function createRecord(record: OperationalRecord) {
     const saved = await saveOperationalRecord(record, String(user?.email || ""));
     setRecords((current) => [saved, ...current]);
@@ -1508,13 +1604,13 @@ export default function GestaoAgendamentosTestePage() {
         )}
         {activeTab === "agendamentos" && (
           <>
-            <FiltersPanel records={records} filters={filters} onChange={(next) => { setFilters(next); setCurrentPage(1); }} statuses={statusOptionsByType.agendamento} />
+            <FiltersPanel records={records} filters={filters} onChange={(next) => { setFilters(next); setCurrentPage(1); }} statuses={statusOptionsByType.agendamento} showConsultationDate />
             <RecordsTable title="Lista de agendamentos" records={recordsForTab} mode="standard" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} />
           </>
         )}
         {activeTab === "ficticios" && (
           <>
-            <FiltersPanel records={records} filters={filters} onChange={(next) => { setFilters(next); setCurrentPage(1); }} statuses={statusOptionsByType.ficticio} />
+            <FiltersPanel records={records} filters={filters} onChange={(next) => { setFilters(next); setCurrentPage(1); }} statuses={statusOptionsByType.ficticio} showConsultationDate />
             <RecordsTable title="Lista de ficticios" records={recordsForTab} mode="standard" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} />
           </>
         )}
@@ -1526,7 +1622,7 @@ export default function GestaoAgendamentosTestePage() {
         )}
         {activeTab === "cancelamentos" && (
           <>
-            <FiltersPanel records={records} filters={filters} onChange={(next) => { setFilters(next); setCurrentPage(1); }} statuses={["Cancelado"]} showClinic={false} />
+            <FiltersPanel records={records} filters={filters} onChange={(next) => { setFilters(next); setCurrentPage(1); }} statuses={statusOptionsByType.cancelamento} showClinic={false} />
             <RecordsTable title="Motivos registrados" records={recordsForTab} mode="cancelamento" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} />
           </>
         )}
@@ -1545,7 +1641,7 @@ export default function GestaoAgendamentosTestePage() {
         {activeTab === "novo" && <NewRecordView onSave={createRecord} currentUserEmail={String(user?.email || "")} />}
       </div>
 
-      <PatientDrawer record={selectedRecord} onClose={() => setSelectedRecord(null)} onSave={updateRecord} users={users} />
+      <PatientDrawer record={selectedRecord} onClose={() => setSelectedRecord(null)} onSave={updateRecord} onDelete={removeRecord} users={users} />
     </div>
   );
 }
