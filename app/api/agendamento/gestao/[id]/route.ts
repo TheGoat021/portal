@@ -11,6 +11,10 @@ function isMissingPaymentDueTimeColumn(message?: string) {
   return String(message || "").includes("payment_due_time");
 }
 
+function isTypeStatusConstraintViolation(message?: string) {
+  return String(message || "").includes("chk_agendamento_operational_type_status");
+}
+
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
@@ -138,6 +142,12 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     }
 
     if (error || !data) {
+      if (isTypeStatusConstraintViolation(error?.message)) {
+        return NextResponse.json(
+          { error: "Os status configurados na aplicacao nao batem com a regra atual do banco. Atualize a constraint chk_agendamento_operational_type_status." },
+          { status: 400 }
+        );
+      }
       return NextResponse.json({ error: error?.message || "Erro ao atualizar registro" }, { status: 500 });
     }
 

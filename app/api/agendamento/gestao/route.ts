@@ -13,6 +13,10 @@ function isMissingPaymentDueTimeColumn(message?: string) {
   return String(message || "").includes("payment_due_time");
 }
 
+function isTypeStatusConstraintViolation(message?: string) {
+  return String(message || "").includes("chk_agendamento_operational_type_status");
+}
+
 function nextDate(date: string) {
   const [year, month, day] = date.split("-").map(Number);
   const value = new Date(Date.UTC(year, (month || 1) - 1, day || 1));
@@ -166,6 +170,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (error || !data) {
+      if (isTypeStatusConstraintViolation(error?.message)) {
+        return NextResponse.json(
+          { error: "Os status configurados na aplicacao nao batem com a regra atual do banco. Atualize a constraint chk_agendamento_operational_type_status." },
+          { status: 400 }
+        );
+      }
       return NextResponse.json({ error: error?.message || "Erro ao criar registro" }, { status: 500 });
     }
 
