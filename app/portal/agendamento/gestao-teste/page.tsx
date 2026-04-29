@@ -1502,7 +1502,11 @@ export default function GestaoAgendamentosTestePage() {
       current.map((record) => (record.id === id ? { ...record, ...patch, updatedAt: "Agora" } : record))
     );
 
-    const currentRecord = records.find((record) => record.id === id);
+    const currentRecord =
+      records.find((record) => record.id === id) ||
+      listRecords.find((record) => record.id === id) ||
+      (selectedRecord?.id === id ? selectedRecord : null);
+
     if (!currentRecord) return;
 
     updateOperationalRecord(id, { ...currentRecord, ...patch }, String(user?.email || ""))
