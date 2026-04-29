@@ -18,6 +18,7 @@ export const STATUS_BY_TYPE = {
     "Agendado, falta enviar voucher",
     "Voucher enviado",
     "Aguardando agenda abrir",
+    "Cancelado pelo titular",
   ],
   ficticio: [
     "Verificando agendamento",
