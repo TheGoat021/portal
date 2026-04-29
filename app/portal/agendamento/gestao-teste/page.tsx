@@ -120,6 +120,7 @@ const statusOptionsByType: Record<RecordType, string[]> = {
     "Agendado, falta enviar voucher",
     "Voucher enviado",
     "Aguardando agenda abrir",
+    "Cancelado pelo titular"
   ],
   ficticio: [
     "Verificando agendamento",
@@ -1533,6 +1534,10 @@ export default function GestaoAgendamentosTestePage() {
   async function createRecord(record: OperationalRecord) {
     const saved = await saveOperationalRecord(record, String(user?.email || ""));
     setRecords((current) => [saved, ...current]);
+    setFilters(initialFilters);
+    setCurrentPage(1);
+    setListRecords([]);
+    refreshDashboardRecords().catch(console.error);
     router.push("/portal/agendamento/gestao-teste?tab=dashboard");
   }
 

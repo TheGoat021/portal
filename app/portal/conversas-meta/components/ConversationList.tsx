@@ -220,6 +220,7 @@ export default function ConversationsList({
   const [pullingConversationId, setPullingConversationId] = useState<string | null>(null)
   const [onlyUnreadForOperator, setOnlyUnreadForOperator] = useState(false)
   const [alertColorFilter, setAlertColorFilter] = useState<"all" | "warning" | "danger">("all")
+  const [selectedOperatorFilter, setSelectedOperatorFilter] = useState<string>("all")
   const [distributionActive, setDistributionActive] = useState(true)
   const [loadingAvailability, setLoadingAvailability] = useState(false)
   const [savingAvailability, setSavingAvailability] = useState(false)
@@ -462,9 +463,39 @@ export default function ConversationsList({
     })
   }, [conversations, currentUser.id, isDiretoria])
 
+  const diretoriaOperatorOptions = useMemo(() => {
+    const map = new Map<string, { value: string; label: string }>()
+
+    for (const conversation of conversations) {
+      if (conversation.serviceState !== "operator" && conversation.serviceState !== "closed") continue
+      const id = String(conversation.assignedUserId || "").trim()
+      const email = String(conversation.assignedUserEmail || "").trim()
+      const value = id || email
+      if (!value) continue
+
+      if (!map.has(value)) {
+        map.set(value, {
+          value,
+          label: email || id
+        })
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label, "pt-BR"))
+  }, [conversations])
+
   const filteredConversations = useMemo(() => {
     const q = search.trim().toLowerCase()
     let base = visibleConversations.filter((conversation) => conversation.serviceState === serviceFilter)
+
+    if (isDiretoria && selectedOperatorFilter !== "all") {
+      base = base.filter((conversation) => {
+        const assignedUserId = String(conversation.assignedUserId || "")
+        const assignedUserEmail = String(conversation.assignedUserEmail || "").toLowerCase()
+        const selected = selectedOperatorFilter.toLowerCase()
+        return assignedUserId === selectedOperatorFilter || assignedUserEmail === selected
+      })
+    }
 
     if (!isDiretoria && onlyUnreadForOperator) {
       base = base.filter((conversation) => (conversation.unreadCount ?? 0) > 0)
@@ -512,7 +543,15 @@ export default function ConversationsList({
       const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0
       return bTime - aTime
     })
-  }, [visibleConversations, search, serviceFilter, isDiretoria, onlyUnreadForOperator, alertColorFilter])
+  }, [
+    visibleConversations,
+    search,
+    serviceFilter,
+    isDiretoria,
+    onlyUnreadForOperator,
+    alertColorFilter,
+    selectedOperatorFilter
+  ])
 
   const allVisibleBotIds = useMemo(
     () =>
@@ -860,7 +899,23 @@ export default function ConversationsList({
                   <option value="danger">🔴</option>
                 </select>
               </div>
-            ) : null}
+            ) : (
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedOperatorFilter}
+                  onChange={(e) => setSelectedOperatorFilter(e.target.value)}
+                  className="h-7 max-w-[180px] rounded-full border text-[11px] px-2 bg-white text-gray-700 border-gray-200 focus:outline-none"
+                  title="Filtrar por atendente"
+                >
+                  <option value="all">Todos atendentes</option>
+                  {diretoriaOperatorOptions.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         ) : null}
 
