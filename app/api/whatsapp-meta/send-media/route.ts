@@ -70,7 +70,20 @@ async function convertAudioToOggOpus(fileBuffer: Buffer, originalName: string) {
     throw new Error('ffmpeg-static não encontrado para conversão de áudio')
   }
 
-  ffmpeg.setFfmpegPath(ffmpegPath)
+  let runtimeFfmpegPath = ffmpegPath
+  try {
+    const ffmpegTmpPath = path.join(os.tmpdir(), `ffmpeg-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+    await fs.copyFile(ffmpegPath, ffmpegTmpPath)
+    await fs.chmod(ffmpegTmpPath, 0o755)
+    runtimeFfmpegPath = ffmpegTmpPath
+  } catch (copyError) {
+    console.warn('Falha ao preparar ffmpeg em /tmp; usando binario original', {
+      ffmpegPath,
+      error: copyError instanceof Error ? copyError.message : String(copyError)
+    })
+  }
+
+  ffmpeg.setFfmpegPath(runtimeFfmpegPath)
 
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'meta-audio-'))
   const safeName = (originalName || `audio-${Date.now()}.tmp`).replace(/[^\w.\-]/g, '_')
@@ -99,6 +112,9 @@ async function convertAudioToOggOpus(fileBuffer: Buffer, originalName: string) {
     }
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true })
+    if (runtimeFfmpegPath !== ffmpegPath) {
+      await fs.rm(runtimeFfmpegPath, { force: true }).catch(() => undefined)
+    }
   }
 }
 
