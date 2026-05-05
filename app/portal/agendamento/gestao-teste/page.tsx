@@ -389,6 +389,12 @@ function sanitizeAmountInput(value?: string) {
   return `${integerPart},${decimalPart}`;
 }
 
+function mapCallStatusFormValue(value: string): CallStatus | undefined {
+  if (value === "Venda feita") return "venda_feita";
+  if (value === "Venda nao realizada") return "venda_nao_realizada";
+  return undefined;
+}
+
 function compareDateTimeAsc(dateA?: string, timeA?: string, dateB?: string, timeB?: string) {
   const left = `${dateA || "9999-12-31"}T${timeA || "23:59:59"}`;
   const right = `${dateB || "9999-12-31"}T${timeB || "23:59:59"}`;
@@ -871,6 +877,7 @@ function DashboardView({
   records: OperationalRecord[];
   onOpen: (record: OperationalRecord) => void;
 }) {
+  const [movementSearch, setMovementSearch] = useState("");
   const today = getTodayInSaoPaulo();
   const yesterday = getYesterdayInSaoPaulo();
   const agendamentosHoje = records.filter((record) => record.type === "agendamento" && record.date === today);
@@ -905,6 +912,9 @@ function DashboardView({
     { title: "Consultas a pagar", records: sortedPayments },
     { title: "Cancelamentos", records: sortedCancelamentos },
   ];
+  const filteredMovements = records.filter((record) =>
+    !movementSearch || normalize(record.patientName).includes(normalize(movementSearch))
+  );
 
   return (
     <div className="space-y-5">
@@ -1018,9 +1028,20 @@ function DashboardView({
         </div>
 
         <div className="h-[520px] rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="mb-4 text-lg font-semibold text-slate-900">Ultimas movimentacoes</h3>
+          <div className="mb-4 flex flex-col gap-3">
+            <h3 className="text-lg font-semibold text-slate-900">Ultimas movimentacoes</h3>
+            <label className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <input
+                value={movementSearch}
+                onChange={(event) => setMovementSearch(event.target.value)}
+                placeholder="Buscar por nome"
+                className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-3 text-sm outline-none focus:border-blue-400"
+              />
+            </label>
+          </div>
           <div className="h-[440px] space-y-4 overflow-y-auto pr-1">
-            {records.map((record) => (
+            {filteredMovements.map((record) => (
               <div key={record.id} className="border-l-4 border-blue-500 pl-3">
                 <strong className="block text-sm text-slate-900">
                   {record.attendant} atualizou {record.patientName} para &quot;{record.status}&quot;
@@ -1028,6 +1049,11 @@ function DashboardView({
                 <span className="mt-1 block text-xs text-slate-500">{record.updatedAt}</span>
               </div>
             ))}
+            {filteredMovements.length === 0 && (
+              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                Nenhuma movimentacao encontrada para esse nome.
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1046,10 +1072,13 @@ function NewRecordView({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
+
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const type = String(form.get("type") || "") as RecordType;
     const needsPayment = form.get("needsPayment") === "Sim";
+    const selectedCallStatus = mapCallStatusFormValue(String(form.get("callStatus") || ""));
     const record: OperationalRecord = {
       id: `op-${Date.now()}`,
       patientName: String(form.get("patientName") || "Novo paciente"),
@@ -1074,7 +1103,10 @@ function NewRecordView({
       paymentAmount: String(form.get("paymentAmount") || ""),
       paymentDueDate: String(form.get("paymentDueDate") || ""),
       paymentDueTime: String(form.get("paymentDueTime") || ""),
-      callStatus: type.includes("ligacoes") ? "venda_nao_realizada" : undefined,
+      callStatus:
+        type.includes("ligacoes")
+          ? selectedCallStatus || "venda_nao_realizada"
+          : undefined,
       updatedAt: "Agora",
     };
 
@@ -1192,7 +1224,7 @@ function NewRecordView({
         </div>
 
         <div className="mt-5 flex flex-wrap gap-3">
-          <button type="submit" className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700">
+          <button type="submit" disabled={saving} className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
             {saving ? "Salvando..." : "Salvar registro"}
           </button>
           <button type="reset" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">Limpar</button>
@@ -1257,6 +1289,14 @@ function PatientDrawer({
     } finally {
       setDeleting(false);
     }
+  }
+
+  function openDocument(documentType: "voucher" | "declaracao") {
+    const recordId = draft?.id || record?.id;
+    if (!recordId) return;
+
+    const url = `/api/agendamento/documento?recordId=${encodeURIComponent(recordId)}&documentType=${documentType}`;
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   return (
@@ -1365,6 +1405,26 @@ function PatientDrawer({
           <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">
             Fechar
           </button>
+        </div>
+
+        <div className="mt-8 border-t border-slate-200 pt-6">
+          <h4 className="mb-3 text-sm font-semibold text-slate-500">Documentos</h4>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => openDocument("voucher")}
+              className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+            >
+              Gerar voucher
+            </button>
+            <button
+              type="button"
+              onClick={() => openDocument("declaracao")}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Gerar declaracao
+            </button>
+          </div>
         </div>
 
         <div className="mt-8 border-t border-slate-200 pt-6">
