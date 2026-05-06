@@ -119,7 +119,6 @@ export const menuConfig: MenuSection[] = [
         label: "WhatsApp Oficial",
         href: "/portal/conversas-meta",
       },
-
       {
         label: "WhatsApp",
         href: "/portal/conversas",
@@ -276,6 +275,10 @@ export const menuConfig: MenuSection[] = [
     roles: ["DIRETORIA"],
     items: [
       { label: "Usuários", href: "/portal/usuarios" },
+      {
+        label: "Axion Voice",
+        href: "/portal/voice/queues",
+      },
       {
         label: "Lançar Evolução",
         href: "/portal/evolucao/lancar",

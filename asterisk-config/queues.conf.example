@@ -1,0 +1,19 @@
+[general]
+persistentmembers=yes
+autofill=yes
+shared_lastcall=yes
+
+[comercial]
+musicclass=default
+strategy=ringall
+timeout=20
+retry=5
+maxlen=0
+joinempty=yes
+leavewhenempty=no
+ringinuse=no
+setinterfacevar=yes
+setqueuevar=yes
+monitor-type=MixMonitor
+monitor-format=wav
+member => PJSIP/1001,1,Comercial 1

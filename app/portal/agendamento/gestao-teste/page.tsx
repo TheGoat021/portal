@@ -1069,6 +1069,8 @@ function NewRecordView({
   currentUserEmail: string;
 }) {
   const [saving, setSaving] = useState(false);
+  const lockedRecordDate = useMemo(() => getTodayInSaoPaulo(), []);
+  const lockedRecordTime = useMemo(() => getCurrentTimeInSaoPaulo(), []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1179,17 +1181,19 @@ function NewRecordView({
             <option>Não</option>
             <option>Sim</option>
           </select>
+          <input name="date" type="hidden" value={lockedRecordDate} readOnly />
           <input
-            name="date"
             type="date"
-            defaultValue={getTodayInSaoPaulo()}
-            className="rounded-xl border border-slate-200 px-3 py-3 text-sm"
+            value={lockedRecordDate}
+            disabled
+            className="cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500"
           />
+          <input name="time" type="hidden" value={lockedRecordTime} readOnly />
           <input
-            name="time"
             type="time"
-            defaultValue={getCurrentTimeInSaoPaulo()}
-            className="rounded-xl border border-slate-200 px-3 py-3 text-sm"
+            value={lockedRecordTime}
+            disabled
+            className="cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500"
             placeholder="Horario da consulta"
           />
           <input name="clinic" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="Clinica" />
@@ -1365,8 +1369,18 @@ function PatientDrawer({
             <option>Nao</option>
             <option>Sim</option>
           </select>
-          <input type="date" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.date} onChange={(event) => patch({ date: event.target.value })} />
-          <input type="time" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.time || ""} onChange={(event) => patch({ time: event.target.value })} />
+          <input
+            type="date"
+            disabled
+            className="cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500"
+            value={draft.date}
+          />
+          <input
+            type="time"
+            disabled
+            className="cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500"
+            value={draft.time || ""}
+          />
           <input className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.clinic || ""} onChange={(event) => patch({ clinic: event.target.value })} placeholder="Clinica" />
           <input className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.specialty || ""} onChange={(event) => patch({ specialty: event.target.value })} placeholder="Especialidade" />
           <UserEmailSelect value={draft.attendant} onChange={(value) => patch({ attendant: value })} users={users} placeholder="Email do atendente" />
