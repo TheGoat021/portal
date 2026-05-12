@@ -19,6 +19,11 @@ import {
 const apiBase =
   process.env.NEXT_PUBLIC_AXION_VOICE_API_URL?.replace(/\/$/, "") || ""
 
+const softphonePasswordTemplate =
+  process.env.NEXT_PUBLIC_AXION_VOICE_SIP_PASSWORD_TEMPLATE || ""
+const softphoneUsernameSuffix =
+  process.env.NEXT_PUBLIC_AXION_VOICE_SIP_USERNAME_SUFFIX || ""
+
 function average(values: number[]) {
   if (values.length === 0) return 0
   return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
@@ -61,6 +66,21 @@ async function fetchJson<T>(path: string): Promise<T> {
   }
 
   return response.json()
+}
+
+export type VoiceSoftphoneIdentity = {
+  agentId: string
+  userId: string | null
+  extension: string
+  sipUsername: string
+  sipPassword: string
+  displayName: string
+}
+
+export type VoiceProvisionUser = {
+  id: string
+  email: string | null
+  role?: string | null
 }
 
 function decorateCalls(calls: VoiceCall[]) {
@@ -119,6 +139,113 @@ export function useVoiceData() {
     statusText,
     reload: load,
     apiBase
+  }
+}
+
+export function deriveSoftphoneIdentity(agent?: VoiceAgent | null): VoiceSoftphoneIdentity | null {
+  if (!agent?.extension) return null
+
+  const sipUsername = `${agent.extension}${softphoneUsernameSuffix}`
+  const sipPassword = softphonePasswordTemplate
+    ? softphonePasswordTemplate
+        .replaceAll("{extension}", agent.extension)
+        .replaceAll("{sipUsername}", sipUsername)
+        .replaceAll("{userId}", agent.user_id ?? "")
+        .replaceAll("{email}", agent.email ?? "")
+    : `${agent.extension}@Axion`
+
+  return {
+    agentId: agent.id,
+    userId: agent.user_id,
+    extension: agent.extension,
+    sipUsername,
+    sipPassword,
+    displayName: agent.name
+  }
+}
+
+export function useCurrentVoiceAgent(agents: VoiceAgent[], userId?: string | null) {
+  return useMemo(() => {
+    if (!userId) return null
+    return agents.find((agent) => agent.user_id === userId) ?? null
+  }, [agents, userId])
+}
+
+export function useVoiceProvisionDirectory() {
+  const [unassignedUsers, setUnassignedUsers] = useState<VoiceProvisionUser[]>([])
+  const [agents, setAgents] = useState<VoiceAgent[]>([])
+  const [loading, setLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [warningMessage, setWarningMessage] = useState<string | null>(null)
+
+  const load = async () => {
+    setLoading(true)
+
+    try {
+      const response = await fetch("/api/voice/agents", { cache: "no-store" })
+      if (!response.ok) {
+        throw new Error("Falha ao consultar o diretorio de agentes.")
+      }
+
+      const payload = (await response.json()) as {
+        agents?: VoiceAgent[]
+        unassignedUsers?: VoiceProvisionUser[]
+        warning?: string
+      }
+
+      setAgents(payload.agents ?? [])
+      setUnassignedUsers(payload.unassignedUsers ?? [])
+      setErrorMessage(null)
+      setWarningMessage(payload.warning ?? null)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Nao foi possivel carregar os usuarios disponiveis para provisionamento."
+      setErrorMessage(message)
+      setWarningMessage(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const provision = async (input: {
+    userId: string
+    extension: string
+    status?: VoiceAgent["status"]
+  }) => {
+    const response = await fetch("/api/voice/agents", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        user_id: input.userId,
+        extension: input.extension,
+        status: input.status ?? "offline"
+      })
+    })
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null
+      throw new Error(payload?.error || "Falha ao provisionar ramal.")
+    }
+
+    await load()
+  }
+
+  useEffect(() => {
+    void load()
+  }, [])
+
+  return {
+    unassignedUsers,
+    agents,
+    loading,
+    errorMessage,
+    warningMessage,
+    reload: load,
+    provision
   }
 }
 

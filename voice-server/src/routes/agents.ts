@@ -18,6 +18,15 @@ agentsRouter.get("/", async (_req, res, next) => {
 
 agentsRouter.post("/", async (req, res, next) => {
   try {
+    const userId = String(req.body?.user_id || req.body?.userId || "")
+    const extension = String(req.body?.extension || "")
+
+    if (!userId || !extension) {
+      return res.status(400).json({
+        error: "user_id and extension are required. Agents must be existing system users."
+      })
+    }
+
     res.json(await createAgent(req.body))
   } catch (error) {
     next(error)

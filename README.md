@@ -20,6 +20,14 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Axion Voice
+
+O portal ja possui a base do softphone do Axion integrada na UI. O guia rapido de configuracao do navegador e do Asterisk esta em:
+
+- `docs/axion-voice-softphone.md`
+- `asterisk-config/http.conf.example`
+- `asterisk-config/pjsip.conf.example`
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

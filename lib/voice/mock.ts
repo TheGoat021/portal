@@ -30,40 +30,50 @@ export const mockVoiceQueues: VoiceQueue[] = [
 export const mockVoiceAgents: VoiceAgent[] = [
   {
     id: "agent-1",
+    user_id: "user-1",
     name: "Ana Martins",
-    extension: "1001",
+    email: "ana@axion.local",
+    extension: "2101",
     status: "in_call",
     current_call_id: "call-2",
     updated_at: new Date(now - 11 * 60 * 1000).toISOString()
   },
   {
     id: "agent-2",
+    user_id: "user-2",
     name: "Bruno Lima",
-    extension: "1002",
+    email: "bruno@axion.local",
+    extension: "2102",
     status: "available",
     current_call_id: null,
     updated_at: new Date(now - 6 * 60 * 1000).toISOString()
   },
   {
     id: "agent-3",
+    user_id: "user-3",
     name: "Carla Souza",
-    extension: "1003",
+    email: "carla@axion.local",
+    extension: "2103",
     status: "paused",
     current_call_id: null,
     updated_at: new Date(now - 14 * 60 * 1000).toISOString()
   },
   {
     id: "agent-4",
+    user_id: "user-4",
     name: "Diego Alves",
-    extension: "1004",
+    email: "diego@axion.local",
+    extension: "2104",
     status: "ringing",
     current_call_id: "call-1",
     updated_at: new Date(now - 45 * 1000).toISOString()
   },
   {
     id: "agent-5",
+    user_id: "user-5",
     name: "Erika Prado",
-    extension: "1005",
+    email: "erika@axion.local",
+    extension: "2105",
     status: "offline",
     current_call_id: null,
     updated_at: new Date(now - 2 * 60 * 60 * 1000).toISOString()

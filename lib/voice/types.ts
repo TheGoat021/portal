@@ -17,7 +17,9 @@ export type VoiceCallStatus =
 
 export type VoiceAgent = {
   id: string
+  user_id: string | null
   name: string
+  email?: string | null
   extension: string
   status: VoiceAgentStatus
   current_call_id: string | null

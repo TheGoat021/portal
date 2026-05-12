@@ -1,0 +1,15 @@
+[general]
+enabled=yes
+bindaddr=0.0.0.0
+bindport=8088
+
+; HTTPS/WSS para WebRTC do Axion Softphone
+tlsenable=yes
+tlsbindaddr=0.0.0.0:8089
+tlscertfile=/etc/asterisk/keys/asterisk.pem
+tlsprivatekey=/etc/asterisk/keys/asterisk.key
+
+; Em producao, prefira um certificado valido para o dominio do voice.
+; Exemplo:
+; tlscertfile=/etc/letsencrypt/live/voice.seudominio.com.br/fullchain.pem
+; tlsprivatekey=/etc/letsencrypt/live/voice.seudominio.com.br/privkey.pem

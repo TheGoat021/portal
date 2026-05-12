@@ -37,10 +37,12 @@ const statusMeta: Record<
 
 export default function AgentCard({
   agent,
-  activePhone
+  activePhone,
+  isCurrentUser = false
 }: {
   agent: VoiceAgent
   activePhone?: string | null
+  isCurrentUser?: boolean
 }) {
   const meta = statusMeta[agent.status] || statusMeta.offline
   const statusSinceSeconds = agent.updated_at
@@ -48,15 +50,27 @@ export default function AgentCard({
     : 0
 
   return (
-    <div className={`rounded-2xl border border-[#E5E7EB] bg-gradient-to-br ${meta.panel} p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.18)] transition duration-300 hover:-translate-y-0.5`}>
+    <div className={`rounded-2xl border bg-gradient-to-br ${meta.panel} p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.18)] transition duration-300 hover:-translate-y-0.5 ${
+      isCurrentUser ? "border-cyan-300 shadow-[0_16px_36px_-22px_rgba(8,145,178,0.28)]" : "border-[#E5E7EB]"
+    }`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-base font-semibold text-slate-950">{agent.name}</p>
           <p className="mt-1 text-sm text-slate-500">Ramal {agent.extension}</p>
+          {agent.email ? (
+            <p className="mt-1 truncate text-xs text-slate-400">{agent.email}</p>
+          ) : null}
         </div>
-        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${meta.tone}`}>
-          {meta.label}
-        </span>
+        <div className="flex flex-col items-end gap-2">
+          {isCurrentUser ? (
+            <span className="rounded-full bg-cyan-500 px-3 py-1 text-[11px] font-semibold text-white">
+              Seu ramal
+            </span>
+          ) : null}
+          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${meta.tone}`}>
+            {meta.label}
+          </span>
+        </div>
       </div>
 
       <div className="mt-5 space-y-3">
@@ -71,6 +85,10 @@ export default function AgentCard({
           <p className="mt-2 text-sm font-medium text-slate-700">
             {activePhone ? formatPhone(activePhone) : "Sem chamada ativa"}
           </p>
+        </div>
+        <div className="rounded-xl border border-white/70 bg-white/70 p-3">
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Login SIP</p>
+          <p className="mt-2 text-sm font-medium text-slate-700">{agent.extension}</p>
         </div>
       </div>
 

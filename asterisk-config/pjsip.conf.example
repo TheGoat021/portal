@@ -1,13 +1,21 @@
+[global]
+type=global
+endpoint_identifier_order=auth_username,username,ip,anonymous
+
+[voice-domain]
+type=domain_alias
+domain=voice.seudominio.com.br
+
 [transport-udp]
 type=transport
 protocol=udp
-bind=0.0.0.0
+bind=0.0.0.0:5060
 
 [transport-wss]
 type=transport
 protocol=wss
-bind=0.0.0.0
-; Fase 2: necessário para WebRTC.
+bind=0.0.0.0:8089
+allow_reload=yes
 
 [vonex-flux-trunk]
 type=endpoint
@@ -31,33 +39,24 @@ password=SIP_TRUNK_PASSWORD
 
 [vonex-flux-trunk-aor]
 type=aor
-contact=sip:SIP_TRUNK_HOST
+contact=sip:SIP_TRUNK_HOST:SIP_TRUNK_PORT
 qualify_frequency=60
 
 [vonex-flux-trunk-identify]
 type=identify
 endpoint=vonex-flux-trunk
-match=SIP_TRUNK_HOST
+match=SIP_TRUNK_IP
 
-[1001]
+[internal-udp-template](!)
 type=endpoint
 transport=transport-udp
 context=axion-voice-internal
 disallow=all
 allow=alaw,ulaw
-auth=1001-auth
-aors=1001
-callerid=Comercial 1 <1001>
-
-[1001-auth]
-type=auth
-auth_type=userpass
-username=1001
-password=CHANGE_ME_1001
-
-[1001]
-type=aor
-max_contacts=1
+direct_media=no
+rtp_symmetric=yes
+force_rport=yes
+rewrite_contact=yes
 
 [webrtc-template](!)
 type=endpoint
@@ -71,6 +70,50 @@ media_encryption=dtls
 dtls_auto_generate_cert=yes
 ice_support=yes
 rtcp_mux=yes
+media_use_received_transport=yes
 rewrite_contact=yes
 force_rport=yes
 rtp_symmetric=yes
+direct_media=no
+identify_by=auth_username
+
+; Copie estes 3 blocos para cada ramal interno de desktop/app SIP
+; e ajuste EXTENSION / PASSWORD conforme o cadastro do painel.
+[EXTENSION](internal-udp-template)
+auth=EXTENSION-auth
+aors=EXTENSION
+callerid=Agente EXTENSION <EXTENSION>
+
+[EXTENSION-auth]
+type=auth
+auth_type=userpass
+username=EXTENSION
+password=CHANGE_ME_EXTENSION
+realm=asterisk
+
+[EXTENSION]
+type=aor
+max_contacts=1
+
+; Copie estes 3 blocos para cada ramal WebRTC do navegador.
+; O nome do endpoint, auth e aor deve bater com o login SIP calculado no portal.
+; Exemplo com suffix configurado no frontend:
+; - extension no painel: 1042
+; - sip username final: 1042-webrtc
+[WEBRTC_USERNAME](webrtc-template)
+auth=WEBRTC_USERNAME-auth
+aors=WEBRTC_USERNAME
+callerid=Axion Browser WEBRTC_USERNAME <WEBRTC_USERNAME>
+
+[WEBRTC_USERNAME-auth]
+type=auth
+auth_type=userpass
+username=WEBRTC_USERNAME
+password=CHANGE_ME_WEBRTC_PASSWORD
+realm=asterisk
+
+[WEBRTC_USERNAME]
+type=aor
+max_contacts=5
+remove_existing=yes
+support_path=yes

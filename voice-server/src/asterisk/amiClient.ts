@@ -29,6 +29,7 @@ export class AmiClient extends EventEmitter {
   private socket: net.Socket | null = null
   private buffer = ""
   private connected = false
+  private loginRequested = false
   private reconnectTimer: NodeJS.Timeout | null = null
 
   start() {
@@ -40,6 +41,7 @@ export class AmiClient extends EventEmitter {
   }
 
   private connect() {
+    this.loginRequested = false
     this.socket = net.createConnection({
       host: env.asterisk.amiHost,
       port: env.asterisk.amiPort
@@ -53,6 +55,16 @@ export class AmiClient extends EventEmitter {
 
     this.socket.on("data", (chunk) => {
       this.buffer += chunk
+
+      if (!this.loginRequested && this.buffer.startsWith("Asterisk Call Manager/")) {
+        const bannerEndIndex = this.buffer.search(/\r?\n/)
+
+        if (bannerEndIndex >= 0) {
+          this.buffer = this.buffer.slice(bannerEndIndex).replace(/^\r?\n/, "")
+          this.login()
+        }
+      }
+
       this.flushBuffer()
     })
 
@@ -62,6 +74,7 @@ export class AmiClient extends EventEmitter {
 
     this.socket.on("close", () => {
       this.connected = false
+      this.loginRequested = false
       logger.warn("AMI socket closed, scheduling reconnect")
       this.scheduleReconnect()
     })
@@ -72,6 +85,15 @@ export class AmiClient extends EventEmitter {
     this.buffer = messages.pop() ?? ""
 
     for (const rawMessage of messages) {
+      const normalizedMessage = rawMessage.trim()
+
+      // The AMI greeting arrives as a plain banner instead of `key: value` pairs.
+      // We use it as the signal to send the login action right away.
+      if (normalizedMessage.startsWith("Asterisk Call Manager/")) {
+        this.login()
+        continue
+      }
+
       const parsed = parseAmiMessage(rawMessage)
 
       if (
@@ -80,6 +102,13 @@ export class AmiClient extends EventEmitter {
       ) {
         this.connected = true
         logger.info("AMI authenticated")
+        continue
+      }
+
+      if (parsed.Response === "Error") {
+        logger.error("AMI authentication failed", {
+          message: parsed.Message ?? "unknown error"
+        })
         continue
       }
 
@@ -95,7 +124,9 @@ export class AmiClient extends EventEmitter {
   }
 
   private login() {
-    if (!this.socket) return
+    if (!this.socket || this.loginRequested) return
+
+    this.loginRequested = true
 
     this.socket.write(
       encodeAction({

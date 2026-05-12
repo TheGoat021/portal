@@ -205,6 +205,40 @@ export function renderAgendamentoDocumentHtml(
         font-size: 12px;
         color: #64748b;
       }
+      .stamp-wrap {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 24px;
+      }
+      .stamp {
+        width: 270px;
+        padding: 14px 16px 12px;
+        border: 2px solid #475569;
+        border-radius: 8px;
+        background: #ffffff;
+        color: #334155;
+        text-align: center;
+        transform: rotate(-3deg);
+        box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+      }
+      .stamp-doc {
+        margin: 0 0 8px;
+        font-size: 15px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+      }
+      .stamp-company {
+        margin: 0 0 10px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+      }
+      .stamp-address {
+        margin: 0;
+        font-size: 10px;
+        line-height: 1.5;
+        font-weight: 700;
+      }
       @media print {
         body {
           background: #fff;
@@ -280,6 +314,18 @@ export function renderAgendamentoDocumentHtml(
         <div class="notes">
           <span class="label">Informacoes complementares</span>
           <p>${observation}</p>
+        </div>
+
+        <div class="stamp-wrap">
+          <div class="stamp">
+            <p class="stamp-doc">26.786.543/0001-70</p>
+            <p class="stamp-company">P&amp;P MARKETING E DIVULGACAO EIRELI EI</p>
+            <p class="stamp-address">
+              Rua Abilio Figueiredo, n° 92 Sala 9<br />
+              Anhangabau - Cep 13208-140<br />
+              Jundiai, SP
+            </p>
+          </div>
         </div>
 
         <div class="footer">

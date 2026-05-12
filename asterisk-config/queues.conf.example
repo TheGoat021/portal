@@ -16,4 +16,7 @@ setinterfacevar=yes
 setqueuevar=yes
 monitor-type=MixMonitor
 monitor-format=wav
-member => PJSIP/1001,1,Comercial 1
+; Adicione um member por ramal que realmente exista no Asterisk.
+; Exemplos:
+; member => PJSIP/1042,1,Atendente 1042
+; member => PJSIP/1043,1,Atendente 1043

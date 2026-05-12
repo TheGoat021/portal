@@ -42,9 +42,25 @@ npm run dev
 ```bash
 cd voice-server
 npm run build
-pm2 start dist/index.js --name axion-voice
+pm2 start ecosystem.config.cjs
 pm2 save
 ```
+
+## Estrutura recomendada de teste
+
+Para um servidor unico de teste com Asterisk + API:
+
+- publique o projeto em `/opt/axion/voice-server`
+- use `.env.production.example` como base do `.env`
+- use os arquivos em `infra/voice/` para bootstrap do host, Nginx e firewall
+
+Arquivos operacionais:
+
+- `voice-server/ecosystem.config.cjs`
+- `voice-server/.env.production.example`
+- `infra/voice/bootstrap/*.sh`
+- `infra/voice/nginx/axion-voice.conf.example`
+- `infra/voice/firewall/ufw-voice.example.sh`
 
 ## Fluxo do MVP
 
