@@ -10,7 +10,9 @@ export default function QueueCard({ queue }: { queue: VoiceQueueSummary }) {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-lg font-semibold text-slate-950">{queue.name}</h3>
-          <p className="mt-1 text-sm text-slate-500">Slug: {queue.slug}</p>
+          {queue.inbound_number ? (
+            <p className="mt-1 text-sm text-slate-500">Numero: {queue.inbound_number}</p>
+          ) : null}
         </div>
         <span
           className={`rounded-full px-3 py-1 text-xs font-semibold ${

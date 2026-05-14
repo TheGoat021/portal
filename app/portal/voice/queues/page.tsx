@@ -2,12 +2,22 @@
 
 import { BarChart3, Clock3, PhoneCall, PhoneMissed, TimerReset, UserRoundCheck } from "lucide-react"
 import KPIHeader from "@/components/voice/KPIHeader"
+import QueueAdminPanel from "@/components/voice/QueueAdminPanel"
 import QueueCard from "@/components/voice/QueueCard"
 import QueueCallerItem from "@/components/voice/QueueCallerItem"
-import { formatSeconds, useVoiceData, useVoiceDerivedData } from "@/lib/voice/api"
+import { formatSeconds, useVoiceData, useVoiceDerivedData, useVoiceQueueDirectory } from "@/lib/voice/api"
 
 export default function VoiceQueuesPage() {
   const { calls, agents, queues, loading, reload, statusText } = useVoiceData()
+  const {
+    queues: queueDirectory,
+    loading: loadingDirectory,
+    saving: savingQueue,
+    errorMessage: queueErrorMessage,
+    reload: reloadDirectory,
+    createQueue,
+    updateQueue
+  } = useVoiceQueueDirectory()
   const { metrics, queueSummaries, queueCallers } = useVoiceDerivedData(calls, agents, queues)
 
   return (
@@ -55,10 +65,34 @@ export default function VoiceQueuesPage() {
         ]}
       />
 
+      <QueueAdminPanel
+        queues={queueDirectory}
+        agents={agents}
+        loading={loadingDirectory}
+        saving={savingQueue}
+        errorMessage={queueErrorMessage}
+        onReload={async () => {
+          await reloadDirectory()
+          await reload()
+        }}
+        onCreate={async (input) => {
+          await createQueue(input)
+          await reload()
+        }}
+        onUpdate={async (queueId, input) => {
+          await updateQueue(queueId, input)
+          await reload()
+        }}
+      />
+
       <section className="grid gap-4 xl:grid-cols-2">
-        {queueSummaries.map((queue) => (
-          <QueueCard key={queue.id} queue={queue} />
-        ))}
+        {queueSummaries.length === 0 ? (
+          <div className="rounded-[24px] border border-dashed border-[#E5E7EB] bg-white p-10 text-center text-sm text-slate-500 xl:col-span-2">
+            Nenhuma fila real configurada ainda para monitoramento.
+          </div>
+        ) : (
+          queueSummaries.map((queue) => <QueueCard key={queue.id} queue={queue} />)
+        )}
       </section>
 
       <section className="rounded-[24px] border border-[#E5E7EB] bg-white p-5 shadow-[0_12px_40px_-24px_rgba(15,23,42,0.18)]">

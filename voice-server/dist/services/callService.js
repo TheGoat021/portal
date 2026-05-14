@@ -75,6 +75,9 @@ export async function createInboundCall(input) {
         external_call_id: input.externalCallId ?? null,
         unique_id: input.uniqueId ?? null,
         linked_id: input.linkedId ?? null,
+        called_number: input.calledNumber ?? null,
+        did_number: input.didNumber ?? null,
+        dialed_extension: input.dialedExtension ?? null,
         direction: "inbound",
         phone: input.phone ?? "",
         normalized_phone: crm.normalizedPhone,
@@ -94,7 +97,10 @@ export async function createInboundCall(input) {
         crmMatchType: crm.matchType,
         externalCallId: input.externalCallId ?? null,
         uniqueId: input.uniqueId ?? null,
-        linkedId: input.linkedId ?? null
+        linkedId: input.linkedId ?? null,
+        calledNumber: input.calledNumber ?? null,
+        didNumber: input.didNumber ?? null,
+        dialedExtension: input.dialedExtension ?? null
     });
     return data;
 }

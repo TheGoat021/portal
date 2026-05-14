@@ -111,8 +111,16 @@ Faça uma ligação real para o número da Vonex/Flux e confira:
 ```bash
 curl -X POST http://127.0.0.1:4001/webhooks/asterisk/event ^
   -H "Content-Type: application/json" ^
-  -d "{\"eventType\":\"call.inbound\",\"payload\":{\"channelId\":\"test-channel-1\",\"uniqueId\":\"1715000000.1\",\"callerNumber\":\"11999998888\",\"queueId\":\"comercial\"}}"
+  -d "{\"eventType\":\"call.inbound\",\"payload\":{\"channelId\":\"test-channel-1\",\"uniqueId\":\"1715000000.1\",\"callerNumber\":\"11999998888\",\"calledNumber\":\"08001234567\",\"didNumber\":\"08001234567\",\"dialedExtension\":\"08001234567\",\"queueId\":\"comercial\"}}"
 ```
+
+O backend aceita e persiste estes campos de roteamento inbound:
+
+- `calledNumber`
+- `didNumber`
+- `dialedExtension`
+
+Isso deixa o numero que recebeu a ligacao disponivel para decidir a fila no backend, sem depender de um `queueId` fixo no dialplan.
 
 Depois:
 

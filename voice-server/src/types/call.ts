@@ -15,6 +15,9 @@ export type VoiceCallRow = {
   external_call_id: string | null
   unique_id: string | null
   linked_id: string | null
+  called_number: string | null
+  did_number: string | null
+  dialed_extension: string | null
   direction: VoiceCallDirection
   phone: string
   normalized_phone: string

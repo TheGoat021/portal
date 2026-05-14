@@ -25,12 +25,12 @@ export async function createAgent(payload) {
         throw new Error("user_id is required. Voice agents must be existing system users.");
     }
     const { data: profile, error: profileError } = await supabaseAdmin
-        .from("portal_users")
+        .from("profiles")
         .select("id, email")
         .eq("id", payload.user_id)
         .maybeSingle();
     if (profileError) {
-        throw new Error(`Failed to load portal user: ${profileError.message}`);
+        throw new Error(`Failed to load user profile: ${profileError.message}`);
     }
     if (!profile?.id) {
         throw new Error("System user not found for voice agent creation.");

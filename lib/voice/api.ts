@@ -10,11 +10,6 @@ import {
   VoiceQueue,
   VoiceQueueSummary
 } from "@/lib/voice/types"
-import {
-  mockVoiceAgents,
-  mockVoiceCalls,
-  mockVoiceQueues
-} from "@/lib/voice/mock"
 
 const apiBase =
   process.env.NEXT_PUBLIC_AXION_VOICE_API_URL?.replace(/\/$/, "") || ""
@@ -91,16 +86,46 @@ function decorateCalls(calls: VoiceCall[]) {
 }
 
 export function useVoiceData() {
-  const [calls, setCalls] = useState<VoiceCall[]>(mockVoiceCalls)
-  const [agents, setAgents] = useState<VoiceAgent[]>(mockVoiceAgents)
-  const [queues, setQueues] = useState<VoiceQueue[]>(mockVoiceQueues)
-  const [loading, setLoading] = useState(Boolean(apiBase))
+  const [calls, setCalls] = useState<VoiceCall[]>([])
+  const [agents, setAgents] = useState<VoiceAgent[]>([])
+  const [queues, setQueues] = useState<VoiceQueue[]>([])
+  const [loading, setLoading] = useState(true)
   const [statusText, setStatusText] = useState(
     apiBase ? "Sincronizando telefonia..." : "Modo demonstrativo ativo."
   )
 
   const load = async () => {
-    if (!apiBase) return
+    if (!apiBase) {
+      setLoading(true)
+      try {
+        const [queueResponse, agentResponse] = await Promise.all([
+          fetch("/api/voice/queues", { cache: "no-store" }),
+          fetch("/api/voice/agents", { cache: "no-store" })
+        ])
+
+        if (queueResponse.ok) {
+          const queuePayload = (await queueResponse.json()) as {
+            queues?: VoiceQueue[]
+          }
+          setQueues(queuePayload.queues ?? [])
+        }
+
+        if (agentResponse.ok) {
+          const agentPayload = (await agentResponse.json()) as {
+            agents?: VoiceAgent[]
+          }
+          setAgents(agentPayload.agents ?? [])
+        }
+
+        setStatusText("Dados locais do Axion Voice carregados.")
+      } catch (_error) {
+        setStatusText("Modo demonstrativo ativo.")
+      } finally {
+        setLoading(false)
+      }
+
+      return
+    }
 
     setLoading(true)
     try {
@@ -169,6 +194,16 @@ export function useCurrentVoiceAgent(agents: VoiceAgent[], userId?: string | nul
     if (!userId) return null
     return agents.find((agent) => agent.user_id === userId) ?? null
   }, [agents, userId])
+}
+
+function sanitizeQueueSlug(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
 }
 
 export function useVoiceProvisionDirectory() {
@@ -249,6 +284,154 @@ export function useVoiceProvisionDirectory() {
   }
 }
 
+export function useVoiceQueueDirectory() {
+  const [queues, setQueues] = useState<VoiceQueue[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  const load = async () => {
+    setLoading(true)
+
+    try {
+      const response = await fetch("/api/voice/queues", { cache: "no-store" })
+      if (!response.ok) {
+        throw new Error("Falha ao consultar as filas do Axion Voice.")
+      }
+
+      const payload = (await response.json()) as {
+        queues?: VoiceQueue[]
+      }
+
+      setQueues(payload.queues ?? [])
+      setErrorMessage(null)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Nao foi possivel carregar as filas do Axion Voice."
+      setErrorMessage(message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const createQueue = async (input: {
+    name: string
+    slug?: string
+    description?: string | null
+    inboundNumber?: string | null
+    strategy: string
+    maxWaitSeconds: number
+    active: boolean
+    members?: Array<{
+      agentId: string
+      priority: number
+      active: boolean
+    }>
+  }) => {
+    setSaving(true)
+
+    try {
+      const response = await fetch("/api/voice/queues", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          name: input.name,
+          slug: sanitizeQueueSlug(input.slug || input.name),
+          description: input.description ?? null,
+          inbound_number: input.inboundNumber ? input.inboundNumber.replace(/\D/g, "") : null,
+          strategy: input.strategy,
+          max_wait_seconds: input.maxWaitSeconds,
+          active: input.active,
+          members: (input.members ?? []).map((member) => ({
+            agent_id: member.agentId,
+            priority: member.priority,
+            active: member.active
+          }))
+        })
+      })
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null
+        throw new Error(payload?.error || "Falha ao criar fila.")
+      }
+
+      await load()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const updateQueue = async (
+    queueId: string,
+    input: {
+      name: string
+      slug?: string
+      description?: string | null
+      inboundNumber?: string | null
+      strategy: string
+      maxWaitSeconds: number
+      active: boolean
+      members?: Array<{
+        agentId: string
+        priority: number
+        active: boolean
+      }>
+    }
+  ) => {
+    setSaving(true)
+
+    try {
+      const response = await fetch(`/api/voice/queues/${queueId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          name: input.name,
+          slug: sanitizeQueueSlug(input.slug || input.name),
+          description: input.description ?? null,
+          inbound_number: input.inboundNumber ? input.inboundNumber.replace(/\D/g, "") : null,
+          strategy: input.strategy,
+          max_wait_seconds: input.maxWaitSeconds,
+          active: input.active,
+          members: (input.members ?? []).map((member) => ({
+            agent_id: member.agentId,
+            priority: member.priority,
+            active: member.active
+          }))
+        })
+      })
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null
+        throw new Error(payload?.error || "Falha ao atualizar fila.")
+      }
+
+      await load()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  useEffect(() => {
+    void load()
+  }, [])
+
+  return {
+    queues,
+    loading,
+    saving,
+    errorMessage,
+    reload: load,
+    createQueue,
+    updateQueue
+  }
+}
+
 export function useVoiceDerivedData(calls: VoiceCall[], agents: VoiceAgent[], queues: VoiceQueue[]) {
   return useMemo(() => {
     const queueMap = new Map(queues.map((queue) => [queue.id, queue]))
@@ -305,6 +488,7 @@ export function useVoiceDerivedData(calls: VoiceCall[], agents: VoiceAgent[], qu
         id: queue.id,
         name: queue.name,
         slug: queue.slug,
+        inbound_number: queue.inbound_number ?? null,
         active: queue.active,
         callsInQueue: queueCalls.filter((call) => call.status !== "answered").length,
         avgWaitSeconds: average(queueCalls.map((call) => call.wait_seconds ?? 0).filter((value) => value > 0)),

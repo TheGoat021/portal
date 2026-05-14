@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ArrowUpDown,
   CalendarDays,
   CheckCircle2,
   Clock3,
@@ -92,7 +93,27 @@ type PaginationState = {
   hasMore: boolean;
 };
 
+type SortDirection = "asc" | "desc";
+
+type SortKey =
+  | "patientName"
+  | "plan"
+  | "phone"
+  | "type"
+  | "date"
+  | "time"
+  | "clinic"
+  | "specialty"
+  | "city"
+  | "attendant"
+  | "paymentAmount"
+  | "paymentStatus"
+  | "cancellationReason"
+  | "status"
+  | "observation";
+
 const PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [10, 50, 100, 500] as const;
 
 const tabs: { key: TabKey; label: string }[] = [
   { key: "dashboard", label: "Dashboard" },
@@ -399,6 +420,57 @@ function compareDateTimeAsc(dateA?: string, timeA?: string, dateB?: string, time
   const left = `${dateA || "9999-12-31"}T${timeA || "23:59:59"}`;
   const right = `${dateB || "9999-12-31"}T${timeB || "23:59:59"}`;
   return left.localeCompare(right);
+}
+
+function compareText(left?: string, right?: string) {
+  return normalize(left || "").localeCompare(normalize(right || ""), "pt-BR");
+}
+
+function comparePaymentAmount(left?: string, right?: string) {
+  const leftNumber = Number.parseFloat(String(left || "0").replace(/[^\d,.-]/g, "").replace(",", "."));
+  const rightNumber = Number.parseFloat(String(right || "0").replace(/[^\d,.-]/g, "").replace(",", "."));
+  return leftNumber - rightNumber;
+}
+
+function sortOperationalRecords(records: OperationalRecord[], sortKey: SortKey, direction: SortDirection) {
+  const sorted = [...records].sort((left, right) => {
+    switch (sortKey) {
+      case "patientName":
+        return compareText(left.patientName, right.patientName);
+      case "plan":
+        return compareText(left.plan, right.plan);
+      case "phone":
+        return compareText(left.phone, right.phone);
+      case "type":
+        return compareText(typeLabel(left.type), typeLabel(right.type));
+      case "date":
+        return compareDateTimeAsc(left.paymentDueDate || left.date, undefined, right.paymentDueDate || right.date, undefined);
+      case "time":
+        return compareText(left.paymentDueTime || left.time, right.paymentDueTime || right.time);
+      case "clinic":
+        return compareText(left.clinic, right.clinic);
+      case "specialty":
+        return compareText(left.specialty, right.specialty);
+      case "city":
+        return compareText(left.city, right.city);
+      case "attendant":
+        return compareText(left.attendant, right.attendant);
+      case "paymentAmount":
+        return comparePaymentAmount(left.paymentAmount, right.paymentAmount);
+      case "paymentStatus":
+        return compareText(left.paymentStatus, right.paymentStatus);
+      case "cancellationReason":
+        return compareText(left.cancellationReason, right.cancellationReason);
+      case "status":
+        return compareText(left.status, right.status);
+      case "observation":
+        return compareText(left.observation, right.observation);
+      default:
+        return 0;
+    }
+  });
+
+  return direction === "asc" ? sorted : sorted.reverse();
 }
 
 function getTodayInSaoPaulo() {
@@ -723,6 +795,8 @@ function RecordsTable({
   pagination,
   currentPage,
   onPageChange,
+  pageSize,
+  onPageSizeChange,
 }: {
   title: string;
   records: OperationalRecord[];
@@ -733,44 +807,105 @@ function RecordsTable({
   pagination?: PaginationState;
   currentPage?: number;
   onPageChange?: (page: number) => void;
+  pageSize?: number;
+  onPageSizeChange?: (pageSize: number) => void;
 }) {
   const totalPages = pagination ? Math.max(1, Math.ceil(pagination.total / pagination.limit)) : 1;
+  const [sortState, setSortState] = useState<{ key: SortKey; direction: SortDirection } | null>(null);
+
+  const sortedRecords = useMemo(() => {
+    if (!sortState) return records;
+    return sortOperationalRecords(records, sortState.key, sortState.direction);
+  }, [records, sortState]);
+
+  const toggleSort = (key: SortKey) => {
+    setSortState((current) => {
+      if (!current || current.key !== key) {
+        return { key, direction: "asc" };
+      }
+
+      return {
+        key,
+        direction: current.direction === "asc" ? "desc" : "asc",
+      };
+    });
+  };
+
+  const renderSortableHeader = (label: string, sortKey: SortKey, className = "px-3 py-3") => {
+    const active = sortState?.key === sortKey;
+    const direction = active ? sortState?.direction : null;
+
+    return (
+      <th className={className}>
+        <button
+          type="button"
+          onClick={() => toggleSort(sortKey)}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-md text-left transition hover:text-slate-700",
+            active && "text-slate-800"
+          )}
+        >
+          <span>{label}</span>
+          <ArrowUpDown size={14} className={cn(active ? "text-blue-600" : "text-slate-400")} />
+          {direction && <span className="text-[10px] font-semibold text-blue-600">{direction === "asc" ? "ASC" : "DESC"}</span>}
+        </button>
+      </th>
+    );
+  };
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-          {pagination ? `${pagination.total} registros` : `${records.length} registros`}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+            {pagination ? `${pagination.total} registros` : `${records.length} registros`}
+          </span>
+          {pagination && onPageSizeChange && (
+            <label className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+              <span>Carregar</span>
+              <select
+                value={pageSize || pagination.limit}
+                onChange={(event) => onPageSizeChange(Number(event.target.value))}
+                className="bg-transparent text-xs font-semibold text-slate-700 outline-none"
+              >
+                {PAGE_SIZE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
       </div>
       <div className="w-full overflow-x-auto">
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
               <th className="px-3 py-3">Acao</th>
-              <th className="px-3 py-3">Paciente</th>
-              <th className="px-3 py-3">Plano</th>
-              {mode !== "payment" && <th className="px-3 py-3">Telefone</th>}
-              {mode === "payment" && <th className="px-3 py-3">Tipo</th>}
+              {renderSortableHeader("Paciente", "patientName")}
+              {renderSortableHeader("Plano", "plan")}
+              {mode !== "payment" && renderSortableHeader("Telefone", "phone")}
+              {mode === "payment" && renderSortableHeader("Tipo", "type")}
               {mode !== "call" && mode !== "cancelamento" && (
-                <th className="px-3 py-3">{mode === "payment" ? "Data pagamento" : "Data"}</th>
+                renderSortableHeader(mode === "payment" ? "Data pagamento" : "Data", "date")
               )}
-              {mode === "standard" && <th className="px-3 py-3">Horario</th>}
-              {mode === "payment" && <th className="px-3 py-3">Horario</th>}
-              {(mode === "standard" || mode === "payment") && <th className="px-3 py-3">Clinica</th>}
-              <th className="px-3 py-3">Especialidade</th>
-              {mode === "standard" && <th className="px-3 py-3">Unidade/Cidade</th>}
-              <th className="px-3 py-3">Atendente</th>
-              {mode === "payment" && <th className="px-3 py-3">Valor</th>}
-              {mode === "payment" && <th className="px-3 py-3">Pagamento</th>}
-              {mode === "cancelamento" && <th className="px-3 py-3">Motivo</th>}
-              {mode !== "payment" && mode !== "cancelamento" && <th className="px-3 py-3">Status</th>}
-              {mode !== "payment" && mode !== "cancelamento" && <th className="px-3 py-3">Observacao</th>}
+              {mode === "standard" && renderSortableHeader("Horario", "time")}
+              {mode === "payment" && renderSortableHeader("Horario", "time")}
+              {(mode === "standard" || mode === "payment") && renderSortableHeader("Clinica", "clinic")}
+              {renderSortableHeader("Especialidade", "specialty")}
+              {mode === "standard" && renderSortableHeader("Unidade/Cidade", "city")}
+              {renderSortableHeader("Atendente", "attendant")}
+              {mode === "payment" && renderSortableHeader("Valor", "paymentAmount")}
+              {mode === "payment" && renderSortableHeader("Pagamento", "paymentStatus")}
+              {mode === "cancelamento" && renderSortableHeader("Motivo", "cancellationReason")}
+              {mode !== "payment" && mode !== "cancelamento" && renderSortableHeader("Status", "status")}
+              {mode !== "payment" && mode !== "cancelamento" && renderSortableHeader("Observacao", "observation")}
             </tr>
           </thead>
           <tbody>
-            {records.map((record) => (
+            {sortedRecords.map((record) => (
               <tr key={record.id} className="border-b border-slate-100 text-sm text-slate-700">
                 <td className="whitespace-nowrap px-3 py-3">
                   <button type="button" onClick={() => onOpen(record)} className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">
@@ -831,7 +966,7 @@ function RecordsTable({
                 </td>
               </tr>
             )}
-            {!loading && records.length === 0 && (
+            {!loading && sortedRecords.length === 0 && (
               <tr>
                 <td colSpan={14} className="px-3 py-8 text-center text-sm text-slate-500">
                   Nenhum registro encontrado para os filtros atuais.
@@ -858,7 +993,7 @@ function RecordsTable({
             <button
               type="button"
               onClick={() => onPageChange(Math.min(totalPages, (currentPage || 1) + 1))}
-              disabled={!pagination.hasMore || loading}
+              disabled={(currentPage || 1) >= totalPages || !pagination.hasMore || loading}
               className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Proxima
@@ -1469,9 +1604,10 @@ export default function GestaoAgendamentosTestePage() {
   const [loading, setLoading] = useState(true);
   const [listLoading, setListLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [pagination, setPagination] = useState<PaginationState>({
     total: 0,
-    limit: PAGE_SIZE,
+    limit: pageSize,
     offset: 0,
     hasMore: false,
   });
@@ -1493,8 +1629,8 @@ export default function GestaoAgendamentosTestePage() {
     if (!isServerPaginatedTab) return;
 
     const params: Record<string, string> = {
-      limit: String(PAGE_SIZE),
-      offset: String((page - 1) * PAGE_SIZE),
+      limit: String(pageSize),
+      offset: String((page - 1) * pageSize),
     };
 
     if (filters.search) params.search = filters.search;
@@ -1545,14 +1681,14 @@ export default function GestaoAgendamentosTestePage() {
       setListRecords([]);
       setPagination({
         total: 0,
-        limit: PAGE_SIZE,
+        limit: pageSize,
         offset: 0,
         hasMore: false,
       });
     } finally {
       setListLoading(false);
     }
-  }, [activeTab, currentPage, filters, isServerPaginatedTab]);
+  }, [activeTab, currentPage, filters, isServerPaginatedTab, pageSize]);
 
   useEffect(() => {
     loadUserOptions().then(setUsers).catch(console.error);
@@ -1691,37 +1827,37 @@ export default function GestaoAgendamentosTestePage() {
         {activeTab === "agendamentos" && (
           <>
             <FiltersPanel records={records} filters={filters} onChange={(next) => { setFilters(next); setCurrentPage(1); }} statuses={statusOptionsByType.agendamento} showConsultationDate />
-            <RecordsTable title="Lista de agendamentos" records={recordsForTab} mode="standard" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} />
+            <RecordsTable title="Lista de agendamentos" records={recordsForTab} mode="standard" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} pageSize={pageSize} onPageSizeChange={(nextSize) => { setPageSize(nextSize); setCurrentPage(1); }} />
           </>
         )}
         {activeTab === "ficticios" && (
           <>
             <FiltersPanel records={records} filters={filters} onChange={(next) => { setFilters(next); setCurrentPage(1); }} statuses={statusOptionsByType.ficticio} showConsultationDate />
-            <RecordsTable title="Lista de ficticios" records={recordsForTab} mode="standard" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} />
+            <RecordsTable title="Lista de ficticios" records={recordsForTab} mode="standard" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} pageSize={pageSize} onPageSizeChange={(nextSize) => { setPageSize(nextSize); setCurrentPage(1); }} />
           </>
         )}
         {activeTab === "pagamentos" && (
           <>
             <FiltersPanel records={records} filters={filters} onChange={(next) => { setFilters(next); setCurrentPage(1); }} statuses={["a_pagar", "pago"]} />
-            <RecordsTable title="Consultas a pagar" records={recordsForTab} mode="payment" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} />
+            <RecordsTable title="Consultas a pagar" records={recordsForTab} mode="payment" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} pageSize={pageSize} onPageSizeChange={(nextSize) => { setPageSize(nextSize); setCurrentPage(1); }} />
           </>
         )}
         {activeTab === "cancelamentos" && (
           <>
             <FiltersPanel records={records} filters={filters} onChange={(next) => { setFilters(next); setCurrentPage(1); }} statuses={statusOptionsByType.cancelamento} showClinic={false} />
-            <RecordsTable title="Motivos registrados" records={recordsForTab} mode="cancelamento" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} />
+            <RecordsTable title="Motivos registrados" records={recordsForTab} mode="cancelamento" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} pageSize={pageSize} onPageSizeChange={(nextSize) => { setPageSize(nextSize); setCurrentPage(1); }} />
           </>
         )}
         {activeTab === "comercial-ligacoes" && (
           <>
             <FiltersPanel records={records} filters={filters} onChange={(next) => { setFilters(next); setCurrentPage(1); }} statuses={statusOptionsByType.comercial_ligacoes} showClinic={false} />
-            <RecordsTable title="Clientes atendidos pelo comercial" records={recordsForTab} mode="call" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} />
+            <RecordsTable title="Clientes atendidos pelo comercial" records={recordsForTab} mode="call" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} pageSize={pageSize} onPageSizeChange={(nextSize) => { setPageSize(nextSize); setCurrentPage(1); }} />
           </>
         )}
         {activeTab === "exames-ligacoes" && (
           <>
             <FiltersPanel records={records} filters={filters} onChange={(next) => { setFilters(next); setCurrentPage(1); }} statuses={statusOptionsByType.exames_ligacoes} showClinic={false} />
-            <RecordsTable title="Clientes atendidos em exames" records={recordsForTab} mode="call" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} />
+            <RecordsTable title="Clientes atendidos em exames" records={recordsForTab} mode="call" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} pageSize={pageSize} onPageSizeChange={(nextSize) => { setPageSize(nextSize); setCurrentPage(1); }} />
           </>
         )}
         {activeTab === "novo" && <NewRecordView onSave={createRecord} currentUserEmail={String(user?.email || "")} />}

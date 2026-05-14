@@ -16,6 +16,16 @@ import { logger } from "../utils/logger.js"
 
 type AsteriskEventPayload = Record<string, unknown>
 
+function firstString(...values: unknown[]) {
+  for (const value of values) {
+    if (value === null || value === undefined) continue
+    const normalized = String(value).trim()
+    if (normalized) return normalized
+  }
+
+  return ""
+}
+
 async function resolveCallByEvent(payload: AsteriskEventPayload) {
   const byUniqueId = await findCallByUniqueId(
     String(payload.uniqueId ?? payload.unique_id ?? payload.Uniqueid ?? "")
@@ -38,15 +48,36 @@ export async function handleAsteriskEvent(
     case "StasisStart":
     case "call.inbound":
       return createInboundCall({
-        externalCallId: String(payload.channelId ?? payload.channel_id ?? payload.Channel ?? ""),
-        uniqueId: String(payload.uniqueId ?? payload.unique_id ?? payload.Uniqueid ?? ""),
-        linkedId: String(payload.linkedId ?? payload.linked_id ?? payload.Linkedid ?? ""),
-        phone: String(
-          payload.callerNumber ??
-            payload.caller_number ??
-            payload.CallerIDNum ??
-            caller?.number ??
-            ""
+        externalCallId: firstString(
+          payload.channelId,
+          payload.channel_id,
+          payload.Channel
+        ),
+        uniqueId: firstString(payload.uniqueId, payload.unique_id, payload.Uniqueid),
+        linkedId: firstString(payload.linkedId, payload.linked_id, payload.Linkedid),
+        phone: firstString(
+          payload.callerNumber,
+          payload.caller_number,
+          payload.CallerIDNum,
+          caller?.number
+        ),
+        calledNumber: firstString(
+          payload.calledNumber,
+          payload.called_number,
+          payload.didNumber,
+          payload.did_number,
+          payload.Exten
+        ),
+        didNumber: firstString(
+          payload.didNumber,
+          payload.did_number,
+          payload.CallerIDDNID,
+          payload.DNID
+        ),
+        dialedExtension: firstString(
+          payload.dialedExtension,
+          payload.dialed_extension,
+          payload.Exten
         ),
         queueId: payload.queueId ? String(payload.queueId) : null,
         startedAt: payload.startedAt ? String(payload.startedAt) : null

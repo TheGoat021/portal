@@ -26,20 +26,36 @@ export type VoiceAgent = {
   updated_at?: string | null
 }
 
+export type VoiceQueueMember = {
+  id: string
+  queue_id?: string
+  agent_id: string
+  priority: number
+  active: boolean
+  agent?: VoiceAgent | null
+}
+
 export type VoiceQueue = {
   id: string
   name: string
   slug: string
   description?: string | null
+  inbound_number?: string | null
   strategy: string
   max_wait_seconds?: number
   active: boolean
+  created_at?: string | null
+  updated_at?: string | null
+  members?: VoiceQueueMember[]
 }
 
 export type VoiceCall = {
   id: string
   phone: string
   normalized_phone?: string
+  called_number?: string | null
+  did_number?: string | null
+  dialed_extension?: string | null
   status: VoiceCallStatus
   started_at: string | null
   answered_at: string | null
@@ -66,6 +82,7 @@ export type VoiceQueueSummary = {
   id: string
   name: string
   slug: string
+  inbound_number?: string | null
   active: boolean
   callsInQueue: number
   avgWaitSeconds: number
