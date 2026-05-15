@@ -274,7 +274,7 @@ function mapUiRecordToApi(record: OperationalRecord, actorUserEmail?: string) {
 }
 
 async function loadOperationalRecords() {
-  const response = await fetch("/api/agendamento/gestao?limit=200", { cache: "no-store" });
+  const response = await fetch("/api/agendamento/gestao?limit=1000", { cache: "no-store" });
   if (!response.ok) throw new Error("Erro ao carregar registros operacionais");
   const payload = await response.json();
   const rows = Array.isArray(payload?.data) ? payload.data : [];
@@ -539,6 +539,14 @@ function typeLabel(type: RecordType) {
     exames_ligacoes: "Exames Ligacoes",
   };
   return labels[type];
+}
+
+function normalizeUserRole(role?: string | null) {
+  return String(role || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase();
 }
 
 function uniqueValues(records: OperationalRecord[], selector: (record: OperationalRecord) => string | undefined) {
@@ -1019,7 +1027,9 @@ function DashboardView({
   const agendamentosOntem = records.filter((record) => record.type === "agendamento" && record.date === yesterday);
   const ficticiosHoje = records.filter((record) => record.type === "ficticio" && record.date === today);
   const ficticiosOntem = records.filter((record) => record.type === "ficticio" && record.date === yesterday);
-  const payments = records.filter((record) => record.needsPayment && record.paymentStatus === "a_pagar");
+  const payments = records.filter(
+    (record) => Boolean(record.paymentDueDate) && String(record.paymentDueDate) >= today
+  );
   const cancelamentos = records.filter((record) => record.type === "cancelamento");
   const cancelamentosHoje = cancelamentos.filter((record) => record.date === today);
   const cancelamentosOntem = cancelamentos.filter((record) => record.date === yesterday);
@@ -1199,13 +1209,56 @@ function DashboardView({
 function NewRecordView({
   onSave,
   currentUserEmail,
+  currentUserRole,
 }: {
   onSave: (record: OperationalRecord) => Promise<void>;
   currentUserEmail: string;
+  currentUserRole?: string | null;
 }) {
   const [saving, setSaving] = useState(false);
   const lockedRecordDate = useMemo(() => getTodayInSaoPaulo(), []);
   const lockedRecordTime = useMemo(() => getCurrentTimeInSaoPaulo(), []);
+  const normalizedRole = normalizeUserRole(currentUserRole);
+  const isComercial = normalizedRole === "COMERCIAL";
+  const isExames = normalizedRole === "EXAMES";
+  const isAgendamento = normalizedRole === "AGENDAMENTO";
+  const lockNeedsPayment = isComercial || isExames;
+  const allowedTypes = useMemo(() => {
+    if (isComercial) return ["ficticio", "comercial_ligacoes"] as RecordType[];
+    if (isExames) return ["exames_ligacoes"] as RecordType[];
+    if (isAgendamento) return ["agendamento", "ficticio", "cancelamento"] as RecordType[];
+
+    return [
+      "agendamento",
+      "ficticio",
+      "cancelamento",
+      "comercial_ligacoes",
+      "exames_ligacoes",
+    ] as RecordType[];
+  }, [isAgendamento, isComercial, isExames]);
+  const [selectedType, setSelectedType] = useState<string>("");
+  const [selectedNeedsPayment, setSelectedNeedsPayment] = useState<string>(lockNeedsPayment ? "Nao" : "");
+
+  useEffect(() => {
+    setSelectedType((current) => {
+      if (allowedTypes.includes(current as RecordType)) return current;
+      return allowedTypes.length === 1 ? allowedTypes[0] : "";
+    });
+  }, [allowedTypes]);
+
+  useEffect(() => {
+    if (lockNeedsPayment) {
+      setSelectedNeedsPayment("Nao");
+      return;
+    }
+
+    setSelectedNeedsPayment((current) => (current === "Nao" || current === "Sim" ? current : ""));
+  }, [lockNeedsPayment]);
+
+  function resetRoleDrivenFields() {
+    setSelectedType(allowedTypes.length === 1 ? allowedTypes[0] : "");
+    setSelectedNeedsPayment(lockNeedsPayment ? "Nao" : "");
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1251,6 +1304,7 @@ function NewRecordView({
     try {
       await onSave(record);
       formElement.reset();
+      resetRoleDrivenFields();
     } finally {
       setSaving(false);
     }
@@ -1258,7 +1312,13 @@ function NewRecordView({
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-      <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <form
+        onSubmit={handleSubmit}
+        onReset={() => {
+          resetRoleDrivenFields();
+        }}
+        className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+      >
         <h1 className="text-2xl font-semibold text-slate-900">Novo registro</h1>
         <p className="mt-1 text-sm text-slate-500">Formulario unico com os novos tipos operacionais do sistema.</p>
 
@@ -1299,22 +1359,48 @@ function NewRecordView({
 
         <h3 className="mb-3 mt-6 text-sm font-semibold text-slate-500">Tipo principal do registro</h3>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <select name="type" required className="rounded-xl border border-slate-200 px-3 py-3 text-sm" defaultValue="">
-            <option value="" disabled>
-              Selecione o tipo de registro
-            </option>
-            <option value="agendamento">Agendamento</option>
-            <option value="ficticio">Ficticio</option>
-            <option value="cancelamento">Cancelamento</option>
-            <option value="comercial_ligacoes">Comercial Ligacoes</option>
-            <option value="exames_ligacoes">Exames Ligacoes</option>
+          {allowedTypes.length === 1 && <input name="type" type="hidden" value={selectedType} readOnly />}
+          <select
+            name={allowedTypes.length === 1 ? undefined : "type"}
+            required
+            className={cn(
+              "rounded-xl border border-slate-200 px-3 py-3 text-sm",
+              allowedTypes.length === 1 && "cursor-not-allowed bg-slate-50 text-slate-500"
+            )}
+            value={selectedType}
+            onChange={(event) => setSelectedType(event.target.value)}
+            disabled={allowedTypes.length === 1}
+          >
+            {allowedTypes.length > 1 && (
+              <option value="" disabled>
+                Selecione o tipo de registro
+              </option>
+            )}
+            {allowedTypes.map((type) => (
+              <option key={type} value={type}>
+                {typeLabel(type)}
+              </option>
+            ))}
           </select>
-          <select name="needsPayment" required className="rounded-xl border border-slate-200 px-3 py-3 text-sm" defaultValue="">
-            <option value="" disabled>
-              Pagar a consulta?
-            </option>
-            <option>Não</option>
-            <option>Sim</option>
+          {lockNeedsPayment && <input name="needsPayment" type="hidden" value="Nao" readOnly />}
+          <select
+            name={lockNeedsPayment ? undefined : "needsPayment"}
+            required={!lockNeedsPayment}
+            className={cn(
+              "rounded-xl border border-slate-200 px-3 py-3 text-sm",
+              lockNeedsPayment && "cursor-not-allowed bg-slate-50 text-slate-500"
+            )}
+            value={selectedNeedsPayment}
+            onChange={(event) => setSelectedNeedsPayment(event.target.value)}
+            disabled={lockNeedsPayment}
+          >
+            {!lockNeedsPayment && (
+              <option value="" disabled>
+                Pagar a consulta?
+              </option>
+            )}
+            <option>Nao</option>
+            {!lockNeedsPayment && <option>Sim</option>}
           </select>
           <input name="date" type="hidden" value={lockedRecordDate} readOnly />
           <input
@@ -1594,7 +1680,7 @@ function PatientDrawer({
 export default function GestaoAgendamentosTestePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const activeTab = resolveTab(searchParams.get("tab"));
   const [records, setRecords] = useState<OperationalRecord[]>([]);
   const [listRecords, setListRecords] = useState<OperationalRecord[]>([]);
@@ -1860,7 +1946,7 @@ export default function GestaoAgendamentosTestePage() {
             <RecordsTable title="Clientes atendidos em exames" records={recordsForTab} mode="call" onOpen={setSelectedRecord} onPatch={updateRecord} loading={listLoading} pagination={pagination} currentPage={currentPage} onPageChange={setCurrentPage} pageSize={pageSize} onPageSizeChange={(nextSize) => { setPageSize(nextSize); setCurrentPage(1); }} />
           </>
         )}
-        {activeTab === "novo" && <NewRecordView onSave={createRecord} currentUserEmail={String(user?.email || "")} />}
+        {activeTab === "novo" && <NewRecordView onSave={createRecord} currentUserEmail={String(user?.email || "")} currentUserRole={role} />}
       </div>
 
       <PatientDrawer record={selectedRecord} onClose={() => setSelectedRecord(null)} onSave={updateRecord} onDelete={removeRecord} users={users} />
