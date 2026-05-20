@@ -10,6 +10,7 @@ import { webhooksRouter } from "./routes/webhooks.js"
 import { ariClient } from "./asterisk/ariClient.js"
 import { amiClient } from "./asterisk/amiClient.js"
 import { handleQueueAmiEvent } from "./asterisk/queueController.js"
+import { handleAriEvent } from "./asterisk/routingController.js"
 
 const app = express()
 
@@ -63,6 +64,17 @@ amiClient.on("event", async (event) => {
   }
 })
 
+ariClient.on("event", async (event) => {
+  try {
+    await handleAriEvent(event)
+  } catch (error) {
+    logger.error("Failed to process ARI event", {
+      error: error instanceof Error ? error.message : String(error),
+      event
+    })
+  }
+})
+
 app.listen(env.port, async () => {
   logger.info("Axion Voice server running", {
     port: env.port,
@@ -70,5 +82,6 @@ app.listen(env.port, async () => {
   })
 
   await ariClient.healthcheck()
+  ariClient.startEventStream()
   amiClient.start()
 })

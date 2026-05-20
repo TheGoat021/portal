@@ -35,7 +35,9 @@ export const env = {
     amiPassword: required(
       "ASTERISK_AMI_PASSWORD",
       process.env.ASTERISK_AMI_PASSWORD
-    )
+    ),
+    agentEndpointSuffix:
+      process.env.ASTERISK_AGENT_ENDPOINT_SUFFIX || "-webrtc"
   },
   recordingsDir: required("RECORDINGS_DIR", process.env.RECORDINGS_DIR),
   recordingsPublicBaseUrl: required(

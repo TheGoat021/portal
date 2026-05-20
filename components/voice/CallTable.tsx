@@ -2,7 +2,12 @@
 
 import { useMemo, useState } from "react"
 import { CalendarRange, Filter, Search } from "lucide-react"
-import { formatPhone, formatSeconds } from "@/lib/voice/api"
+import {
+  formatPhone,
+  formatSeconds,
+  formatVoiceCallDirection,
+  formatVoiceCallStatus
+} from "@/lib/voice/api"
 import { VoiceCallTableRow } from "@/lib/voice/types"
 
 export default function CallTable({
@@ -16,24 +21,42 @@ export default function CallTable({
 }) {
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState("all")
+  const [direction, setDirection] = useState("all")
   const [agent, setAgent] = useState("all")
   const [queue, setQueue] = useState("all")
   const [period, setPeriod] = useState("today")
 
   const filteredRows = useMemo(() => {
     const query = search.trim().toLowerCase()
+    const now = new Date()
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const periodThreshold =
+      period === "today"
+        ? startOfToday.getTime()
+        : period === "7d"
+          ? now.getTime() - 7 * 24 * 60 * 60 * 1000
+          : period === "30d"
+            ? now.getTime() - 30 * 24 * 60 * 60 * 1000
+            : null
+
     return rows.filter((row) => {
+      const startedAtTime = row.startedAt ? new Date(row.startedAt).getTime() : null
       const bySearch =
         !query ||
         row.clientName.toLowerCase().includes(query) ||
-        row.phone.toLowerCase().includes(query)
+        row.phone.toLowerCase().includes(query) ||
+        row.agentName.toLowerCase().includes(query) ||
+        row.queueName.toLowerCase().includes(query)
       const byStatus = status === "all" || row.status === status
+      const byDirection = direction === "all" || row.direction === direction
       const byAgent = agent === "all" || row.agentName === agent
       const byQueue = queue === "all" || row.queueName === queue
-      const byPeriod = period === "all" || Boolean(row.createdAtLabel)
-      return bySearch && byStatus && byAgent && byQueue && byPeriod
+      const byPeriod =
+        periodThreshold === null ||
+        (startedAtTime !== null && Number.isFinite(startedAtTime) && startedAtTime >= periodThreshold)
+      return bySearch && byStatus && byDirection && byAgent && byQueue && byPeriod
     })
-  }, [agent, period, queue, rows, search, status])
+  }, [agent, direction, period, queue, rows, search, status])
 
   return (
     <div className="rounded-[24px] border border-[#E5E7EB] bg-white p-5 shadow-[0_12px_40px_-24px_rgba(15,23,42,0.18)]">
@@ -45,7 +68,7 @@ export default function CallTable({
           </p>
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-[1.4fr_repeat(4,minmax(0,1fr))]">
+        <div className="grid gap-3 xl:grid-cols-[1.4fr_repeat(5,minmax(0,1fr))]">
           <label className="flex items-center gap-2 rounded-xl border border-[#E5E7EB] bg-slate-50 px-3">
             <Search className="h-4 w-4 text-slate-400" />
             <input
@@ -94,6 +117,16 @@ export default function CallTable({
           </select>
 
           <select
+            value={direction}
+            onChange={(event) => setDirection(event.target.value)}
+            className="h-11 rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-slate-700 outline-none"
+          >
+            <option value="all">Todas as direcoes</option>
+            <option value="inbound">Entrante</option>
+            <option value="outbound">Saida</option>
+          </select>
+
+          <select
             value={status}
             onChange={(event) => setStatus(event.target.value)}
             className="h-11 rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-slate-700 outline-none"
@@ -101,7 +134,7 @@ export default function CallTable({
             <option value="all">Todos os status</option>
             {["answered", "ended", "missed", "abandoned", "failed", "transferred"].map((item) => (
               <option key={item} value={item}>
-                {item}
+                {formatVoiceCallStatus(item)}
               </option>
             ))}
           </select>
@@ -118,7 +151,7 @@ export default function CallTable({
         <table className="w-full min-w-[880px] text-left text-sm">
           <thead className="bg-slate-50 text-slate-500">
             <tr>
-              {["Cliente", "Telefone", "Agente", "Status", "Duracao", "Data", "Acoes"].map((head) => (
+              {["Cliente", "Telefone", "Direcao", "Agente", "Status", "Duracao", "Data", "Acoes"].map((head) => (
                 <th key={head} className="px-4 py-3 font-medium">
                   {head}
                 </th>
@@ -130,10 +163,11 @@ export default function CallTable({
               <tr key={row.id} className="border-t border-[#E5E7EB] bg-white">
                 <td className="px-4 py-3 font-medium text-slate-900">{row.clientName}</td>
                 <td className="px-4 py-3 text-slate-600">{formatPhone(row.phone)}</td>
+                <td className="px-4 py-3 text-slate-600">{formatVoiceCallDirection(row.direction)}</td>
                 <td className="px-4 py-3 text-slate-600">{row.agentName}</td>
                 <td className="px-4 py-3">
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                    {row.status}
+                    {formatVoiceCallStatus(row.status)}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-slate-600">{formatSeconds(row.durationSeconds)}</td>

@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from "react"
 import {
   VoiceAgent,
+  VoiceAgentStatus,
   VoiceCall,
+  VoiceCallDirection,
+  VoiceCallStatus,
   VoiceCaller,
   VoiceCallTableRow,
   VoiceDashboardMetrics,
@@ -54,6 +57,42 @@ export function formatPhone(phone?: string | null) {
   return phone
 }
 
+const voiceCallStatusLabels: Record<VoiceCallStatus, string> = {
+  ringing: "Tocando",
+  queued: "Em fila",
+  answered: "Atendida",
+  missed: "Nao atendida",
+  abandoned: "Abandonada",
+  transferred: "Transferida",
+  ended: "Encerrada",
+  failed: "Falhou"
+}
+
+const voiceCallDirectionLabels: Record<VoiceCallDirection, string> = {
+  inbound: "Entrante",
+  outbound: "Saida"
+}
+
+const voiceAgentStatusLabels: Record<VoiceAgentStatus, string> = {
+  offline: "Offline",
+  available: "Disponivel",
+  ringing: "Tocando",
+  in_call: "Em chamada",
+  paused: "Pausado"
+}
+
+export function formatVoiceCallStatus(status: VoiceCallStatus) {
+  return voiceCallStatusLabels[status] ?? status
+}
+
+export function formatVoiceAgentStatus(status: VoiceAgentStatus) {
+  return voiceAgentStatusLabels[status] ?? status
+}
+
+export function formatVoiceCallDirection(direction: VoiceCallDirection) {
+  return voiceCallDirectionLabels[direction] ?? direction
+}
+
 async function fetchJson<T>(path: string): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, { cache: "no-store" })
   if (!response.ok) {
@@ -98,10 +137,18 @@ export function useVoiceData() {
     if (!apiBase) {
       setLoading(true)
       try {
-        const [queueResponse, agentResponse] = await Promise.all([
+        const [callResponse, queueResponse, agentResponse] = await Promise.all([
+          fetch("/api/voice/calls", { cache: "no-store" }),
           fetch("/api/voice/queues", { cache: "no-store" }),
           fetch("/api/voice/agents", { cache: "no-store" })
         ])
+
+        if (callResponse.ok) {
+          const callPayload = (await callResponse.json()) as {
+            calls?: VoiceCall[]
+          }
+          setCalls(callPayload.calls ?? [])
+        }
 
         if (queueResponse.ok) {
           const queuePayload = (await queueResponse.json()) as {
@@ -479,9 +526,10 @@ export function useVoiceDerivedData(calls: VoiceCall[], agents: VoiceAgent[], qu
           call.queue_id === queue.id &&
           (call.status === "queued" || call.status === "ringing" || call.status === "answered")
       )
-      const activeAgents = agents.filter((agent) => {
-        if (agent.status === "offline") return false
-        return queue.slug === "comercial" || Boolean(agent.id)
+      const activeAgents = (queue.members ?? []).filter((member) => {
+        if (!member.active) return false
+        const memberAgent = member.agent ?? agents.find((agent) => agent.id === member.agent_id)
+        return Boolean(memberAgent && memberAgent.status !== "offline")
       }).length
 
       return {
@@ -513,10 +561,12 @@ export function useVoiceDerivedData(calls: VoiceCall[], agents: VoiceAgent[], qu
       id: call.id,
       clientName: call.clientName,
       phone: call.phone,
+      direction: call.direction === "outbound" ? "outbound" : "inbound",
       agentName: call.agent_id ? agentMap.get(call.agent_id)?.name || "Agente nao identificado" : "Nao atribuido",
       queueName: queueMap.get(call.queue_id || "")?.name || "Sem fila",
       status: call.status,
       durationSeconds: call.duration_seconds ?? 0,
+      startedAt: call.started_at,
       createdAtLabel: new Date(call.started_at || Date.now()).toLocaleString("pt-BR"),
       recordingUrl: call.recording_url
     }))

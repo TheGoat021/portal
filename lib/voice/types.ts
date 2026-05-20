@@ -15,6 +15,8 @@ export type VoiceCallStatus =
   | "ended"
   | "failed"
 
+export type VoiceCallDirection = "inbound" | "outbound"
+
 export type VoiceAgent = {
   id: string
   user_id: string | null
@@ -56,6 +58,7 @@ export type VoiceCall = {
   called_number?: string | null
   did_number?: string | null
   dialed_extension?: string | null
+  direction?: VoiceCallDirection | null
   status: VoiceCallStatus
   started_at: string | null
   answered_at: string | null
@@ -104,10 +107,12 @@ export type VoiceCallTableRow = {
   id: string
   clientName: string
   phone: string
+  direction: VoiceCallDirection
   agentName: string
   queueName: string
   status: VoiceCallStatus
   durationSeconds: number
+  startedAt: string | null
   createdAtLabel: string
   recordingUrl: string | null
 }

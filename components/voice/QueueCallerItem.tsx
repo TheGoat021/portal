@@ -1,7 +1,7 @@
 "use client"
 
 import { ArrowRightLeft, PhoneIncoming } from "lucide-react"
-import { formatPhone, formatSeconds } from "@/lib/voice/api"
+import { formatPhone, formatSeconds, formatVoiceCallStatus } from "@/lib/voice/api"
 import { VoiceCaller } from "@/lib/voice/types"
 import { useVoiceSoftphoneStore } from "@/store/voiceSoftphoneStore"
 
@@ -29,7 +29,9 @@ export default function QueueCallerItem({ caller }: { caller: VoiceCaller }) {
           <div className="mt-4">
             <div className="mb-2 flex items-center justify-between text-xs text-slate-500">
               <span>{caller.queueName}</span>
-              <span>{formatSeconds(caller.waitSeconds)}</span>
+              <span>
+                {formatVoiceCallStatus(caller.status)} • {formatSeconds(caller.waitSeconds)}
+              </span>
             </div>
             <div className="h-2 rounded-full bg-slate-100">
               <div

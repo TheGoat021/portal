@@ -31,6 +31,23 @@ interface MetaConversation {
   connection_id: string
 }
 
+type LeadRecord = {
+  id?: string | number | null
+  conversation_id?: string | number | null
+  phone?: string | null
+  telefone?: string | null
+  email?: string | null
+  status?: string | null
+  origem_id?: string | number | null
+  origem?: {
+    id?: string | number | null
+  } | null
+  cliente?: {
+    telefone?: string | null
+    email?: string | null
+  } | null
+}
+
 interface Client {
   id: string
   leadId: string | null
@@ -171,7 +188,7 @@ export default function ClientDetails({ selectedConversationId, currentUser }: P
 
         const conversationPayload = await conversationRes.json()
         const conversation: MetaConversation | null = conversationPayload?.data ?? conversationPayload ?? null
-        const leads: any[] = await leadsRes.json()
+        const leads: LeadRecord[] = await leadsRes.json()
         const origensData: Origem[] = origensRes.ok ? await origensRes.json() : []
         const notesPayload = notesRes.ok ? await notesRes.json() : { data: [] }
         const reminderPayload = reminderRes.ok ? await reminderRes.json() : { data: null }
@@ -189,7 +206,7 @@ export default function ClientDetails({ selectedConversationId, currentUser }: P
 
         const normalizedConversationPhone = normalizePhone(conversation.wa_id)
 
-        const relatedLead = (leads || []).find((lead: any) => {
+        const relatedLead = (leads || []).find((lead) => {
           const leadConversationId = lead?.conversation_id
           const leadPhone =
             normalizePhone(lead?.phone) ||
@@ -369,15 +386,15 @@ export default function ClientDetails({ selectedConversationId, currentUser }: P
   }
 
   if (!selectedConversationId) {
-    return <div className="h-full bg-white flex items-center justify-center text-gray-400">Nenhum cliente selecionado</div>
+    return <div className="flex h-full items-center justify-center bg-transparent text-slate-400">Nenhum cliente selecionado</div>
   }
 
   if (loading) {
-    return <div className="h-full bg-white flex items-center justify-center text-gray-400">Carregando...</div>
+    return <div className="flex h-full items-center justify-center bg-transparent text-slate-400">Carregando...</div>
   }
 
   if (!client) {
-    return <div className="h-full bg-white flex items-center justify-center text-gray-400">Cliente nao encontrado</div>
+    return <div className="flex h-full items-center justify-center bg-transparent text-slate-400">Cliente nao encontrado</div>
   }
 
   const displayName = (client.name && client.name.trim()) || "Sem nome"
@@ -386,11 +403,11 @@ export default function ClientDetails({ selectedConversationId, currentUser }: P
   const isLost = status === "Perdido"
 
   return (
-    <div className="h-full min-h-0 bg-[#F9FAFB] flex flex-col">
-      <div className="p-4 border-b bg-white">
+    <div className="flex h-full min-h-0 flex-col bg-transparent">
+      <div className="border-b border-white/60 bg-white/42 p-4 backdrop-blur-xl">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="h-9 w-9 rounded-full bg-gray-100 border flex items-center justify-center text-sm font-semibold text-gray-700 shrink-0">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/80 bg-white/82 text-sm font-semibold text-slate-700">
               {(displayName[0] || "C").toUpperCase()}
             </div>
 
@@ -406,7 +423,7 @@ export default function ClientDetails({ selectedConversationId, currentUser }: P
 
           <button
             onClick={copyPhone}
-            className="h-8 w-8 rounded-lg border hover:bg-gray-50 flex items-center justify-center shrink-0"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/75 bg-white/72 hover:bg-white"
             title="Copiar telefone"
           >
             <Copy size={14} />
@@ -415,7 +432,7 @@ export default function ClientDetails({ selectedConversationId, currentUser }: P
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
-        <div className="rounded-xl border bg-white p-3">
+        <div className="rounded-[24px] border border-white/75 bg-white/66 p-4 shadow-[0_12px_30px_rgba(148,163,184,0.1)] backdrop-blur-xl">
           <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-2">Pipeline</div>
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
             {pipelineSteps.map((step, index) => {
@@ -473,7 +490,7 @@ export default function ClientDetails({ selectedConversationId, currentUser }: P
           </div>
         </div>
 
-        <div className="rounded-xl border bg-white p-3 space-y-3">
+        <div className="rounded-[24px] border border-white/75 bg-white/66 p-4 space-y-3 shadow-[0_12px_30px_rgba(148,163,184,0.1)] backdrop-blur-xl">
           <div className="text-[11px] uppercase tracking-wide text-gray-500">Dados do cliente</div>
 
           <div className="grid grid-cols-1 gap-3">
@@ -545,7 +562,7 @@ export default function ClientDetails({ selectedConversationId, currentUser }: P
           </button>
         </div>
 
-        <div className="rounded-xl border bg-white p-3 space-y-3">
+        <div className="rounded-[24px] border border-white/75 bg-white/66 p-4 space-y-3 shadow-[0_12px_30px_rgba(148,163,184,0.1)] backdrop-blur-xl">
           <div className="text-[11px] uppercase tracking-wide text-gray-500">Realizar mais tarde</div>
 
           {activeReminder ? (
@@ -590,7 +607,7 @@ export default function ClientDetails({ selectedConversationId, currentUser }: P
           </div>
         </div>
 
-        <div className="rounded-xl border bg-white p-3 space-y-3">
+        <div className="rounded-[24px] border border-white/75 bg-white/66 p-4 space-y-3 shadow-[0_12px_30px_rgba(148,163,184,0.1)] backdrop-blur-xl">
           <div className="text-[11px] uppercase tracking-wide text-gray-500">Notas</div>
 
           <div className="space-y-2">

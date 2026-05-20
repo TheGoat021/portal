@@ -3,24 +3,38 @@ AXION_VOICE_SERVER_URL=AXION_VOICE_SERVER_URL
 
 [axion-voice-inbound]
 exten => _X.,1,NoOp(Axion Voice inbound via Vonex/Flux)
- same => n,Answer()
  same => n,Set(__CALL_UNIQUE_ID=${UNIQUEID})
  same => n,Set(__CALLER_NUMBER=${CALLERID(num)})
  same => n,Set(__CALLED_NUMBER=${IF($["${CALLERID(dnid)}" = ""]?${EXTEN}:${CALLERID(dnid)})})
- same => n,Playback(custom/axion-bem-vindo)
  same => n,Set(MONITOR_FILENAME=${STRFTIME(${EPOCH},,%Y%m%d-%H%M%S)}-${UNIQUEID})
  same => n,MixMonitor(${MONITOR_FILENAME}.wav,b)
- same => n,System(curl -s -X POST ${AXION_VOICE_SERVER_URL}/webhooks/asterisk/event -H "Content-Type: application/json" -d "{\"eventType\":\"call.inbound\",\"payload\":{\"channelId\":\"${CHANNEL}\",\"uniqueId\":\"${UNIQUEID}\",\"linkedId\":\"${CHANNEL(linkedid)}\",\"callerNumber\":\"${CALLERID(num)}\",\"calledNumber\":\"${CALLED_NUMBER}\",\"didNumber\":\"${CALLERID(dnid)}\",\"dialedExtension\":\"${EXTEN}\",\"queueId\":\"comercial\",\"startedAt\":\"${STRFTIME(${EPOCH},,%Y-%m-%dT%H:%M:%S%z)}\"}}")
- same => n,Queue(comercial,tTkK,,,300)
+ same => n,Set(CHANNEL(hangup_handler_push)=axion-voice-hangup,s,1)
+ same => n,Stasis(axion-voice,inbound,${UNIQUEID},${CALLERID(num)},${CALLED_NUMBER},${EXTEN})
  same => n,Hangup()
 
-exten => h,1,NoOp(Fim da chamada ${UNIQUEID})
+[axion-voice-hangup]
+exten => s,1,NoOp(Fim da chamada ${UNIQUEID})
  same => n,System(curl -s -X POST ${AXION_VOICE_SERVER_URL}/webhooks/asterisk/event -H "Content-Type: application/json" -d "{\"eventType\":\"call.ended\",\"payload\":{\"channelId\":\"${CHANNEL}\",\"uniqueId\":\"${UNIQUEID}\",\"linkedId\":\"${CHANNEL(linkedid)}\",\"finalStatus\":\"ended\",\"endedAt\":\"${STRFTIME(${EPOCH},,%Y-%m-%dT%H:%M:%S%z)}\"}}")
  same => n,Return()
 
 [axion-voice-internal]
 exten => _10XX,1,NoOp(Ramal interno)
  same => n,Dial(PJSIP/${EXTEN},25)
+ same => n,Hangup()
+
+exten => _0X.,1,NoOp(Saida via Flux)
+ same => n,Goto(axion-voice-outbound,${EXTEN:1},1)
+
+[axion-voice-outbound]
+exten => _X.,1,NoOp(Outbound via Flux)
+ same => n,Set(__CALL_UNIQUE_ID=${UNIQUEID})
+ same => n,Set(__CALLER_EXTENSION=${CUT(CHANNEL,-,1)})
+ same => n,Set(__OUTBOUND_NUMBER=${FILTER(0123456789,${EXTEN})})
+ same => n,ExecIf($["${OUTBOUND_NUMBER:0:2}"!="55"]?Set(OUTBOUND_NUMBER=55${OUTBOUND_NUMBER}))
+ same => n,Set(CHANNEL(hangup_handler_push)=axion-voice-hangup,s,1)
+ same => n,System(curl -s -X POST ${AXION_VOICE_SERVER_URL}/webhooks/asterisk/event -H "Content-Type: application/json" -d "{\"eventType\":\"call.outbound\",\"payload\":{\"channelId\":\"${CHANNEL}\",\"uniqueId\":\"${UNIQUEID}\",\"linkedId\":\"${CHANNEL(linkedid)}\",\"callerExtension\":\"${CALLER_EXTENSION}\",\"targetNumber\":\"${OUTBOUND_NUMBER}\",\"startedAt\":\"${STRFTIME(${EPOCH},,%Y-%m-%dT%H:%M:%S%z)}\"}}")
+ same => n,NoOp(Discando para Flux: ${OUTBOUND_NUMBER})
+ same => n,Dial(PJSIP/${OUTBOUND_NUMBER}@vonex-flux-trunk,60)
  same => n,Hangup()
 
 [axion-voice-stasis]

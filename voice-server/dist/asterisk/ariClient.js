@@ -1,5 +1,7 @@
 import { env } from "../env.js";
 import { logger } from "../utils/logger.js";
+import EventEmitter from "node:events";
+import WebSocket from "ws";
 function authHeader() {
     return `Basic ${Buffer.from(`${env.asterisk.ariUser}:${env.asterisk.ariPassword}`).toString("base64")}`;
 }
@@ -13,12 +15,14 @@ function buildUrl(pathname, params) {
     }
     return base.toString();
 }
-async function request(method, pathname, params) {
+async function request(method, pathname, params, body) {
     const response = await fetch(buildUrl(pathname, params), {
         method,
         headers: {
-            Authorization: authHeader()
-        }
+            Authorization: authHeader(),
+            ...(body ? { "Content-Type": "application/json" } : {})
+        },
+        ...(body ? { body: JSON.stringify(body) } : {})
     });
     if (!response.ok) {
         const body = await response.text();
@@ -27,8 +31,21 @@ async function request(method, pathname, params) {
     const text = await response.text();
     return text ? JSON.parse(text) : null;
 }
-export class AriClient {
+function buildWebSocketUrl(pathname, params) {
+    const base = new URL(env.asterisk.ariUrl);
+    base.protocol = base.protocol === "https:" ? "wss:" : "ws:";
+    base.pathname = `${base.pathname.replace(/\/$/, "")}${pathname}`;
+    if (params) {
+        for (const [key, value] of Object.entries(params)) {
+            base.searchParams.set(key, String(value));
+        }
+    }
+    return base.toString();
+}
+export class AriClient extends EventEmitter {
     healthy = false;
+    eventSocket = null;
+    reconnectTimer = null;
     async healthcheck() {
         try {
             await request("GET", "/ari/asterisk/info");
@@ -54,6 +71,74 @@ export class AriClient {
     }
     async transferChannel(channelId, endpoint) {
         return request("POST", `/ari/channels/${encodeURIComponent(channelId)}/redirect`, { endpoint });
+    }
+    async originateChannel(params) {
+        return request("POST", "/ari/channels", {
+            endpoint: params.endpoint,
+            app: env.asterisk.ariApp,
+            ...(params.appArgs && params.appArgs.length > 0
+                ? { appArgs: params.appArgs.join(",") }
+                : {}),
+            ...(params.callerId ? { callerId: params.callerId } : {}),
+            ...(params.timeoutSeconds ? { timeout: params.timeoutSeconds } : {})
+        });
+    }
+    async createBridge(type = "mixing") {
+        return request("POST", "/ari/bridges", { type });
+    }
+    async addChannelToBridge(bridgeId, channelId) {
+        return request("POST", `/ari/bridges/${encodeURIComponent(bridgeId)}/addChannel`, {
+            channel: channelId
+        });
+    }
+    async destroyBridge(bridgeId) {
+        return request("DELETE", `/ari/bridges/${encodeURIComponent(bridgeId)}`);
+    }
+    async playOnChannel(channelId, media) {
+        return request("POST", `/ari/channels/${encodeURIComponent(channelId)}/play`, {
+            media
+        });
+    }
+    startEventStream() {
+        if (this.eventSocket)
+            return;
+        const wsUrl = buildWebSocketUrl("/ari/events", {
+            app: env.asterisk.ariApp,
+            subscribeAll: "true",
+            api_key: `${env.asterisk.ariUser}:${env.asterisk.ariPassword}`
+        });
+        const socket = new WebSocket(wsUrl);
+        this.eventSocket = socket;
+        socket.on("open", () => {
+            logger.info("Connected to ARI event stream", { app: env.asterisk.ariApp });
+        });
+        socket.on("message", (data) => {
+            try {
+                const parsed = JSON.parse(String(data));
+                this.emit("event", parsed);
+            }
+            catch (error) {
+                logger.error("Failed to parse ARI event", {
+                    error: error instanceof Error ? error.message : String(error)
+                });
+            }
+        });
+        socket.on("close", () => {
+            this.eventSocket = null;
+            logger.warn("ARI event stream closed, scheduling reconnect");
+            this.scheduleReconnect();
+        });
+        socket.on("error", (error) => {
+            logger.error("ARI event stream error", { error: error.message });
+        });
+    }
+    scheduleReconnect() {
+        if (this.reconnectTimer)
+            return;
+        this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
+            this.startEventStream();
+        }, 5000);
     }
 }
 export const ariClient = new AriClient();

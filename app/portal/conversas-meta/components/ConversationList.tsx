@@ -757,8 +757,8 @@ export default function ConversationsList({
   const selectedConnection = connections.find((item) => item.id === selectedConnectionId)
 
   return (
-    <div className="relative min-h-0">
-      <div className="p-3 border-b border-gray-100 bg-white sticky top-0 z-10 space-y-2">
+    <div className="relative min-h-0 bg-transparent">
+      <div className="sticky top-0 z-10 space-y-3 border-b border-white/60 bg-white/42 p-4 backdrop-blur-xl">
         <div>
           <select
             value={selectedConnectionId}
@@ -766,7 +766,7 @@ export default function ConversationsList({
               setSelectedConnectionId(e.target.value)
               onSelectConversation("")
             }}
-            className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white outline-none"
+            className="w-full rounded-2xl border border-white/75 bg-white/72 px-3 py-2.5 text-sm text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] outline-none"
             disabled={loadingConnections}
           >
             <option value="">
@@ -786,11 +786,11 @@ export default function ConversationsList({
             placeholder="Buscar por nome, telefone ou mensagem..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white outline-none"
+            className="w-full rounded-2xl border border-white/75 bg-white/72 px-3 py-2.5 text-sm text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] outline-none"
           />
           <button
             onClick={() => setShowModal(true)}
-            className="w-10 h-10 rounded-xl bg-green-500 text-white hover:bg-green-600 transition flex items-center justify-center disabled:opacity-60"
+            className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#7c3aed,#60a5fa)] text-white shadow-[0_14px_30px_rgba(124,58,237,0.24)] transition disabled:opacity-60"
             title="Nova conversa Meta"
             disabled={!selectedConnectionId}
           >
@@ -803,10 +803,10 @@ export default function ConversationsList({
             type="button"
             onClick={() => setServiceFilter("bot")}
             className={[
-              "h-10 rounded-xl border flex items-center justify-center gap-1.5 transition",
+              "h-10 rounded-2xl border flex items-center justify-center gap-1.5 transition shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]",
               serviceFilter === "bot"
-                ? "bg-blue-50 border-blue-300 text-blue-700"
-                : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                ? "bg-[linear-gradient(135deg,rgba(224,242,254,0.92),rgba(239,246,255,0.88))] border-cyan-200 text-sky-700"
+                : "bg-white/68 border-white/75 text-slate-600 hover:bg-white"
             ].join(" ")}
             title="Clientes no fluxo do bot"
           >
@@ -818,10 +818,10 @@ export default function ConversationsList({
             type="button"
             onClick={() => setServiceFilter("operator")}
             className={[
-              "h-10 rounded-xl border flex items-center justify-center gap-1.5 transition",
+              "h-10 rounded-2xl border flex items-center justify-center gap-1.5 transition shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]",
               serviceFilter === "operator"
-                ? "bg-green-50 border-green-300 text-green-700"
-                : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                ? "bg-[linear-gradient(135deg,rgba(220,252,231,0.92),rgba(236,253,245,0.88))] border-emerald-200 text-emerald-700"
+                : "bg-white/68 border-white/75 text-slate-600 hover:bg-white"
             ].join(" ")}
             title="Clientes em atendimento com operador"
           >
@@ -833,10 +833,10 @@ export default function ConversationsList({
             type="button"
             onClick={() => setServiceFilter("closed")}
             className={[
-              "h-10 rounded-xl border flex items-center justify-center gap-1.5 transition",
+              "h-10 rounded-2xl border flex items-center justify-center gap-1.5 transition shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]",
               serviceFilter === "closed"
-                ? "bg-amber-50 border-amber-300 text-amber-700"
-                : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                ? "bg-[linear-gradient(135deg,rgba(254,243,199,0.92),rgba(255,251,235,0.88))] border-amber-200 text-amber-700"
+                : "bg-white/68 border-white/75 text-slate-600 hover:bg-white"
             ].join(" ")}
             title="Atendimentos encerrados"
           >
@@ -992,17 +992,17 @@ export default function ConversationsList({
                   }
                 }}
                 className={[
-                  "w-full text-left px-4 py-3 border-b transition cursor-pointer",
+                  "mx-3 mb-2 rounded-[22px] border px-4 py-3 transition cursor-pointer shadow-[0_10px_28px_rgba(148,163,184,0.08)] backdrop-blur-xl",
                   conv.responseAlertLevel === "danger"
-                    ? "border-red-500 bg-red-100/95 shadow-[inset_0_0_0_1px_rgba(220,38,38,0.45)] hover:bg-red-200/95"
+                    ? "border-rose-200/80 bg-[linear-gradient(135deg,rgba(255,241,242,0.96),rgba(255,255,255,0.82))] hover:bg-[linear-gradient(135deg,rgba(255,228,230,0.98),rgba(255,255,255,0.88))]"
                     : conv.responseAlertLevel === "warning"
-                      ? "border-amber-400 bg-amber-100/95 shadow-[inset_0_0_0_1px_rgba(217,119,6,0.45)] hover:bg-amber-200/95"
-                      : "border-gray-100 hover:bg-gray-50",
-                  isSelected ? "ring-1 ring-gray-300" : ""
+                      ? "border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,251,235,0.96),rgba(255,255,255,0.82))] hover:bg-[linear-gradient(135deg,rgba(254,243,199,0.94),rgba(255,255,255,0.88))]"
+                      : "border-white/75 bg-white/66 hover:bg-white/82",
+                  isSelected ? "ring-1 ring-cyan-200/80" : ""
                 ].join(" ")}
               >
                 <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-sm font-semibold text-gray-700 shrink-0">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/80 bg-white/82 text-sm font-semibold text-slate-700">
                     {initials}
                   </div>
 

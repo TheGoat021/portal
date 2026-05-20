@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowRightLeft,
   Delete,
@@ -61,6 +61,12 @@ export default function FloatingSoftphone() {
     sipUsername
   } = useVoiceSoftphoneStore()
   const [elapsed, setElapsed] = useState(0)
+  const [floatingPosition, setFloatingPosition] = useState<{ x: number; y: number } | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const floatingRef = useRef<HTMLDivElement | null>(null)
+  const dragOffsetRef = useRef({ x: 0, y: 0 })
+  const dragStartRef = useRef({ x: 0, y: 0 })
+  const dragMovedRef = useRef(false)
   const dialPad = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"]
 
   useEffect(() => {
@@ -78,6 +84,30 @@ export default function FloatingSoftphone() {
     return () => window.clearInterval(interval)
   }, [startedAt])
 
+  useEffect(() => {
+    if (!floatingPosition) return
+
+    const clampPosition = () => {
+      const element = floatingRef.current
+      if (!element) return
+
+      const rect = element.getBoundingClientRect()
+      const maxX = Math.max(8, window.innerWidth - rect.width - 8)
+      const maxY = Math.max(8, window.innerHeight - rect.height - 8)
+
+      setFloatingPosition((current) => {
+        if (!current) return current
+        return {
+          x: Math.min(Math.max(8, current.x), maxX),
+          y: Math.min(Math.max(8, current.y), maxY)
+        }
+      })
+    }
+
+    window.addEventListener("resize", clampPosition)
+    return () => window.removeEventListener("resize", clampPosition)
+  }, [floatingPosition])
+
   const active = status !== "idle" && Boolean(client)
   const webRtcEnabled = runtimeMode === "webrtc"
   const webRtcRegistered = connectionStatus === "registered"
@@ -92,6 +122,70 @@ export default function FloatingSoftphone() {
     return `${statusLabelMap[status]} ${formatSeconds(elapsed)}`
   }, [active, elapsed, status])
   const showIncomingActions = callDirection === "inbound" && status === "ringing"
+
+  const startDragging = (clientX: number, clientY: number) => {
+    const element = floatingRef.current
+    if (!element) return
+
+    const rect = element.getBoundingClientRect()
+    dragOffsetRef.current = {
+      x: clientX - rect.left,
+      y: clientY - rect.top
+    }
+    dragStartRef.current = { x: clientX, y: clientY }
+    dragMovedRef.current = false
+    setDragging(true)
+    setFloatingPosition({ x: rect.left, y: rect.top })
+  }
+
+  const moveFloating = (clientX: number, clientY: number) => {
+    const element = floatingRef.current
+    if (!element) return
+
+    if (
+      Math.abs(clientX - dragStartRef.current.x) > 4 ||
+      Math.abs(clientY - dragStartRef.current.y) > 4
+    ) {
+      dragMovedRef.current = true
+    }
+
+    const maxX = Math.max(8, window.innerWidth - element.offsetWidth - 8)
+    const maxY = Math.max(8, window.innerHeight - element.offsetHeight - 8)
+    const nextX = Math.min(Math.max(8, clientX - dragOffsetRef.current.x), maxX)
+    const nextY = Math.min(Math.max(8, clientY - dragOffsetRef.current.y), maxY)
+
+    setFloatingPosition({ x: nextX, y: nextY })
+  }
+
+  useEffect(() => {
+    if (!dragging) return
+
+    const handlePointerMove = (event: PointerEvent) => {
+      moveFloating(event.clientX, event.clientY)
+    }
+
+    const handlePointerUp = () => {
+      setDragging(false)
+    }
+
+    window.addEventListener("pointermove", handlePointerMove)
+    window.addEventListener("pointerup", handlePointerUp)
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerUp)
+    }
+  }, [dragging])
+
+  const floatingStyle = floatingPosition
+    ? {
+        left: `${floatingPosition.x}px`,
+        top: `${floatingPosition.y}px`
+      }
+    : {
+        bottom: "1.5rem",
+        right: "1.5rem"
+      }
 
   const handleDial = async () => {
     if (!dialedNumber.trim()) return
@@ -199,13 +293,27 @@ export default function FloatingSoftphone() {
   }
 
   return (
-    <div className="pointer-events-none fixed bottom-6 right-6 z-50 flex max-w-[calc(100vw-1rem)] justify-end">
-      <div className="pointer-events-auto">
+    <div className="pointer-events-none fixed inset-0 z-50">
+      <div
+        ref={floatingRef}
+        style={floatingStyle}
+        className="pointer-events-auto absolute max-w-[calc(100vw-1rem)]"
+      >
         {minimized ? (
           <button
             type="button"
-            onClick={toggleMinimized}
+            onClick={() => {
+              if (dragMovedRef.current) {
+                dragMovedRef.current = false
+                return
+              }
+              toggleMinimized()
+            }}
+            onPointerDown={(event) => {
+              startDragging(event.clientX, event.clientY)
+            }}
             className="flex items-center gap-3 rounded-full border border-slate-900 bg-slate-950 px-4 py-3 text-white shadow-[0_24px_60px_-26px_rgba(15,23,42,0.55)]"
+            style={{ touchAction: "none", cursor: dragging ? "grabbing" : "grab" }}
           >
             <div className={`rounded-full p-2 ${active ? "bg-emerald-500" : "bg-slate-700"}`}>
               <Phone className="h-4 w-4" />
@@ -215,7 +323,15 @@ export default function FloatingSoftphone() {
         ) : (
           <div className="w-[min(240px,calc(100vw-1rem))] overflow-hidden rounded-[28px] border border-slate-800 bg-[radial-gradient(circle_at_top,#15213c_0%,#060914_38%,#03050a_100%)] text-white shadow-[0_22px_54px_-26px_rgba(15,23,42,0.75)]">
             <div className="px-3 pb-3 pt-2.5">
-              <div className="flex items-center justify-between text-[9px] text-slate-400">
+              <div
+                onPointerDown={(event) => {
+                  const target = event.target as HTMLElement
+                  if (target.closest("button, a, input")) return
+                  startDragging(event.clientX, event.clientY)
+                }}
+                className="flex items-center justify-between text-[9px] text-slate-400"
+                style={{ touchAction: "none", cursor: dragging ? "grabbing" : "grab" }}
+              >
                 <div className="flex items-center gap-1.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
                   <span className={`inline-flex items-center gap-1 ${connectionToneMap[connectionStatus]}`}>
