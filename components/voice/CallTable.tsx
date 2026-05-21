@@ -8,7 +8,16 @@ import {
   formatVoiceCallDirection,
   formatVoiceCallStatus
 } from "@/lib/voice/api"
-import { VoiceCallTableRow } from "@/lib/voice/types"
+import { VoiceCallStatus, VoiceCallTableRow } from "@/lib/voice/types"
+
+const callStatusOptions: VoiceCallStatus[] = [
+  "answered",
+  "ended",
+  "missed",
+  "abandoned",
+  "failed",
+  "transferred"
+]
 
 export default function CallTable({
   rows,
@@ -132,7 +141,7 @@ export default function CallTable({
             className="h-11 rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-slate-700 outline-none"
           >
             <option value="all">Todos os status</option>
-            {["answered", "ended", "missed", "abandoned", "failed", "transferred"].map((item) => (
+            {callStatusOptions.map((item) => (
               <option key={item} value={item}>
                 {formatVoiceCallStatus(item)}
               </option>

@@ -251,8 +251,8 @@ function MuralModal({
 
 export default function PortalPage() {
   const auth = useAuth();
-  const role: string = auth?.role;
-  const userId: string | undefined = auth?.user?.id || auth?.user?.uid || auth?.id;
+  const role = auth?.role ?? "";
+  const userId: string | undefined = auth?.user?.id || auth?.user?.uid;
   const { activeHref, setActiveHref } = usePortalStore();
   const [tab, setTab] = useState<"TODOS" | MuralType>("TODOS");
   const [posts, setPosts] = useState<MuralPost[]>([]);

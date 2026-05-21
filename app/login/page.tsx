@@ -26,7 +26,7 @@ export default function LoginPage() {
     return;
   }
 
-  // ✅ força nova navegação (middleware roda)
+  // ✅ força nova navegação (proxy roda)
   window.location.href = "/portal";
 }
 
