@@ -610,10 +610,10 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-semibold transition",
+        "whitespace-nowrap rounded-2xl px-4 py-2.5 text-sm font-semibold backdrop-blur-xl transition",
         active
-          ? "bg-blue-600 text-white shadow-sm"
-          : "border border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50"
+          ? "border border-cyan-200/80 bg-[linear-gradient(135deg,rgba(96,165,250,0.94),rgba(34,211,238,0.9),rgba(167,139,250,0.84))] text-white shadow-[0_18px_32px_rgba(96,165,250,0.24)]"
+          : "border border-white/70 bg-white/64 text-slate-700 shadow-[0_8px_24px_rgba(148,163,184,0.08)] hover:bg-white/86"
       )}
     >
       {children}
@@ -637,7 +637,7 @@ function UserEmailSelect({
   return (
     <select
       name={name}
-      className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-blue-400"
+      className="rounded-2xl border border-white/70 bg-white/76 px-3 py-3 text-sm text-slate-700 outline-none backdrop-blur-xl focus:border-cyan-200"
       value={value}
       onChange={(event) => onChange(event.target.value)}
     >
@@ -665,23 +665,23 @@ function MetricCard({
   icon: React.ElementType;
 }) {
   const tones = {
-    green: "text-green-700 bg-green-50 border-green-100",
-    blue: "text-blue-700 bg-blue-50 border-blue-100",
-    yellow: "text-yellow-700 bg-yellow-50 border-yellow-100",
-    red: "text-red-700 bg-red-50 border-red-100",
-    purple: "text-purple-700 bg-purple-50 border-purple-100",
-    teal: "text-teal-700 bg-teal-50 border-teal-100",
+    green: "text-emerald-700 bg-[linear-gradient(135deg,rgba(236,253,245,0.96),rgba(236,254,255,0.8))] border-emerald-100",
+    blue: "text-blue-700 bg-[linear-gradient(135deg,rgba(239,246,255,0.98),rgba(236,254,255,0.82))] border-blue-100",
+    yellow: "text-amber-700 bg-[linear-gradient(135deg,rgba(255,251,235,0.98),rgba(255,255,255,0.84))] border-amber-100",
+    red: "text-rose-700 bg-[linear-gradient(135deg,rgba(255,241,242,0.98),rgba(255,255,255,0.82))] border-rose-100",
+    purple: "text-violet-700 bg-[linear-gradient(135deg,rgba(245,243,255,0.98),rgba(239,246,255,0.82))] border-violet-100",
+    teal: "text-cyan-700 bg-[linear-gradient(135deg,rgba(236,254,255,0.98),rgba(240,253,250,0.82))] border-cyan-100",
   };
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="min-w-0 overflow-hidden rounded-[28px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.78),rgba(245,249,255,0.66))] p-5 shadow-[0_18px_44px_rgba(148,163,184,0.12)] backdrop-blur-xl">
       <div className="mb-4 flex items-start justify-between gap-3">
-        <small className="text-sm font-medium text-slate-500">{label}</small>
-        <span className={cn("rounded-xl border p-2", tones[tone])}>
+        <small className="text-sm font-medium tracking-[-0.01em] text-slate-500">{label}</small>
+        <span className={cn("rounded-2xl border p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]", tones[tone])}>
           <Icon size={18} />
         </span>
       </div>
-      <strong className="block text-3xl font-semibold text-slate-900">{value}</strong>
+      <strong className="block text-3xl font-semibold tracking-[-0.04em] text-slate-950">{value}</strong>
       <span className={cn("mt-3 block text-sm font-semibold", tones[tone].split(" ")[0])}>{hint}</span>
     </div>
   );
@@ -715,43 +715,48 @@ function FiltersPanel({
   const patch = (next: Partial<Filters>) => onChange({ ...filters, ...next });
 
   return (
-    <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="mb-4 rounded-[30px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.8),rgba(245,249,255,0.64))] p-5 shadow-[0_20px_48px_rgba(148,163,184,0.1)] backdrop-blur-xl">
       <div className="mb-4 flex items-center gap-2">
-        <SlidersHorizontal size={18} className="text-blue-600" />
-        <h3 className="text-base font-semibold text-slate-900">Filtros</h3>
+        <span className="flex h-9 w-9 items-center justify-center rounded-2xl border border-cyan-100 bg-[linear-gradient(135deg,rgba(239,246,255,0.98),rgba(236,254,255,0.88))] text-cyan-700">
+          <SlidersHorizontal size={18} />
+        </span>
+        <div>
+          <h3 className="text-base font-semibold text-slate-900">Filtros</h3>
+          <p className="text-xs text-slate-500">Refine os registros em tempo real</p>
+        </div>
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
         <label className="relative xl:col-span-2">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
           <input
-            className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-3 text-sm outline-none focus:border-blue-400"
+            className="w-full rounded-2xl border border-white/70 bg-white/78 py-3 pl-10 pr-3 text-sm text-slate-700 outline-none backdrop-blur-xl focus:border-cyan-200"
             value={filters.search}
             onChange={(event) => patch({ search: event.target.value })}
             placeholder="Buscar por Id, nome ou telefone"
           />
         </label>
-        <select className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none" value={filters.status} onChange={(event) => patch({ status: event.target.value })}>
+        <select className="rounded-2xl border border-white/70 bg-white/78 px-3 py-3 text-sm text-slate-700 outline-none backdrop-blur-xl" value={filters.status} onChange={(event) => patch({ status: event.target.value })}>
           <option value="">Status</option>
           {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
         </select>
-        <select className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none" value={filters.attendant} onChange={(event) => patch({ attendant: event.target.value })}>
+        <select className="rounded-2xl border border-white/70 bg-white/78 px-3 py-3 text-sm text-slate-700 outline-none backdrop-blur-xl" value={filters.attendant} onChange={(event) => patch({ attendant: event.target.value })}>
           <option value="">Atendente</option>
           {attendants.map((attendant) => <option key={attendant} value={attendant}>{attendant}</option>)}
         </select>
         {showClinic && (
-          <select className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none" value={filters.clinic} onChange={(event) => patch({ clinic: event.target.value })}>
+          <select className="rounded-2xl border border-white/70 bg-white/78 px-3 py-3 text-sm text-slate-700 outline-none backdrop-blur-xl" value={filters.clinic} onChange={(event) => patch({ clinic: event.target.value })}>
             <option value="">Clinica</option>
             {clinics.map((clinic) => <option key={clinic} value={clinic}>{clinic}</option>)}
           </select>
         )}
         {showCity && (
-          <select className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none" value={filters.city} onChange={(event) => patch({ city: event.target.value })}>
+          <select className="rounded-2xl border border-white/70 bg-white/78 px-3 py-3 text-sm text-slate-700 outline-none backdrop-blur-xl" value={filters.city} onChange={(event) => patch({ city: event.target.value })}>
             <option value="">Unidade/Cidade</option>
             {cities.map((city) => <option key={city} value={city}>{city}</option>)}
           </select>
         )}
         {showPlan && (
-          <select className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none" value={filters.plan} onChange={(event) => patch({ plan: event.target.value })}>
+          <select className="rounded-2xl border border-white/70 bg-white/78 px-3 py-3 text-sm text-slate-700 outline-none backdrop-blur-xl" value={filters.plan} onChange={(event) => patch({ plan: event.target.value })}>
             <option value="">Plano</option>
             {plans.map((plan) => <option key={plan} value={plan}>{plan}</option>)}
           </select>
@@ -759,13 +764,13 @@ function FiltersPanel({
         {showConsultationDate && (
           <label className="flex flex-col gap-1 text-xs font-semibold text-slate-500">
             <span>Data da consulta (acompanhamento)</span>
-            <input className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-normal text-slate-700 outline-none" type="date" value={filters.consultationDate} onChange={(event) => patch({ consultationDate: event.target.value })} />
+            <input className="rounded-2xl border border-white/70 bg-white/78 px-3 py-3 text-sm font-normal text-slate-700 outline-none backdrop-blur-xl" type="date" value={filters.consultationDate} onChange={(event) => patch({ consultationDate: event.target.value })} />
           </label>
         )}
         {showRegistrationDate && (
           <label className="flex flex-col gap-1 text-xs font-semibold text-slate-500">
             <span>Data do registro</span>
-            <input className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-normal text-slate-700 outline-none" type="date" value={filters.registrationDate} onChange={(event) => patch({ registrationDate: event.target.value })} />
+            <input className="rounded-2xl border border-white/70 bg-white/78 px-3 py-3 text-sm font-normal text-slate-700 outline-none backdrop-blur-xl" type="date" value={filters.registrationDate} onChange={(event) => patch({ registrationDate: event.target.value })} />
           </label>
         )}
       </div>
@@ -784,7 +789,7 @@ function StatusSelect({
 }) {
   return (
     <select
-      className="min-w-48 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400"
+      className="min-w-48 rounded-2xl border border-white/70 bg-white/78 px-3 py-2 text-sm text-slate-700 outline-none backdrop-blur-xl focus:border-cyan-200"
       value={value}
       onChange={(event) => onChange(event.target.value)}
     >
@@ -862,15 +867,15 @@ function RecordsTable({
   };
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-[30px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.8),rgba(245,249,255,0.64))] p-5 shadow-[0_20px_48px_rgba(148,163,184,0.1)] backdrop-blur-xl">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+        <h3 className="text-lg font-semibold tracking-[-0.02em] text-slate-950">{title}</h3>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+          <span className="rounded-full border border-white/70 bg-white/72 px-3 py-1 text-xs font-semibold text-slate-600">
             {pagination ? `${pagination.total} registros` : `${records.length} registros`}
           </span>
           {pagination && onPageSizeChange && (
-            <label className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+            <label className="flex items-center gap-2 rounded-full border border-white/70 bg-white/72 px-3 py-1 text-xs font-semibold text-slate-600">
               <span>Carregar</span>
               <select
                 value={pageSize || pagination.limit}
@@ -888,9 +893,9 @@ function RecordsTable({
         </div>
       </div>
       <div className="w-full overflow-x-auto">
-        <table className="w-full border-collapse text-left">
+        <table className="w-full border-separate border-spacing-y-2 text-left">
           <thead>
-            <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+            <tr className="text-xs uppercase tracking-[0.22em] text-slate-500">
               <th className="px-3 py-3">Acao</th>
               {renderSortableHeader("Paciente", "patientName")}
               {renderSortableHeader("Plano", "plan")}
@@ -914,9 +919,9 @@ function RecordsTable({
           </thead>
           <tbody>
             {sortedRecords.map((record) => (
-              <tr key={record.id} className="border-b border-slate-100 text-sm text-slate-700">
+              <tr key={record.id} className="text-sm text-slate-700">
                 <td className="whitespace-nowrap px-3 py-3">
-                  <button type="button" onClick={() => onOpen(record)} className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">
+                  <button type="button" onClick={() => onOpen(record)} className="rounded-2xl border border-cyan-200/80 bg-[linear-gradient(135deg,rgba(239,246,255,0.98),rgba(236,254,255,0.9))] px-3 py-2 text-sm font-semibold text-cyan-700 hover:bg-white">
                     Abrir ficha
                   </button>
                 </td>
@@ -943,7 +948,7 @@ function RecordsTable({
                 )}
                 {mode === "cancelamento" && (
                   <td className="min-w-64 px-3 py-3">
-                    <input className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none" value={record.cancellationReason || ""} onChange={(event) => onPatch(record.id, { cancellationReason: event.target.value })} />
+                    <input className="w-full rounded-2xl border border-white/70 bg-white/78 px-3 py-2 text-sm outline-none backdrop-blur-xl" value={record.cancellationReason || ""} onChange={(event) => onPatch(record.id, { cancellationReason: event.target.value })} />
                   </td>
                 )}
                 {mode !== "payment" && mode !== "cancelamento" && (
@@ -962,7 +967,7 @@ function RecordsTable({
                 )}
                 {mode !== "payment" && mode !== "cancelamento" && (
                   <td className="min-w-72 px-3 py-3">
-                    <input className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none" value={record.observation} onChange={(event) => onPatch(record.id, { observation: event.target.value })} />
+                    <input className="w-full rounded-2xl border border-white/70 bg-white/78 px-3 py-2 text-sm outline-none backdrop-blur-xl" value={record.observation} onChange={(event) => onPatch(record.id, { observation: event.target.value })} />
                   </td>
                 )}
               </tr>
@@ -985,7 +990,7 @@ function RecordsTable({
         </table>
       </div>
       {pagination && onPageChange && (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/60 pt-4">
           <span className="text-sm text-slate-500">
             Pagina {currentPage || 1} de {totalPages}
           </span>
@@ -994,7 +999,7 @@ function RecordsTable({
               type="button"
               onClick={() => onPageChange(Math.max(1, (currentPage || 1) - 1))}
               disabled={(currentPage || 1) <= 1 || loading}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-2xl border border-white/70 bg-white/76 px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Anterior
             </button>
@@ -1002,7 +1007,7 @@ function RecordsTable({
               type="button"
               onClick={() => onPageChange(Math.min(totalPages, (currentPage || 1) + 1))}
               disabled={(currentPage || 1) >= totalPages || !pagination.hasMore || loading}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-2xl border border-white/70 bg-white/76 px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Proxima
             </button>
@@ -1063,22 +1068,22 @@ function DashboardView({
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">
-        <select className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">
+      <div className="grid grid-cols-1 gap-3 rounded-[30px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(245,249,255,0.66))] p-4 shadow-[0_20px_48px_rgba(148,163,184,0.1)] backdrop-blur-xl md:grid-cols-4">
+        <select className="rounded-2xl border border-white/70 bg-white/78 px-3 py-3 text-sm text-slate-700 outline-none backdrop-blur-xl">
           <option>Filtrar por atendente</option>
           {uniqueValues(records, (record) => record.attendant).map((name) => <option key={name}>{name}</option>)}
         </select>
-        <select className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">
+        <select className="rounded-2xl border border-white/70 bg-white/78 px-3 py-3 text-sm text-slate-700 outline-none backdrop-blur-xl">
           <option>Periodo</option>
           <option>Hoje</option>
           <option>Ultimos 7 dias</option>
           <option>Este mes</option>
         </select>
-        <select className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">
+        <select className="rounded-2xl border border-white/70 bg-white/78 px-3 py-3 text-sm text-slate-700 outline-none backdrop-blur-xl">
           <option>Clinica</option>
           {uniqueValues(records, (record) => record.clinic).map((clinic) => <option key={clinic}>{clinic}</option>)}
         </select>
-        <button className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700">Aplicar filtros</button>
+        <button className="rounded-2xl bg-[linear-gradient(135deg,rgba(96,165,250,0.94),rgba(34,211,238,0.9),rgba(167,139,250,0.84))] px-4 py-3 text-sm font-semibold text-white shadow-[0_18px_32px_rgba(96,165,250,0.22)]">Aplicar filtros</button>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
@@ -1131,19 +1136,19 @@ function DashboardView({
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-        <div className="h-[520px] rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="h-[520px] rounded-[30px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(245,249,255,0.66))] p-5 shadow-[0_20px_48px_rgba(148,163,184,0.1)] backdrop-blur-xl">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-lg font-semibold text-slate-900">Fluxo operacional</h3>
+            <h3 className="text-lg font-semibold tracking-[-0.02em] text-slate-950">Fluxo operacional</h3>
             <span className="text-sm text-slate-500">Status separados por area</span>
           </div>
           <div className="grid h-[440px] grid-cols-1 gap-4 overflow-hidden md:grid-cols-2 xl:grid-cols-4">
             {kanban.map((column) => (
-              <div key={column.title} className="flex h-full min-h-0 flex-col rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div key={column.title} className="flex h-full min-h-0 flex-col rounded-[26px] border border-white/70 bg-white/56 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] backdrop-blur-xl">
                 <h4 className="mb-3 text-sm font-semibold text-slate-900">{column.title}</h4>
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
                   {column.records.length > 0 ? (
                     column.records.slice(0, 4).map((record) => (
-                      <div key={record.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div key={record.id} className="rounded-2xl border border-white/70 bg-white/76 p-4 shadow-[0_10px_28px_rgba(148,163,184,0.1)] backdrop-blur-xl">
                         <strong className="block text-sm text-slate-900">{record.patientName}</strong>
                         <p className="mt-2 text-xs leading-5 text-slate-500">
                           Status: {record.status}
@@ -1155,14 +1160,14 @@ function DashboardView({
                         <button
                           type="button"
                           onClick={() => onOpen(record)}
-                          className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                          className="mt-3 rounded-2xl border border-cyan-200/80 bg-[linear-gradient(135deg,rgba(239,246,255,0.98),rgba(236,254,255,0.9))] px-3 py-2 text-xs font-semibold text-cyan-700"
                         >
                           Abrir ficha
                         </button>
                       </div>
                     ))
                   ) : (
-                    <div className="rounded-xl border border-dashed border-slate-200 bg-white p-4 text-xs text-slate-500">
+                    <div className="rounded-2xl border border-dashed border-white/80 bg-white/74 p-4 text-xs text-slate-500">
                       Nenhum registro nesta area.
                     </div>
                   )}
@@ -1172,22 +1177,22 @@ function DashboardView({
           </div>
         </div>
 
-        <div className="h-[520px] rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="h-[520px] rounded-[30px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(245,249,255,0.66))] p-5 shadow-[0_20px_48px_rgba(148,163,184,0.1)] backdrop-blur-xl">
           <div className="mb-4 flex flex-col gap-3">
-            <h3 className="text-lg font-semibold text-slate-900">Ultimas movimentacoes</h3>
+            <h3 className="text-lg font-semibold tracking-[-0.02em] text-slate-950">Ultimas movimentacoes</h3>
             <label className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input
                 value={movementSearch}
                 onChange={(event) => setMovementSearch(event.target.value)}
                 placeholder="Buscar por nome"
-                className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-3 text-sm outline-none focus:border-blue-400"
+                className="w-full rounded-2xl border border-white/70 bg-white/78 py-3 pl-10 pr-3 text-sm text-slate-700 outline-none backdrop-blur-xl focus:border-cyan-200"
               />
             </label>
           </div>
           <div className="h-[440px] space-y-4 overflow-y-auto pr-1">
             {filteredMovements.map((record) => (
-              <div key={record.id} className="border-l-4 border-blue-500 pl-3">
+              <div key={record.id} className="rounded-r-2xl border-l-4 border-cyan-400 bg-white/58 py-2 pl-3 pr-3">
                 <strong className="block text-sm text-slate-900">
                   {record.attendant} atualizou {record.patientName} para &quot;{record.status}&quot;
                 </strong>
@@ -1195,7 +1200,7 @@ function DashboardView({
               </div>
             ))}
             {filteredMovements.length === 0 && (
-              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+              <div className="rounded-2xl border border-dashed border-white/80 bg-white/74 p-4 text-sm text-slate-500">
                 Nenhuma movimentacao encontrada para esse nome.
               </div>
             )}
@@ -1868,11 +1873,17 @@ export default function GestaoAgendamentosTestePage() {
   }
 
   return (
-    <div className="min-h-full overflow-x-hidden bg-slate-50">
+    <div className="min-h-full overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(191,219,254,0.26),transparent_28%),radial-gradient(circle_at_top_right,rgba(196,181,253,0.22),transparent_26%),radial-gradient(circle_at_bottom_center,rgba(153,246,228,0.18),transparent_28%),linear-gradient(180deg,#f8fbff_0%,#f4f8ff_48%,#f6fbff_100%)]">
       <div className="mx-auto flex min-w-0 max-w-450 flex-col gap-5">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="relative overflow-hidden rounded-[34px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(245,249,255,0.66))] p-5 shadow-[0_24px_60px_rgba(148,163,184,0.12)] backdrop-blur-2xl">
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute -left-10 top-0 h-40 w-40 rounded-full bg-cyan-200/30 blur-3xl" />
+            <div className="absolute right-0 top-0 h-44 w-44 rounded-full bg-violet-200/24 blur-3xl" />
+            <div className="absolute bottom-0 left-1/3 h-36 w-52 rounded-full bg-emerald-200/20 blur-3xl" />
+          </div>
+          <div className="relative z-10">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex gap-2 overflow-x-auto pb-1">
               {tabs.map((tab) => (
                 <TabButton
                   key={tab.key}
@@ -1886,20 +1897,21 @@ export default function GestaoAgendamentosTestePage() {
                   {tab.label}
                 </TabButton>
               ))}
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50">
-                <Download size={16} />
-                Exportar
-              </button>
-              <button
-                type="button"
-                onClick={() => router.push("/portal/agendamento/gestao-teste?tab=novo")}
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
-              >
-                <Plus size={16} />
-                Novo registro
-              </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button className="inline-flex items-center gap-2 rounded-2xl border border-white/70 bg-white/72 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-[0_8px_24px_rgba(148,163,184,0.08)] hover:bg-white">
+                  <Download size={16} />
+                  Exportar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/portal/agendamento/gestao-teste?tab=novo")}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[linear-gradient(135deg,rgba(96,165,250,0.94),rgba(34,211,238,0.9),rgba(167,139,250,0.84))] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_18px_32px_rgba(96,165,250,0.22)]"
+                >
+                  <Plus size={16} />
+                  Novo registro
+                </button>
+              </div>
             </div>
           </div>
         </div>

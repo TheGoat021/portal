@@ -653,16 +653,99 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
   }
 
   const iconBtn =
-    "h-10 w-10 rounded-full flex items-center justify-center text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition disabled:opacity-60 disabled:hover:bg-transparent"
+    "flex h-10 w-10 items-center justify-center rounded-full border border-white/60 bg-white/54 text-slate-600 shadow-[0_8px_24px_rgba(148,163,184,0.12)] backdrop-blur-xl transition hover:bg-white/80 active:scale-[0.98] disabled:opacity-60 disabled:hover:bg-white/54"
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-[#EFEAE2]">
-      <div className="h-14 px-3 flex items-center justify-between border-b bg-white">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.26),rgba(243,251,249,0.4))]">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-x-0 bottom-0 top-[24%] opacity-95">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_18%,rgba(255,255,255,0.96),rgba(255,255,255,0)_30%),radial-gradient(circle_at_22%_42%,rgba(52,211,153,0.34),rgba(255,255,255,0)_18%),radial-gradient(circle_at_56%_76%,rgba(45,212,191,0.22),rgba(255,255,255,0)_24%),radial-gradient(circle_at_84%_44%,rgba(56,189,248,0.2),rgba(255,255,255,0)_18%)]" />
+          <div className="absolute left-[12%] top-[14%] h-[26%] w-[26%] rounded-full bg-emerald-300/40 blur-[88px] mix-blend-screen" />
+          <div className="absolute left-[10%] bottom-[6%] h-[24%] w-[38%] rounded-full bg-teal-300/18 blur-[92px] mix-blend-screen" />
+          <div className="absolute right-[10%] bottom-[10%] h-[24%] w-[30%] rounded-full bg-sky-200/34 blur-[88px] mix-blend-screen" />
+          <div className="absolute left-[24%] bottom-[16%] h-[12%] w-[30%] rounded-full bg-emerald-400/18 blur-[70px]" />
+          <svg className="absolute bottom-[8%] left-0 h-[48%] w-full opacity-[0.99]" viewBox="0 0 1200 420" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <linearGradient id="baleysWaveFront" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="rgba(52,211,153,0.72)" />
+                <stop offset="25%" stopColor="rgba(45,212,191,0.68)" />
+                <stop offset="52%" stopColor="rgba(56,189,248,0.62)" />
+                <stop offset="76%" stopColor="rgba(134,239,172,0.54)" />
+                <stop offset="100%" stopColor="rgba(248,250,255,0.42)" />
+              </linearGradient>
+              <linearGradient id="baleysWaveFrontUnderside" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="rgba(5,150,105,0.32)" />
+                <stop offset="35%" stopColor="rgba(13,148,136,0.28)" />
+                <stop offset="64%" stopColor="rgba(2,132,199,0.2)" />
+                <stop offset="100%" stopColor="rgba(255,255,255,0.08)" />
+              </linearGradient>
+              <linearGradient id="baleysWaveMid" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="rgba(52,211,153,0.38)" />
+                <stop offset="35%" stopColor="rgba(45,212,191,0.34)" />
+                <stop offset="70%" stopColor="rgba(56,189,248,0.3)" />
+                <stop offset="100%" stopColor="rgba(167,243,208,0.22)" />
+              </linearGradient>
+              <linearGradient id="baleysWaveMidUnderside" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="rgba(16,185,129,0.18)" />
+                <stop offset="36%" stopColor="rgba(13,148,136,0.16)" />
+                <stop offset="72%" stopColor="rgba(2,132,199,0.12)" />
+                <stop offset="100%" stopColor="rgba(255,255,255,0.04)" />
+              </linearGradient>
+              <linearGradient id="baleysWaveBack" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="rgba(52,211,153,0.18)" />
+                <stop offset="40%" stopColor="rgba(45,212,191,0.16)" />
+                <stop offset="72%" stopColor="rgba(56,189,248,0.14)" />
+                <stop offset="100%" stopColor="rgba(167,243,208,0.1)" />
+              </linearGradient>
+              <linearGradient id="baleysWaveHighlight" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="rgba(255,255,255,0)" />
+                <stop offset="36%" stopColor="rgba(255,255,255,0.82)" />
+                <stop offset="62%" stopColor="rgba(255,255,255,0.36)" />
+                <stop offset="100%" stopColor="rgba(255,255,255,0.04)" />
+              </linearGradient>
+              <filter id="baleysShadow" x="-20%" y="-20%" width="140%" height="160%">
+                <feGaussianBlur in="SourceAlpha" stdDeviation="16" result="blur" />
+                <feOffset dy="18" result="offsetBlur" />
+                <feColorMatrix
+                  in="offsetBlur"
+                  type="matrix"
+                  values="0 0 0 0 0.14 0 0 0 0 0.64 0 0 0 0 0.58 0 0 0 0.16 0"
+                  result="shadow"
+                />
+                <feBlend in="SourceGraphic" in2="shadow" mode="normal" />
+              </filter>
+              <filter id="baleysInnerGlow" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="8" result="coloredBlur" />
+                <feMerge>
+                  <feMergeNode in="coloredBlur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+            <g opacity="0.84">
+              <path d="M-42 334C58 340 122 302 212 302C326 302 382 388 494 388C626 388 656 188 814 188C940 188 1020 250 1238 272L1238 420L-42 420Z" fill="url(#baleysWaveBack)" />
+            </g>
+            <g filter="url(#baleysInnerGlow)" opacity="0.92">
+              <path d="M-28 314C74 322 138 266 222 266C324 266 366 354 478 354C620 354 654 196 812 196C944 196 1018 238 1230 248L1230 420L-28 420Z" fill="url(#baleysWaveMidUnderside)" />
+              <path d="M-24 300C76 308 140 256 220 256C320 256 358 352 476 352C620 352 650 186 810 186C944 186 1016 236 1230 244L1230 420L-24 420Z" fill="url(#baleysWaveMid)" />
+            </g>
+            <g filter="url(#baleysShadow)">
+              <path d="M-14 302C92 302 152 232 238 232C344 232 384 332 500 332C642 332 672 136 826 136C956 136 1022 220 1228 226L1228 420L-14 420Z" fill="url(#baleysWaveFrontUnderside)" opacity="0.9" />
+              <path d="M-18 284C84 284 144 220 232 220C336 220 364 330 486 330C640 330 660 114 822 114C958 114 1020 214 1226 220L1226 420L-18 420Z" fill="url(#baleysWaveFront)" />
+            </g>
+            <path d="M-6 270C96 270 150 210 240 210C342 210 370 320 492 320C644 320 664 102 824 102C958 102 1024 206 1212 212" fill="none" stroke="url(#baleysWaveHighlight)" strokeWidth="10" strokeLinecap="round" />
+            <path d="M16 286C114 286 164 238 246 238C338 238 376 318 490 318C630 318 666 124 818 124C944 124 1016 208 1186 214" fill="none" stroke="rgba(255,255,255,0.28)" strokeWidth="4" strokeLinecap="round" />
+          </svg>
+          <div className="absolute bottom-[9%] left-[8%] h-32 w-80 opacity-40 [background-image:radial-gradient(circle,rgba(255,255,255,0.42)_1px,transparent_1.5px)] [background-size:10px_10px] [mask-image:radial-gradient(circle_at_18%_55%,rgba(0,0,0,1),rgba(0,0,0,0.42),transparent_78%)]" />
+        </div>
+      </div>
+
+      <div className="relative z-10 flex h-16 items-center justify-between border-b border-white/60 bg-white/36 px-4 backdrop-blur-xl">
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-gray-900 truncate">
+          <div className="truncate text-sm font-semibold text-slate-900">
             {selectedConversationId ? "Conversa selecionada" : "Selecione uma conversa"}
           </div>
-          <div className="text-xs text-gray-500 truncate">
+          <div className="truncate text-xs text-slate-500">
             {selectedConversationId ?? ""}
           </div>
         </div>
@@ -690,11 +773,11 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-2">
+      <div className="relative z-10 flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-3">
         {!selectedConversationId ? (
           <div className="h-full flex items-center justify-center">
-            <div className="text-center text-gray-600">
-              <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-white/70 flex items-center justify-center border border-black/5">
+            <div className="text-center text-slate-600">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-white/70 bg-white/70 shadow-[0_10px_24px_rgba(148,163,184,0.14)]">
                 <MessageSquare size={22} className="opacity-70" />
               </div>
               <div className="font-medium">Selecione uma conversa</div>
@@ -721,20 +804,22 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
                 >
                   <div className="max-w-[75%]">
                     {outbound && msg.agentName && (
-                      <div className="px-1 mb-1 text-xs font-semibold text-gray-700">
+                      <div className="mb-1 px-1 text-xs font-semibold text-slate-700">
                         {msg.agentName}:
                       </div>
                     )}
 
                     <div
-                      className={`rounded-2xl px-3 py-2 shadow-sm border border-black/5 ${
-                        outbound ? "bg-[#D9FDD3]" : "bg-white"
+                      className={`rounded-[24px] border px-3.5 py-2.5 shadow-[0_12px_32px_rgba(148,163,184,0.12)] backdrop-blur-xl ${
+                        outbound
+                          ? "border-emerald-200/70 bg-[linear-gradient(135deg,rgba(220,252,231,0.92),rgba(207,250,254,0.8))]"
+                          : "border-white/70 bg-white/70"
                       }`}
                     >
                       {renderQuotedMessage(msg)}
                       {renderMessageContent(msg)}
 
-                      <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-gray-500 leading-none">
+                      <div className="mt-1 flex items-center justify-end gap-1 text-[10px] leading-none text-slate-500">
                         <span>{formatTime(msg.createdAt)}</span>
                         {renderStatusIcon(msg)}
                       </div>
@@ -749,7 +834,7 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
         )}
       </div>
 
-      <div className="border-t bg-white px-3 py-2">
+      <div className="relative z-10 border-t border-white/60 bg-white/34 px-3 py-2 backdrop-blur-xl">
         {!isRecording ? (
           <div className="flex items-center gap-2">
             <button
@@ -774,7 +859,7 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
 
             <div className="flex-1">
               <textarea
-                className="w-full min-h-[40px] max-h-32 px-4 py-2 rounded-2xl bg-gray-100 border border-transparent focus:border-gray-200 focus:bg-white outline-none disabled:opacity-60 resize-none overflow-y-auto"
+                className="min-h-[42px] max-h-32 w-full resize-none overflow-y-auto rounded-2xl border border-white/70 bg-white/70 px-4 py-2.5 text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-cyan-200 focus:bg-white disabled:opacity-60"
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 placeholder={
@@ -807,7 +892,7 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
               <button
                 type="button"
                 onClick={sendMessage}
-                className="h-10 w-10 rounded-full flex items-center justify-center bg-green-500 text-white hover:bg-green-600 active:bg-green-700 transition disabled:opacity-60"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-[linear-gradient(135deg,rgba(16,185,129,0.94),rgba(34,211,238,0.92))] text-white shadow-[0_14px_28px_rgba(45,212,191,0.28)] transition hover:scale-[1.02] disabled:opacity-60"
                 title="Enviar"
                 disabled={!selectedConversationId || sendingMessage}
               >
@@ -850,7 +935,7 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
               <Trash2 size={20} className="text-red-500" />
             </button>
 
-            <div className="flex-1 h-10 rounded-full bg-gray-100 px-4 flex items-center gap-3 border border-black/5">
+            <div className="flex h-10 flex-1 items-center gap-3 rounded-full border border-white/70 bg-white/72 px-4 shadow-[0_8px_24px_rgba(148,163,184,0.12)]">
               <div className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
               <div className="text-sm font-medium text-gray-700 tabular-nums">
                 {formatRecordTime(recordTime)}
@@ -868,7 +953,7 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
             <button
               type="button"
               onClick={stopRecording}
-              className="h-10 w-10 rounded-full flex items-center justify-center bg-green-500 text-white hover:bg-green-600 active:bg-green-700 transition disabled:opacity-60"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-[linear-gradient(135deg,rgba(16,185,129,0.94),rgba(34,211,238,0.92))] text-white shadow-[0_14px_28px_rgba(45,212,191,0.28)] transition hover:scale-[1.02] disabled:opacity-60"
               title="Enviar áudio"
               disabled={sendingMedia}
             >
@@ -879,18 +964,18 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
       </div>
 
       {transferOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="w-[520px] max-w-[96vw] bg-white rounded-2xl shadow-xl border border-black/5 overflow-hidden">
-            <div className="px-5 py-4 border-b flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/24 p-4 backdrop-blur-sm">
+          <div className="w-[520px] max-w-[96vw] overflow-hidden rounded-[28px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(244,251,250,0.86))] shadow-[0_32px_90px_rgba(148,163,184,0.18)]">
+            <div className="flex items-center justify-between border-b border-white/60 px-5 py-4">
               <div>
-                <div className="text-sm font-semibold">Transferir conversa</div>
-                <div className="text-xs text-gray-500">
+                <div className="text-sm font-semibold text-slate-900">Transferir conversa</div>
+                <div className="text-xs text-slate-500">
                   Selecione o atendente que vai assumir
                 </div>
               </div>
 
               <button
-                className="h-9 w-9 rounded-full hover:bg-gray-100 flex items-center justify-center"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/60 bg-white/60 hover:bg-white/84"
                 onClick={() => setTransferOpen(false)}
                 title="Fechar"
               >
@@ -898,13 +983,13 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
               </button>
             </div>
 
-            <div className="p-5 space-y-3">
-              <label className="text-xs text-gray-500">Atendente</label>
+            <div className="space-y-3 p-5">
+              <label className="text-xs text-slate-500">Atendente</label>
 
               <select
                 value={transferTo}
                 onChange={(e) => setTransferTo(e.target.value)}
-                className="w-full h-11 px-4 rounded-xl border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
+                className="h-11 w-full rounded-2xl border border-white/70 bg-white/76 px-4 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                 disabled={agentsLoading || transferSaving}
               >
                 <option value="">
@@ -919,19 +1004,19 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
               </select>
 
               {!agentsLoading && agents.length === 0 && (
-                <div className="text-xs text-gray-500">Nenhum atendente encontrado.</div>
+                <div className="text-xs text-slate-500">Nenhum atendente encontrado.</div>
               )}
 
               {!!transferTo && (
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-slate-500">
                   Selecionado:{" "}
-                  <span className="font-medium text-gray-700">{selectedAgentLabel}</span>
+                  <span className="font-medium text-slate-700">{selectedAgentLabel}</span>
                 </div>
               )}
 
               <div className="flex justify-end gap-2 pt-2">
                 <button
-                  className="px-4 py-2 rounded-xl border hover:bg-gray-50"
+                  className="rounded-2xl border border-white/70 bg-white/72 px-4 py-2 text-slate-700 hover:bg-white"
                   onClick={() => setTransferOpen(false)}
                   disabled={transferSaving}
                 >
@@ -939,7 +1024,7 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
                 </button>
 
                 <button
-                  className="px-4 py-2 rounded-xl bg-gray-900 text-white hover:bg-black disabled:opacity-60"
+                  className="rounded-2xl bg-[linear-gradient(135deg,rgba(16,185,129,0.94),rgba(34,211,238,0.92))] px-4 py-2 text-white shadow-[0_14px_28px_rgba(45,212,191,0.28)] disabled:opacity-60"
                   onClick={confirmTransfer}
                   disabled={!transferTo || transferSaving}
                 >

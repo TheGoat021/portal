@@ -16,6 +16,22 @@ interface Origem {
   plataforma?: string | null
 }
 
+type ConversationRecord = {
+  id?: string | number | null
+  name?: string | null
+  phone?: string | null
+  email?: string | null
+}
+
+type LeadRecord = {
+  id?: string | number | null
+  conversation_id?: string | number | null
+  status?: string | null
+  origem?: {
+    id?: string | number | null
+  } | null
+}
+
 interface Client {
   id: string
   leadId: string | null
@@ -103,19 +119,19 @@ export default function ClientDetails({ selectedConversationId }: Props) {
           return
         }
 
-        const conversations: any[] = await convRes.json()
-        const leads: any[] = await leadsRes.json()
+        const conversations: ConversationRecord[] = await convRes.json()
+        const leads: LeadRecord[] = await leadsRes.json()
         const origensData: Origem[] = origensRes.ok ? await origensRes.json() : []
 
         setOrigens(origensData || [])
 
-        const conversation = conversations.find((c: any) => String(c.id) === String(selectedConversationId))
+        const conversation = conversations.find((c) => String(c.id) === String(selectedConversationId))
         if (!conversation) {
           setClient(null)
           return
         }
 
-        const relatedLead = leads.find((lead: any) => String(lead.conversation_id) === String(selectedConversationId))
+        const relatedLead = leads.find((lead) => String(lead.conversation_id) === String(selectedConversationId))
 
         setClient({
           id: String(conversation.id),
@@ -216,15 +232,15 @@ export default function ClientDetails({ selectedConversationId }: Props) {
   }
 
   if (!selectedConversationId) {
-    return <div className="h-full bg-white flex items-center justify-center text-gray-400">Nenhum cliente selecionado</div>
+    return <div className="flex h-full items-center justify-center bg-transparent text-slate-400">Nenhum cliente selecionado</div>
   }
 
   if (loading) {
-    return <div className="h-full bg-white flex items-center justify-center text-gray-400">Carregando...</div>
+    return <div className="flex h-full items-center justify-center bg-transparent text-slate-400">Carregando...</div>
   }
 
   if (!client) {
-    return <div className="h-full bg-white flex items-center justify-center text-gray-400">Cliente nao encontrado</div>
+    return <div className="flex h-full items-center justify-center bg-transparent text-slate-400">Cliente nao encontrado</div>
   }
 
   const displayName = (client.name && client.name.trim()) || "Sem nome"
@@ -233,26 +249,26 @@ export default function ClientDetails({ selectedConversationId }: Props) {
   const isLost = status === "Perdido"
 
   return (
-    <div className="h-full min-h-0 bg-[#F9FAFB] flex flex-col">
-      <div className="p-4 border-b bg-white">
+    <div className="flex h-full min-h-0 flex-col bg-transparent">
+      <div className="border-b border-white/60 bg-white/36 p-4 backdrop-blur-xl">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="h-9 w-9 rounded-full bg-gray-100 border flex items-center justify-center text-sm font-semibold text-gray-700 shrink-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/70 bg-[linear-gradient(135deg,rgba(236,253,245,0.96),rgba(224,242,254,0.94))] text-sm font-semibold text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
               {(displayName[0] || "C").toUpperCase()}
             </div>
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-gray-900 truncate">{displayName}</h3>
+              <h3 className="truncate text-sm font-semibold text-slate-900">{displayName}</h3>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
                 <span className={`text-[11px] px-2 py-0.5 rounded-full border ${statusBadgeClass(status)}`}>{status}</span>
-                {savingStatus && <span className="text-[11px] text-gray-400">Salvando status...</span>}
-                {savingOrigem && <span className="text-[11px] text-gray-400">Salvando origem...</span>}
+                {savingStatus && <span className="text-[11px] text-slate-400">Salvando status...</span>}
+                {savingOrigem && <span className="text-[11px] text-slate-400">Salvando origem...</span>}
               </div>
             </div>
           </div>
 
           <button
             onClick={copyPhone}
-            className="h-8 w-8 rounded-lg border hover:bg-gray-50 flex items-center justify-center shrink-0"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-600 shadow-[0_8px_24px_rgba(148,163,184,0.12)] hover:bg-white"
             title="Copiar telefone"
           >
             <Copy size={14} />
@@ -260,18 +276,18 @@ export default function ClientDetails({ selectedConversationId }: Props) {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
-        <div className="rounded-xl border bg-white p-3">
-          <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-2">Pipeline</div>
+      <div className="flex-1 min-h-0 space-y-3 overflow-y-auto p-4">
+        <div className="rounded-[24px] border border-white/70 bg-white/62 p-4 shadow-[0_14px_28px_rgba(148,163,184,0.1)] backdrop-blur-xl">
+          <div className="mb-2 text-[11px] uppercase tracking-[0.24em] text-slate-500">Pipeline</div>
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
             {pipelineSteps.map((step, index) => {
               const isActive = status === step
               const isCompleted = !isLost && currentStepIndex > index
-              const stepClass = isActive
-                ? "border-gray-900 bg-gray-900 text-white"
+                  const stepClass = isActive
+                ? "border-emerald-400 bg-[linear-gradient(135deg,rgba(16,185,129,0.92),rgba(34,211,238,0.88))] text-white shadow-[0_10px_24px_rgba(45,212,191,0.22)]"
                 : isCompleted
-                  ? "border-green-200 bg-green-50 text-green-700"
-                  : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                  ? "border-emerald-200 bg-[linear-gradient(135deg,rgba(236,253,245,0.96),rgba(236,254,255,0.88))] text-emerald-700"
+                  : "border-white/70 bg-white/76 text-slate-600 hover:bg-white"
 
               return (
                 <div key={step} className="flex items-center gap-1.5 shrink-0">
@@ -286,7 +302,7 @@ export default function ClientDetails({ selectedConversationId }: Props) {
                     {step}
                   </button>
                   {index < pipelineSteps.length - 1 && (
-                    <div className={`w-4 h-px ${!isLost && currentStepIndex > index ? "bg-green-300" : "bg-gray-200"}`} />
+                    <div className={`h-px w-4 ${!isLost && currentStepIndex > index ? "bg-emerald-300" : "bg-slate-200"}`} />
                   )}
                 </div>
               )
@@ -300,7 +316,7 @@ export default function ClientDetails({ selectedConversationId }: Props) {
               className={`text-[11px] px-2.5 py-1.5 rounded-full border ${
                 status === "Perdido"
                   ? "bg-red-600 text-white border-red-600"
-                  : "bg-white text-red-600 border-red-200 hover:bg-red-50"
+                  : "bg-white/78 text-red-600 border-red-200 hover:bg-red-50"
               } ${savingStatus || !client.leadId ? "opacity-70 cursor-not-allowed" : ""}`}
             >
               Marcar como perdido
@@ -310,7 +326,7 @@ export default function ClientDetails({ selectedConversationId }: Props) {
               <button
                 onClick={() => handleChangeStatus("Novo")}
                 disabled={savingStatus || !client.leadId}
-                className={`text-[11px] px-2.5 py-1.5 rounded-full border bg-white text-gray-700 border-gray-200 hover:bg-gray-50 ${
+                className={`text-[11px] px-2.5 py-1.5 rounded-full border bg-white/78 text-slate-700 border-white/70 hover:bg-white ${
                   savingStatus || !client.leadId ? "opacity-70 cursor-not-allowed" : ""
                 }`}
               >
@@ -320,14 +336,14 @@ export default function ClientDetails({ selectedConversationId }: Props) {
           </div>
         </div>
 
-        <div className="rounded-xl border bg-white p-3 space-y-3">
-          <div className="text-[11px] uppercase tracking-wide text-gray-500">Dados do cliente</div>
+        <div className="space-y-3 rounded-[24px] border border-white/70 bg-white/62 p-4 shadow-[0_14px_28px_rgba(148,163,184,0.1)] backdrop-blur-xl">
+          <div className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Dados do cliente</div>
 
           <div className="grid grid-cols-1 gap-3">
             <div>
-              <label className="text-[11px] text-gray-500 block mb-1">Nome</label>
+              <label className="mb-1 block text-[11px] text-slate-500">Nome</label>
               <input
-                className="w-full h-9 border rounded-lg px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-200"
+                className="h-10 w-full rounded-2xl border border-white/70 bg-white/78 px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                 value={client.name || ""}
                 onChange={(e) => setClient({ ...client, name: e.target.value })}
                 placeholder="Nome do cliente"
@@ -335,12 +351,12 @@ export default function ClientDetails({ selectedConversationId }: Props) {
             </div>
 
             <div>
-              <label className="text-[11px] text-gray-500 block mb-1">Telefone</label>
+              <label className="mb-1 block text-[11px] text-slate-500">Telefone</label>
               <div className="flex gap-2">
-                <input className="w-full h-9 border rounded-lg px-2.5 text-sm bg-gray-50" value={client.phone} readOnly />
+                <input className="h-10 w-full rounded-2xl border border-white/70 bg-white/72 px-3 text-sm text-slate-700" value={client.phone} readOnly />
                 <button
                   onClick={copyPhone}
-                  className="h-9 w-9 border rounded-lg hover:bg-gray-50 flex items-center justify-center"
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/70 bg-white/72 text-slate-600 hover:bg-white"
                   title="Copiar telefone"
                 >
                   <Copy size={14} />
@@ -349,9 +365,9 @@ export default function ClientDetails({ selectedConversationId }: Props) {
             </div>
 
             <div>
-              <label className="text-[11px] text-gray-500 block mb-1">Email</label>
+              <label className="mb-1 block text-[11px] text-slate-500">Email</label>
               <input
-                className="w-full h-9 border rounded-lg px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-200"
+                className="h-10 w-full rounded-2xl border border-white/70 bg-white/78 px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                 value={client.email || ""}
                 onChange={(e) => setClient({ ...client, email: e.target.value })}
                 placeholder="cliente@empresa.com"
@@ -359,9 +375,9 @@ export default function ClientDetails({ selectedConversationId }: Props) {
             </div>
 
             <div>
-              <label className="text-[11px] text-gray-500 block mb-1">Origem do lead</label>
+              <label className="mb-1 block text-[11px] text-slate-500">Origem do lead</label>
               <select
-                className="w-full h-9 border rounded-lg px-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-200 disabled:bg-gray-50"
+                className="h-10 w-full rounded-2xl border border-white/70 bg-white/78 px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:bg-white/60"
                 value={client.origemId || ""}
                 onChange={(e) => handleChangeOrigem(e.target.value)}
                 disabled={!client.leadId || savingOrigem}
@@ -378,7 +394,7 @@ export default function ClientDetails({ selectedConversationId }: Props) {
           </div>
 
           {!client.leadId && (
-            <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2">
+            <p className="rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] text-amber-600">
               Lead ainda nao sincronizado.
             </p>
           )}
@@ -386,7 +402,7 @@ export default function ClientDetails({ selectedConversationId }: Props) {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="w-full h-9 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition disabled:opacity-70"
+            className="h-10 w-full rounded-2xl bg-[linear-gradient(135deg,rgba(16,185,129,0.94),rgba(34,211,238,0.92))] text-sm text-white shadow-[0_14px_28px_rgba(45,212,191,0.24)] transition hover:scale-[1.01] disabled:opacity-70"
           >
             {saving ? "Salvando..." : "Salvar alteracoes"}
           </button>

@@ -232,9 +232,36 @@ export default function ConversationsList({
     roleUpper === "ADMINISTRACAO" ||
     roleUpper === "ADMIN"
 
-  const [lastSeenAtById, setLastSeenAtById] = useState<Record<string, number>>({})
-  const selectedRef = useRef<string | null>(null)
   const seenStorageKey = `conversations-last-seen:${currentUser.id}`
+  const [lastSeenAtById, setLastSeenAtById] = useState<Record<string, number>>(() => {
+    if (typeof window === "undefined") return {}
+
+    try {
+      const raw = localStorage.getItem(seenStorageKey)
+      if (!raw) return {}
+
+      const parsed = JSON.parse(raw) as Record<string, number>
+      return parsed && typeof parsed === "object" ? parsed : {}
+    } catch {
+      return {}
+    }
+  })
+  const selectedRef = useRef<string | null>(null)
+
+  function setSeenAt(conversationId: string, ts: number) {
+    if (!conversationId || !ts) return
+
+    setLastSeenAtById((prev) => {
+      const current = prev[conversationId] ?? 0
+      if (ts <= current) return prev
+
+      const next = { ...prev, [conversationId]: ts }
+      try {
+        localStorage.setItem(seenStorageKey, JSON.stringify(next))
+      } catch {}
+      return next
+    })
+  }
 
   const fetchConversations = async () => {
     try {
@@ -278,38 +305,6 @@ export default function ConversationsList({
     const interval = setInterval(fetchConversations, 3000)
     return () => clearInterval(interval)
   }, [currentUser.id, currentUser.role])
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(seenStorageKey)
-      if (!raw) {
-        setLastSeenAtById({})
-        return
-      }
-
-      const parsed = JSON.parse(raw) as Record<string, number>
-      if (parsed && typeof parsed === "object") {
-        setLastSeenAtById(parsed)
-      }
-    } catch {
-      setLastSeenAtById({})
-    }
-  }, [seenStorageKey])
-
-  const setSeenAt = (conversationId: string, ts: number) => {
-    if (!conversationId || !ts) return
-
-    setLastSeenAtById((prev) => {
-      const current = prev[conversationId] ?? 0
-      if (ts <= current) return prev
-
-      const next = { ...prev, [conversationId]: ts }
-      try {
-        localStorage.setItem(seenStorageKey, JSON.stringify(next))
-      } catch {}
-      return next
-    })
-  }
 
   useEffect(() => {
     selectedRef.current = selectedConversationId
@@ -426,18 +421,22 @@ export default function ConversationsList({
   }
 
   return (
-    <div className="relative min-h-0">
-      <div className="p-3 border-b border-gray-100 bg-white sticky top-0 z-10">
+    <div className="relative min-h-0 bg-transparent">
+      <div className="sticky top-0 z-10 border-b border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(247,252,251,0.72))] p-4 backdrop-blur-xl">
+        <div className="mb-3">
+          <div className="text-[22px] font-semibold tracking-[-0.03em] text-slate-950">WhatsApp Baleys</div>
+          <div className="mt-1 text-xs text-slate-500">Conversas ativas com identidade mint</div>
+        </div>
         <div className="flex items-center gap-2">
           <input
             placeholder="Buscar por nome, telefone ou mensagem..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white outline-none"
+            className="h-11 w-full rounded-2xl border border-white/70 bg-white/70 px-4 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-cyan-200 focus:bg-white focus:shadow-[0_8px_24px_rgba(34,211,238,0.12)]"
           />
           <button
             onClick={() => setShowModal(true)}
-            className="w-10 h-10 rounded-xl bg-green-500 text-white hover:bg-green-600 transition flex items-center justify-center"
+            className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/70 bg-[linear-gradient(135deg,rgba(16,185,129,0.94),rgba(34,211,238,0.92))] text-white shadow-[0_14px_28px_rgba(45,212,191,0.28)] transition hover:scale-[1.02]"
             title="Nova conversa"
           >
             +
@@ -449,10 +448,10 @@ export default function ConversationsList({
             type="button"
             onClick={() => setServiceFilter("open")}
             className={[
-              "h-10 rounded-xl border flex items-center justify-center gap-1.5 transition",
+              "flex h-10 items-center justify-center gap-1.5 rounded-2xl border text-sm transition",
               serviceFilter === "open"
-                ? "bg-green-50 border-green-300 text-green-700"
-                : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                ? "border-emerald-200 bg-[linear-gradient(135deg,rgba(236,253,245,0.96),rgba(236,254,255,0.86))] text-emerald-700 shadow-[0_10px_24px_rgba(16,185,129,0.12)]"
+                : "border-white/70 bg-white/68 text-slate-600 hover:bg-white/82"
             ].join(" ")}
             title="Em atendimento"
           >
@@ -464,10 +463,10 @@ export default function ConversationsList({
             type="button"
             onClick={() => setServiceFilter("closed")}
             className={[
-              "h-10 rounded-xl border flex items-center justify-center gap-1.5 transition",
+              "flex h-10 items-center justify-center gap-1.5 rounded-2xl border text-sm transition",
               serviceFilter === "closed"
-                ? "bg-amber-50 border-amber-300 text-amber-700"
-                : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                ? "border-cyan-200 bg-[linear-gradient(135deg,rgba(239,246,255,0.98),rgba(236,254,255,0.88))] text-cyan-700 shadow-[0_10px_24px_rgba(34,211,238,0.12)]"
+                : "border-white/70 bg-white/68 text-slate-600 hover:bg-white/82"
             ].join(" ")}
             title="Arquivados/finalizados"
           >
@@ -479,7 +478,7 @@ export default function ConversationsList({
 
       <div className="min-h-0">
         {filteredConversations.length === 0 ? (
-          <div className="p-6 text-sm text-gray-500">
+          <div className="p-6 text-sm text-slate-500">
             {serviceFilter === "open"
               ? "Nenhum atendimento em andamento."
               : "Nenhum atendimento arquivado."}
@@ -507,12 +506,14 @@ export default function ConversationsList({
                 key={conv.id}
                 onClick={() => handleSelectConversation(conv)}
                 className={[
-                  "w-full text-left px-4 py-3 border-b border-gray-100 transition",
-                  isSelected ? "bg-gray-50" : "hover:bg-gray-50"
+                  "mx-3 my-2 w-[calc(100%-1.5rem)] rounded-[24px] border px-4 py-3 text-left transition",
+                  isSelected
+                    ? "border-emerald-200 bg-[linear-gradient(135deg,rgba(236,253,245,0.95),rgba(236,254,255,0.88))] shadow-[0_14px_30px_rgba(16,185,129,0.12)]"
+                    : "border-white/70 bg-white/62 hover:bg-white/82 hover:shadow-[0_14px_28px_rgba(148,163,184,0.12)]"
                 ].join(" ")}
               >
                 <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-sm font-semibold text-gray-700 shrink-0">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/70 bg-[linear-gradient(135deg,rgba(236,253,245,0.96),rgba(224,242,254,0.94))] text-sm font-semibold text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
                     {initials}
                   </div>
 
@@ -522,18 +523,18 @@ export default function ConversationsList({
                         <div
                           className={[
                             "truncate",
-                            hasNew ? "font-bold text-gray-900" : "font-semibold text-gray-900"
+                            hasNew ? "font-bold text-slate-950" : "font-semibold text-slate-900"
                           ].join(" ")}
                         >
                           {title}
                         </div>
 
                         {subtitle ? (
-                          <div className="text-xs text-gray-500 truncate">{subtitle}</div>
+                          <div className="truncate text-xs text-slate-500">{subtitle}</div>
                         ) : null}
 
                         {conv.agentName ? (
-                          <div className="text-[11px] text-gray-400 truncate mt-0.5">
+                          <div className="mt-0.5 truncate text-[11px] text-slate-400">
                             Atendente: {conv.agentName}
                           </div>
                         ) : null}
@@ -544,7 +545,7 @@ export default function ConversationsList({
                           <div
                             className={[
                               "text-xs",
-                              hasNew ? "text-gray-800 font-semibold" : "text-gray-400"
+                              hasNew ? "font-semibold text-slate-800" : "text-slate-400"
                             ].join(" ")}
                           >
                             {time}
@@ -552,14 +553,14 @@ export default function ConversationsList({
 
                           {hasNew ? (
                             <span
-                              className="w-2.5 h-2.5 rounded-full bg-green-500"
+                              className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_6px_rgba(16,185,129,0.12)]"
                               title="Nova mensagem"
                             />
                           ) : null}
                         </div>
 
                         {isLockedByOther ? (
-                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-100">
+                          <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] text-rose-600">
                             Em atendimento
                           </span>
                         ) : null}
@@ -568,8 +569,8 @@ export default function ConversationsList({
 
                     <div
                       className={[
-                        "text-sm truncate mt-1 flex items-center gap-1.5",
-                        hasNew ? "text-gray-900 font-semibold" : "text-gray-600"
+                        "mt-1 flex items-center gap-1.5 truncate text-sm",
+                        hasNew ? "font-semibold text-slate-900" : "text-slate-600"
                       ].join(" ")}
                     >
                       {preview.icon}
@@ -584,34 +585,34 @@ export default function ConversationsList({
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-2xl w-[420px] max-w-[92vw] space-y-4 shadow-xl border border-black/5">
-            <h2 className="text-lg font-semibold text-gray-900">Nova conversa</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/24 p-4 backdrop-blur-sm">
+          <div className="w-[420px] max-w-[92vw] space-y-4 rounded-[28px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(244,251,250,0.86))] p-6 shadow-[0_32px_90px_rgba(148,163,184,0.18)]">
+            <h2 className="text-lg font-semibold tracking-[-0.02em] text-slate-950">Nova conversa</h2>
 
             <input
               placeholder="Telefone (5511999999999)"
               value={newPhone}
               onChange={(e) => setNewPhone(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 outline-none bg-gray-50 focus:bg-white"
+              className="w-full rounded-2xl border border-white/70 bg-white/72 px-4 py-3 outline-none transition focus:border-cyan-200 focus:bg-white"
             />
 
             <textarea
               placeholder="Mensagem inicial..."
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 outline-none bg-gray-50 focus:bg-white min-h-[96px]"
+              className="min-h-[96px] w-full rounded-2xl border border-white/70 bg-white/72 px-4 py-3 outline-none transition focus:border-cyan-200 focus:bg-white"
             />
 
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setShowModal(false)}
-                className="px-4 py-2 border border-gray-200 rounded-xl hover:bg-gray-50"
+                className="rounded-2xl border border-white/70 bg-white/72 px-4 py-2.5 text-slate-700 hover:bg-white"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleCreateConversation}
-                className="px-4 py-2 bg-green-500 text-white rounded-xl hover:bg-green-600"
+                className="rounded-2xl bg-[linear-gradient(135deg,rgba(16,185,129,0.94),rgba(34,211,238,0.92))] px-4 py-2.5 text-white shadow-[0_14px_28px_rgba(45,212,191,0.28)]"
               >
                 Enviar
               </button>
