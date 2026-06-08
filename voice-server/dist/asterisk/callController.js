@@ -1,5 +1,5 @@
 import { ariClient } from "./ariClient.js";
-import { assignAgent, createCallEvent, createInboundCall, finalizeCall, findCallByExternalId, findCallByUniqueId, getCallById, setCallAnswered, setCallQueued } from "../services/callService.js";
+import { assignAgent, createCallEvent, createInboundCall, createOutboundCall, finalizeCall, findCallByExternalId, findCallByUniqueId, getCallById, setCallAnswered, setCallQueued } from "../services/callService.js";
 import { updateAgentStatus } from "../services/agentService.js";
 import { handleRecordingFinished } from "./recordingController.js";
 import { logger } from "../utils/logger.js";
@@ -19,6 +19,19 @@ async function resolveCallByEvent(payload) {
         return byUniqueId;
     return findCallByExternalId(String(payload.channelId ?? payload.channel_id ?? payload.Channel ?? ""));
 }
+async function resolveExistingCall(payload) {
+    const uniqueId = firstString(payload.uniqueId, payload.unique_id, payload.Uniqueid);
+    if (uniqueId) {
+        const byUniqueId = await findCallByUniqueId(uniqueId);
+        if (byUniqueId)
+            return byUniqueId;
+    }
+    const externalCallId = firstString(payload.channelId, payload.channel_id, payload.Channel);
+    if (externalCallId) {
+        return findCallByExternalId(externalCallId);
+    }
+    return null;
+}
 export async function handleAsteriskEvent(eventType, payload) {
     const caller = payload.caller;
     switch (eventType) {
@@ -35,6 +48,20 @@ export async function handleAsteriskEvent(eventType, payload) {
                 queueId: payload.queueId ? String(payload.queueId) : null,
                 startedAt: payload.startedAt ? String(payload.startedAt) : null
             });
+        case "call.outbound": {
+            const existing = await resolveExistingCall(payload);
+            if (existing?.id)
+                return existing;
+            return createOutboundCall({
+                externalCallId: firstString(payload.channelId, payload.channel_id, payload.Channel),
+                uniqueId: firstString(payload.uniqueId, payload.unique_id, payload.Uniqueid),
+                linkedId: firstString(payload.linkedId, payload.linked_id, payload.Linkedid),
+                phone: firstString(payload.phone, payload.targetNumber, payload.target_number, payload.calledNumber, payload.called_number, payload.Exten),
+                dialedExtension: firstString(payload.dialedExtension, payload.dialed_extension, payload.callerExtension, payload.caller_extension, payload.CallerIDNum),
+                agentId: payload.agentId ? String(payload.agentId) : null,
+                startedAt: payload.startedAt ? String(payload.startedAt) : null
+            });
+        }
         case "QueueCallerJoin":
         case "call.queued": {
             const call = await resolveCallByEvent(payload);

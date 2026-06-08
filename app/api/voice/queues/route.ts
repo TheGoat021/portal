@@ -6,6 +6,8 @@ type QueuePayload = {
   slug?: string
   description?: string | null
   inbound_number?: string | null
+  greeting_audio_url?: string | null
+  greeting_audio_name?: string | null
   strategy?: string
   max_wait_seconds?: number
   active?: boolean
@@ -35,6 +37,12 @@ function normalizeQueuePayload(body: QueuePayload) {
   const inboundNumber = body.inbound_number
     ? String(body.inbound_number).replace(/\D/g, "").trim()
     : null
+  const greetingAudioUrl = body.greeting_audio_url
+    ? String(body.greeting_audio_url).trim()
+    : null
+  const greetingAudioName = body.greeting_audio_name
+    ? String(body.greeting_audio_name).trim()
+    : null
   const active = body.active ?? true
   const members = (body.members ?? [])
     .map((member) => ({
@@ -51,6 +59,8 @@ function normalizeQueuePayload(body: QueuePayload) {
     max_wait_seconds: Number.isFinite(maxWaitSeconds) ? maxWaitSeconds : NaN,
     description,
     inbound_number: inboundNumber || null,
+    greeting_audio_url: greetingAudioUrl || null,
+    greeting_audio_name: greetingAudioName || null,
     active,
     members
   }
@@ -66,6 +76,8 @@ export async function GET() {
         slug,
         description,
         inbound_number,
+        greeting_audio_url,
+        greeting_audio_name,
         strategy,
         max_wait_seconds,
         active,
@@ -182,11 +194,13 @@ export async function POST(req: Request) {
         slug: payload.slug,
         description: payload.description,
         inbound_number: payload.inbound_number,
+        greeting_audio_url: payload.greeting_audio_url,
+        greeting_audio_name: payload.greeting_audio_name,
         strategy: payload.strategy,
         max_wait_seconds: payload.max_wait_seconds,
         active: payload.active
       })
-      .select("id, name, slug, description, inbound_number, strategy, max_wait_seconds, active, created_at, updated_at")
+      .select("id, name, slug, description, inbound_number, greeting_audio_url, greeting_audio_name, strategy, max_wait_seconds, active, created_at, updated_at")
       .single()
 
     if (error) {

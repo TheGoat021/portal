@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 export async function proxy(request: NextRequest) {
-  let response = NextResponse.next();
+  const response = NextResponse.next();
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,7 +28,7 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // 🔒 Protege o portal
-  if (pathname.startsWith("/portal") && !session) {
+  if ((pathname.startsWith("/portal") || pathname.startsWith("/axion-league")) && !session) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
@@ -41,5 +41,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/portal/:path*", "/login"],
+  matcher: ["/portal/:path*", "/axion-league/:path*", "/login"],
 };

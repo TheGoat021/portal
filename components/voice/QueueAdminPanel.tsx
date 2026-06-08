@@ -14,6 +14,8 @@ type QueueFormState = {
   slug: string
   description: string
   inboundNumber: string
+  greetingAudioUrl: string
+  greetingAudioName: string
   strategy: string
   maxWaitSeconds: string
   active: boolean
@@ -55,6 +57,8 @@ function buildFormState(agents: VoiceAgent[], queue?: VoiceQueue | null): QueueF
     slug: queue?.slug || "",
     description: queue?.description || "",
     inboundNumber: queue?.inbound_number || "",
+    greetingAudioUrl: queue?.greeting_audio_url || "",
+    greetingAudioName: queue?.greeting_audio_name || "",
     strategy: queue?.strategy || "ringall",
     maxWaitSeconds: String(queue?.max_wait_seconds ?? 300),
     active: queue?.active ?? true,
@@ -70,6 +74,27 @@ function extractSelectedMembers(state: QueueFormState) {
       priority: Number(member.priority || "1"),
       active: true
     }))
+}
+
+async function uploadGreetingAudio(queueSlug: string, file: File) {
+  const formData = new FormData()
+  formData.set("queueSlug", slugify(queueSlug) || "fila")
+  formData.set("file", file)
+
+  const response = await fetch("/api/voice/queues/upload", {
+    method: "POST",
+    body: formData
+  })
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null
+    throw new Error(payload?.error || "Nao foi possivel subir o audio inicial da fila.")
+  }
+
+  return (await response.json()) as {
+    publicUrl: string
+    fileName: string
+  }
 }
 
 export default function QueueAdminPanel({
@@ -93,6 +118,8 @@ export default function QueueAdminPanel({
     slug?: string
     description?: string | null
     inboundNumber?: string | null
+    greetingAudioUrl?: string | null
+    greetingAudioName?: string | null
     strategy: string
     maxWaitSeconds: number
     active: boolean
@@ -109,6 +136,8 @@ export default function QueueAdminPanel({
       slug?: string
       description?: string | null
       inboundNumber?: string | null
+      greetingAudioUrl?: string | null
+      greetingAudioName?: string | null
       strategy: string
       maxWaitSeconds: number
       active: boolean
@@ -130,10 +159,12 @@ export default function QueueAdminPanel({
   )
 
   const [createState, setCreateState] = useState<QueueFormState>(buildFormState(sortedAgents))
+  const [createAudioFile, setCreateAudioFile] = useState<File | null>(null)
   const [savingCreate, setSavingCreate] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [editingQueueId, setEditingQueueId] = useState<string | null>(null)
   const [editState, setEditState] = useState<QueueFormState>(buildFormState(sortedAgents))
+  const [editAudioFile, setEditAudioFile] = useState<File | null>(null)
   const [editError, setEditError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -171,17 +202,32 @@ export default function QueueAdminPanel({
     setCreateError(null)
 
     try {
+      let greetingAudioUrl = createState.greetingAudioUrl || null
+      let greetingAudioName = createState.greetingAudioName || null
+
+      if (createAudioFile) {
+        const uploaded = await uploadGreetingAudio(
+          createState.slug || createState.name,
+          createAudioFile
+        )
+        greetingAudioUrl = uploaded.publicUrl
+        greetingAudioName = uploaded.fileName
+      }
+
       await onCreate({
         name: createState.name.trim(),
         slug: slugify(createState.slug || createState.name),
         description: createState.description.trim() || null,
         inboundNumber: createState.inboundNumber.trim() || null,
+        greetingAudioUrl,
+        greetingAudioName,
         strategy: createState.strategy,
         maxWaitSeconds: Number(createState.maxWaitSeconds || "300"),
         active: createState.active,
         members: extractSelectedMembers(createState)
       })
       setCreateState(buildFormState(sortedAgents))
+      setCreateAudioFile(null)
     } catch (error) {
       setCreateError(
         error instanceof Error ? error.message : "Nao foi possivel criar a fila."
@@ -194,6 +240,7 @@ export default function QueueAdminPanel({
   const startEditing = (queue: VoiceQueue) => {
     setEditingQueueId(queue.id)
     setEditState(buildFormState(sortedAgents, queue))
+    setEditAudioFile(null)
     setEditError(null)
   }
 
@@ -202,17 +249,29 @@ export default function QueueAdminPanel({
 
     setEditError(null)
     try {
+      let greetingAudioUrl = editState.greetingAudioUrl || null
+      let greetingAudioName = editState.greetingAudioName || null
+
+      if (editAudioFile) {
+        const uploaded = await uploadGreetingAudio(editState.slug || editState.name, editAudioFile)
+        greetingAudioUrl = uploaded.publicUrl
+        greetingAudioName = uploaded.fileName
+      }
+
       await onUpdate(editingQueueId, {
         name: editState.name.trim(),
         slug: slugify(editState.slug || editState.name),
         description: editState.description.trim() || null,
         inboundNumber: editState.inboundNumber.trim() || null,
+        greetingAudioUrl,
+        greetingAudioName,
         strategy: editState.strategy,
         maxWaitSeconds: Number(editState.maxWaitSeconds || "300"),
         active: editState.active,
         members: extractSelectedMembers(editState)
       })
       setEditingQueueId(null)
+      setEditAudioFile(null)
     } catch (error) {
       setEditError(
         error instanceof Error ? error.message : "Nao foi possivel atualizar a fila."
@@ -400,6 +459,47 @@ export default function QueueAdminPanel({
           </label>
         </div>
 
+        <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+          <label className="flex min-h-11 cursor-pointer items-center rounded-xl border border-dashed border-slate-300 bg-white px-4 text-sm text-slate-600">
+            <input
+              type="file"
+              accept="audio/*"
+              className="hidden"
+              onChange={(event) => {
+                const nextFile = event.target.files?.[0] ?? null
+                setCreateAudioFile(nextFile)
+                if (nextFile) {
+                  setCreateState((current) => ({
+                    ...current,
+                    greetingAudioName: nextFile.name
+                  }))
+                }
+              }}
+            />
+            {createAudioFile
+              ? `Audio selecionado: ${createAudioFile.name}`
+              : createState.greetingAudioName
+                ? `Audio atual: ${createState.greetingAudioName}`
+                : "Selecionar audio inicial da fila"}
+          </label>
+          {(createAudioFile || createState.greetingAudioUrl) ? (
+            <button
+              type="button"
+              onClick={() => {
+                setCreateAudioFile(null)
+                setCreateState((current) => ({
+                  ...current,
+                  greetingAudioUrl: "",
+                  greetingAudioName: ""
+                }))
+              }}
+              className="inline-flex h-11 items-center justify-center rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Remover audio
+            </button>
+          ) : null}
+        </div>
+
         <div className="mt-3">{renderMembers("create", createState)}</div>
 
         {createError ? (
@@ -543,6 +643,55 @@ export default function QueueAdminPanel({
                     />
                     Fila ativa
                   </label>
+                </div>
+
+                <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+                  <label
+                    className={`flex min-h-11 items-center rounded-xl border px-4 text-sm ${
+                      isEditing
+                        ? "cursor-pointer border-dashed border-slate-300 bg-white text-slate-600"
+                        : "border-[#E5E7EB] bg-slate-50 text-slate-500"
+                    }`}
+                  >
+                    {isEditing ? (
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        className="hidden"
+                        onChange={(event) => {
+                          const nextFile = event.target.files?.[0] ?? null
+                          setEditAudioFile(nextFile)
+                          if (nextFile) {
+                            setEditState((current) => ({
+                              ...current,
+                              greetingAudioName: nextFile.name
+                            }))
+                          }
+                        }}
+                      />
+                    ) : null}
+                    {editAudioFile && isEditing
+                      ? `Novo audio: ${editAudioFile.name}`
+                      : state.greetingAudioName
+                        ? `Audio atual: ${state.greetingAudioName}`
+                        : "Nenhum audio inicial configurado"}
+                  </label>
+                  {isEditing && (editAudioFile || state.greetingAudioUrl) ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditAudioFile(null)
+                        setEditState((current) => ({
+                          ...current,
+                          greetingAudioUrl: "",
+                          greetingAudioName: ""
+                        }))
+                      }}
+                      className="inline-flex h-11 items-center justify-center rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
+                      Remover audio
+                    </button>
+                  ) : null}
                 </div>
 
                 {isEditing ? <div className="mt-3">{renderMembers("edit", editState)}</div> : null}

@@ -43,6 +43,8 @@ export type VoiceQueue = {
   slug: string
   description?: string | null
   inbound_number?: string | null
+  greeting_audio_url?: string | null
+  greeting_audio_name?: string | null
   strategy: string
   max_wait_seconds?: number
   active: boolean

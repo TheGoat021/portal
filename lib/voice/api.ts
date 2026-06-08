@@ -368,6 +368,8 @@ export function useVoiceQueueDirectory() {
     slug?: string
     description?: string | null
     inboundNumber?: string | null
+    greetingAudioUrl?: string | null
+    greetingAudioName?: string | null
     strategy: string
     maxWaitSeconds: number
     active: boolean
@@ -390,6 +392,8 @@ export function useVoiceQueueDirectory() {
           slug: sanitizeQueueSlug(input.slug || input.name),
           description: input.description ?? null,
           inbound_number: input.inboundNumber ? input.inboundNumber.replace(/\D/g, "") : null,
+          greeting_audio_url: input.greetingAudioUrl ?? null,
+          greeting_audio_name: input.greetingAudioName ?? null,
           strategy: input.strategy,
           max_wait_seconds: input.maxWaitSeconds,
           active: input.active,
@@ -419,6 +423,8 @@ export function useVoiceQueueDirectory() {
       slug?: string
       description?: string | null
       inboundNumber?: string | null
+      greetingAudioUrl?: string | null
+      greetingAudioName?: string | null
       strategy: string
       maxWaitSeconds: number
       active: boolean
@@ -442,6 +448,8 @@ export function useVoiceQueueDirectory() {
           slug: sanitizeQueueSlug(input.slug || input.name),
           description: input.description ?? null,
           inbound_number: input.inboundNumber ? input.inboundNumber.replace(/\D/g, "") : null,
+          greeting_audio_url: input.greetingAudioUrl ?? null,
+          greeting_audio_name: input.greetingAudioName ?? null,
           strategy: input.strategy,
           max_wait_seconds: input.maxWaitSeconds,
           active: input.active,

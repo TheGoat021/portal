@@ -37,7 +37,15 @@ export const env = {
       process.env.ASTERISK_AMI_PASSWORD
     ),
     agentEndpointSuffix:
-      process.env.ASTERISK_AGENT_ENDPOINT_SUFFIX || "-webrtc"
+      process.env.ASTERISK_AGENT_ENDPOINT_SUFFIX || "-webrtc",
+    soundsDir: process.env.ASTERISK_SOUNDS_DIR || "/var/lib/asterisk/sounds",
+    externalMediaHost: process.env.ASTERISK_EXTERNAL_MEDIA_HOST || "127.0.0.1",
+    externalMediaBindAddress:
+      process.env.ASTERISK_EXTERNAL_MEDIA_BIND_ADDRESS || "0.0.0.0",
+    externalMediaStartPort: toNumber(
+      process.env.ASTERISK_EXTERNAL_MEDIA_START_PORT,
+      18000
+    )
   },
   recordingsDir: required("RECORDINGS_DIR", process.env.RECORDINGS_DIR),
   recordingsPublicBaseUrl: required(

@@ -1,4 +1,5 @@
-﻿import type { LucideIcon } from "lucide-react";
+﻿import { geographicView } from "google-ads-api/build/src/protos/autogen/resourceNames";
+import type { LucideIcon } from "lucide-react";
 import {
   Home,
   GraduationCap,
@@ -6,9 +7,20 @@ import {
   Calendar,
   Stethoscope,
   Crown,
-  TrendingUp,
+  MessageCircle,
   Settings,
+  TrendingUp,
+  Phone,
+  PersonStandingIcon,
+  PersonStanding,
+  GitGraphIcon,
+  GitGraph,
+  LucideGitGraph,
+  Gauge,
+  ChartNoAxesColumn,
+  Megaphone,
 } from "lucide-react";
+import { graphicalItemsReducer } from "recharts/types/state/graphicalItemsSlice";
 
 export type MenuItem = {
   label: string;
@@ -35,6 +47,134 @@ export const menuConfig: MenuSection[] = [
       {
         label: "Home",
         href: "/portal",
+      },
+    ],
+  },
+
+  {
+    icon: DollarSign,
+    roles: ["DIRETORIA"],
+    items: [
+      {
+        label: "CRM",
+        href: "/portal/vendas",
+      },
+    ],
+  },
+
+  {
+    icon: Calendar,
+    roles: ["AGENDAMENTO", "DIRETORIA"],
+    items: [
+      {
+        label: "Dasboard",
+        href: "/portal/agendamento/gestao-teste",
+      },
+    ],
+  },
+
+  {
+    icon: Calendar,
+    roles: ["TREINAMENTO", "COMERCIAL", "EXAMES",],
+    items: [
+      {
+        label: "Novo registro",
+        href: "/portal/agendamento/gestao-teste?tab=novo",
+      },
+    ],
+  },
+{
+    icon: Phone,
+    roles: [ "DIRETORIA"],
+    items: [
+      {
+        label: "Axion Voice",
+        href: "/portal/voice/queues",
+      },
+    ],
+  },
+  {
+    icon: Crown,
+    roles: ["DIRETORIA"],
+    items: [
+      {
+        label: "Axion League",
+        href: "/portal/axion-league",
+      },
+    ],
+  },
+   {
+    icon: Crown,
+    roles: ["COMERCIAL"],
+    items: [
+      {
+        label: "Tabela Copa",
+        href: "/axion-league/tabela",
+      },
+    ],
+  },
+
+  {
+    icon: MessageCircle,
+    roles: ["TREINAMENTO", "COMERCIAL", "AGENDAMENTO", "EXAMES", "DIRETORIA"],
+    items: [
+      {
+        label: "WhatsApp Oficial",
+        href: "/portal/conversas-meta",
+      },
+    ],
+  },
+
+  {
+    icon: MessageCircle,
+    roles: [],
+    items: [
+      {
+        label: "WhatsApp",
+        href: "/portal/conversas",
+      },
+    ],
+  },
+  
+  {
+    icon: Settings,
+    roles: ["DIRETORIA"],
+    items: [
+      {
+        label: "Whatsapp Config",
+        href: "/portal/whatsapp",
+      },
+    ],
+  },
+   {
+    icon: PersonStanding,
+    roles: ["DIRETORIA"],
+    items: [
+      {
+        label: "Usuários",
+        href: "/portal/usuarios",
+      },
+    ],
+  },
+
+   {
+    icon: ChartNoAxesColumn,
+    roles: ["DIRETORIA"],
+    items: [
+      {
+        label: "Performance",
+        href: "/portal/relatorios/consolidado",
+      },
+    ],
+  },
+
+  {
+    icon: Megaphone,
+    roles: ["DIRETORIA"],
+    items: [
+      {
+        label: "Marketing",
+        href: "/portal/diretoria/visao-geral",
       },
     ],
   },
@@ -68,86 +208,10 @@ export const menuConfig: MenuSection[] = [
   },
 
   {
-    title: "Comercial",
-    icon: DollarSign,
-    roles: ["COMERCIAL", "DIRETORIA"],
-    items: [
-      {
-        label: "Novo Registro",
-        href: "/portal/agendamento/gestao-teste?tab=novo",
-      },
-      {
-        label: "Metas Geral",
-        href: "https://glittering-dieffenbachia-ed9bc9.netlify.app/",
-        allowExternal: true,
-      },
-      {
-        label: "Equipe A",
-        href: "https://docs.google.com/spreadsheets/d/1x5vfTy5datDHqFq2HJtMxVfBXTG0l4gSaJjh4RxjL7o/edit?gid=0#gid=0",
-        allowExternal: true,
-      },
-      {
-        label: "Equipe B",
-        href: "https://docs.google.com/spreadsheets/d/1kp8WvwvDNMQZHW3jRAUGAzp4oXtqvjGtk4oIclCGhi0/edit?gid=1570139612#gid=1570139612",
-        allowExternal: true,
-      },
-      {
-        label: "Consulta CPF ",
-        href: "https://servicos.receita.fazenda.gov.br/Servicos/CPF/ConsultaSituacao/ConsultaPublica.asp",
-        allowExternal: true,
-      },
-      {
-        label: "Agendas",
-        href: "https://sage-macaron-e8a43f.netlify.app/",
-        allowExternal: true,
-      },
-      {
-        label: "Credênciadas",
-        href: "https://docs.google.com/spreadsheets/d/1R0UVojq0po_O0YFcywHANnK4-zEEK_pz7M3oftLgJNk/edit?usp=sharing",
-        allowExternal: true,
-      },
-    ],
-  },
-
-  {
-    title: "Leads",
-    icon: DollarSign,
-    roles: ["COMERCIAL", "DIRETORIA"],
-    items: [
-      
-      {
-        label: "WhatsApp Oficial",
-        href: "/portal/conversas-meta",
-      },
-      {
-        label: "WhatsApp",
-        href: "/portal/conversas",
-      },
-      
-      {
-        label: "Leads",
-        href: "/portal/leads",
-      },
-      {
-        label: "Vendas",
-        href: "/portal/vendas",
-      },
-    ],
-  },
-
-  {
-    title: "Agendamento",
+    title: "Extras Agendamento",
     icon: Calendar,
-    roles: ["AGENDAMENTO", "DIRETORIA"],
+    roles: ["AGENDAMENTO"],
     items: [
-      {
-        label: "Dashboard",
-        href: "/portal/agendamento/gestao-teste?tab=dashboard",
-      },
-      {
-        label: "WhatsApp",
-        href: "/portal/conversas",
-      },
       {
         label: "TN Cancelamento",
         href: "https://docs.google.com/document/d/1xxRstJptIuIYeVqroVEk-bZZ8n5jq9foXbOeg55_9_0/edit?usp=sharing",
@@ -182,14 +246,10 @@ export const menuConfig: MenuSection[] = [
   },
 
   {
-    title: "Exames",
+    title: " Extras Exames",
     icon: Stethoscope,
-    roles: ["EXAMES", "DIRETORIA"],
+    roles: ["EXAMES"],
     items: [
-      {
-        label: "Novo Registro",
-        href: "/portal/agendamento/gestao-teste?tab=novo",
-      },
       {
         label: "TN Cancelamento",
         href: "https://docs.google.com/document/d/15gOYw1BFQ6F6TmmTNdLqhEvl7hmL1QjQaSR82DDoxOE/edit?usp=sharing",
@@ -227,75 +287,35 @@ export const menuConfig: MenuSection[] = [
       },
     ],
   },
-
-  {
-    title: "Diretoria",
-    icon: Crown,
-    roles: ["DIRETORIA"],
+{
+    title: "Extras Comercial",
+    icon: Calendar,
+    roles: ["AGENDAMENTO"],
     items: [
-      {
-        label: "Relatório vendas",
-        href: "/portal/relatorios/consolidado",
+      { label: "Metas Geral",
+         href: "https://glittering-dieffenbachia-ed9bc9.netlify.app/",
+         allowExternal: true,
       },
-      {
-        label: "Marketing",
-        href: "/portal/diretoria/visao-geral",
+      { label: "Equipe A",
+     href: "https://docs.google.com/spreadsheets/d/1x5vfTy5datDHqFq2HJtMxVfBXTG0l4gSaJjh4RxjL7o/edit?gid=0#gid=0",
+     allowExternal: true,
       },
-      {
-        label: "Avaliações",
-        href: "/portal/diretoria/avaliacoes",
+      { label: "Equipe B",
+     href: "https://docs.google.com/spreadsheets/d/1kp8WvwvDNMQZHW3jRAUGAzp4oXtqvjGtk4oIclCGhi0/edit?gid=1570139612#gid=1570139612",
+     allowExternal: true,
       },
-      {
-        label: "Geral Empresa",
-        href: "https://docs.google.com/spreadsheets/d/1UTz8gqUmWQH_E2LgwZqZro31APchbT-BodexzcZZEjs/edit?gid=1536522903#gid=1536522903",
-        allowExternal: true,
+      { label: "Consulta CPF",
+     href: "https://servicos.receita.fazenda.gov.br/Servicos/CPF/ConsultaSituacao/ConsultaPublica.asp",
+     allowExternal: true,
       },
-      {
-        label: "Equipe",
-        href: "/portal/evolucao/equipe",
+      { label: "Agendas",
+     href: "https://sage-macaron-e8a43f.netlify.app/",
+     allowExternal: true,
       },
-    ],
-  },
-
-  {
-    title: "Evolução",
-    icon: TrendingUp,
-    roles: ["COMERCIAL", "AGENDAMENTO", "EXAMES", "DIRETORIA"],
-    items: [
-      {
-        label: "Minha Evolução",
-        href: "/portal/evolucao",
+      { label: "Credenciadas", 
+    href: "https://docs.google.com/spreadsheets/d/1R0UVojq0po_O0YFcywHANnK4-zEEK_pz7M3oftLgJNk/edit?usp=sharing",
+     allowExternal: true,
       },
-    ],
-  },
-
-  {
-    title: "Administração",
-    icon: Settings,
-    roles: ["DIRETORIA"],
-    items: [
-      { label: "Usuários", href: "/portal/usuarios" },
-      {
-        label: "Axion Voice",
-        href: "/portal/voice/queues",
-      },
-      {
-        label: "Lançar Evolução",
-        href: "/portal/evolucao/lancar",
-      },
-      {
-        label: "Conexão Whats",
-        href: "/portal/whatsapp",
-      },
-      {
-        label: "Fila Whats Meta",
-        href: "/portal/integracoes/whatsapp/fila",
-      },
-      {
-        label: "Importar",
-        href: "/portal/vendas/importar",
-      },
-      
     ],
   },
 ];

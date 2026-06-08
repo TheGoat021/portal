@@ -2,18 +2,22 @@
 
 import { useEffect, useState } from 'react'
 import { getVendas } from '@/services/vendas'
+import { CommercialSubmenu } from '@/components/CommercialSubmenu'
 import Money from '@/components/Money'
 import OrigemBadge from '@/components/OrigemBadge'
 import VendaModal from './VendaModal'
 import EditarVendaModal from './EditarVendaModal'
 
+type VendasResponse = Awaited<ReturnType<typeof getVendas>>
+type VendaItem = VendasResponse['vendas'][number]
+
 export default function VendasPage() {
-  const [vendas, setVendas] = useState<any[]>([])
+  const [vendas, setVendas] = useState<VendaItem[]>([])
   const [total, setTotal] = useState(0)
   const [quantidade, setQuantidade] = useState(0)
 
   const [open, setOpen] = useState(false)
-  const [editingVenda, setEditingVenda] = useState<any | null>(null)
+  const [editingVenda, setEditingVenda] = useState<VendaItem | null>(null)
 
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -32,12 +36,18 @@ export default function VendasPage() {
   }
 
   useEffect(() => {
-    loadVendas()
+    const timeoutId = setTimeout(() => {
+      loadVendas()
+    }, 0)
+
+    return () => clearTimeout(timeoutId)
   }, [])
 
   return (
     <div className="min-h-screen bg-gray-50/60 p-6">
       <div className="mx-auto max-w-7xl space-y-6">
+        <CommercialSubmenu />
+
         <div className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-gray-900">

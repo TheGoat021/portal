@@ -83,6 +83,20 @@ export class AriClient extends EventEmitter {
             ...(params.timeoutSeconds ? { timeout: params.timeoutSeconds } : {})
         });
     }
+    async createExternalMediaChannel(params) {
+        return request("POST", "/ari/channels/externalMedia", {
+            app: env.asterisk.ariApp,
+            external_host: params.externalHost,
+            format: params.format,
+            direction: "both",
+            ...(params.appArgs && params.appArgs.length > 0
+                ? { appArgs: params.appArgs.join(",") }
+                : {})
+        });
+    }
+    async getChannelVariable(channelId, variable) {
+        return request("GET", `/ari/channels/${encodeURIComponent(channelId)}/variable`, { variable });
+    }
     async createBridge(type = "mixing") {
         return request("POST", "/ari/bridges", { type });
     }
@@ -98,6 +112,9 @@ export class AriClient extends EventEmitter {
         return request("POST", `/ari/channels/${encodeURIComponent(channelId)}/play`, {
             media
         });
+    }
+    async stopPlayback(playbackId) {
+        return request("DELETE", `/ari/playbacks/${encodeURIComponent(playbackId)}`);
     }
     startEventStream() {
         if (this.eventSocket)

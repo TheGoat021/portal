@@ -104,6 +104,43 @@ export async function createInboundCall(input) {
     });
     return data;
 }
+export async function createOutboundCall(input) {
+    const normalizedPhone = normalizePhone(input.phone);
+    const crm = await resolveCrmAssociationByPhone(normalizedPhone);
+    const { data, error } = await supabaseAdmin
+        .from("voice_calls")
+        .insert({
+        external_call_id: input.externalCallId ?? null,
+        unique_id: input.uniqueId ?? null,
+        linked_id: input.linkedId ?? null,
+        dialed_extension: input.dialedExtension ?? null,
+        direction: "outbound",
+        phone: input.phone ?? "",
+        normalized_phone: crm.normalizedPhone,
+        status: "ringing",
+        agent_id: input.agentId ?? null,
+        cliente_id: crm.clienteId,
+        lead_id: crm.leadId,
+        started_at: input.startedAt ?? new Date().toISOString()
+    })
+        .select("*")
+        .single();
+    if (error) {
+        throw new Error(`Failed to create outbound call: ${error.message}`);
+    }
+    await createCallEvent(String(data.id), "call.created", {
+        source: "asterisk",
+        direction: "outbound",
+        crmMatchType: crm.matchType,
+        externalCallId: input.externalCallId ?? null,
+        uniqueId: input.uniqueId ?? null,
+        linkedId: input.linkedId ?? null,
+        phone: input.phone ?? null,
+        dialedExtension: input.dialedExtension ?? null,
+        agentId: input.agentId ?? null
+    });
+    return data;
+}
 export async function findCallByUniqueId(uniqueId) {
     if (!uniqueId)
         return null;

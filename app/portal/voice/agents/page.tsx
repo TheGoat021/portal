@@ -1,22 +1,17 @@
 "use client"
 
-import { Clock3, Headset, PauseCircle, PhoneIncoming, UserRoundSearch, WifiOff } from "lucide-react"
-import AgentCard from "@/components/voice/AgentCard"
+import AgentMonitorCard from "@/components/voice/AgentMonitorCard"
 import AgentProvisionPanel from "@/components/voice/AgentProvisionPanel"
-import KPIHeader from "@/components/voice/KPIHeader"
-import {
-  deriveSoftphoneIdentity,
-  useCurrentVoiceAgent,
-  useVoiceData,
-  useVoiceProvisionDirectory
-} from "@/lib/voice/api"
+import MonitoringHero from "@/components/voice/MonitoringHero"
+import QueueMonitorStrip from "@/components/voice/QueueMonitorStrip"
+import { useVoiceMonitoringSnapshot } from "@/lib/voice/monitoring"
+import { useVoiceData, useVoiceProvisionDirectory } from "@/lib/voice/api"
 import { useAuth } from "@/store/authStore"
 
 export default function VoiceAgentsPage() {
   const { user } = useAuth()
-  const { calls, agents: apiAgents, reload } = useVoiceData()
+  const { reload } = useVoiceData()
   const {
-    agents: directoryAgents,
     unassignedUsers,
     loading: loadingDirectory,
     errorMessage: directoryErrorMessage,
@@ -24,88 +19,107 @@ export default function VoiceAgentsPage() {
     reload: reloadDirectory,
     provision
   } = useVoiceProvisionDirectory()
-  const agents = directoryAgents.length > 0 ? directoryAgents : apiAgents
-  const currentAgent = useCurrentVoiceAgent(agents, user?.id)
-  const currentIdentity = deriveSoftphoneIdentity(currentAgent)
-  const activeCallMap = new Map(calls.map((call) => [call.id, call.phone]))
-  const orderedAgents = [...agents].sort((left, right) => {
-    if (left.user_id === user?.id) return -1
-    if (right.user_id === user?.id) return 1
-    return left.name.localeCompare(right.name)
-  })
+  const {
+    snapshot: monitoring,
+    loading: monitoringLoading,
+    errorMessage: monitoringErrorMessage,
+    reload: reloadMonitoring
+  } = useVoiceMonitoringSnapshot(user?.id)
+
+  if (!monitoring) {
+    return (
+      <div className="space-y-5">
+        <MonitoringHero
+          title="Painel operacional de ramais e filas"
+          description="Tela desenhada para supervisao em tempo real, com leitura compacta de filas, alertas visuais de espera e alta densidade para acompanhar muitos agentes simultaneamente."
+          items={[
+            { label: "Filas ativas", value: "--", hint: "Carregando snapshot operacional.", tone: "slate" },
+            { label: "Em espera", value: "--", hint: "Sincronizando filas do monitoramento.", tone: "slate" },
+            { label: "Disponiveis", value: "--", hint: "Carregando ramais do backend.", tone: "slate" },
+            { label: "Tocando", value: "--", hint: "Aguardando eventos ativos.", tone: "slate" },
+            { label: "Em ligacao", value: "--", hint: "Calculando chamadas atuais.", tone: "slate" },
+            { label: "Offline", value: "--", hint: "Lendo status reais dos agentes.", tone: "slate" }
+          ]}
+        />
+
+        <div className="rounded-[24px] border border-dashed border-[#d9e2ec] bg-white px-5 py-10 text-center text-sm text-slate-500">
+          {monitoringErrorMessage
+            ? monitoringErrorMessage
+            : monitoringLoading
+              ? "Carregando monitoramento em tempo real..."
+              : "Aguardando snapshot do backend."}
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-6">
-      <KPIHeader
-        title="Monitoramento de ramais"
-        description="Grid operacional moderno para substituir o painel antigo, com leitura rapida por status e tempo em cada estado."
+    <div className="space-y-5">
+      <MonitoringHero
+        title="Painel operacional de ramais e filas"
+        description="Tela desenhada para supervisao em tempo real, com leitura compacta de filas, alertas visuais de espera e alta densidade para acompanhar muitos agentes simultaneamente."
         items={[
           {
+            label: "Filas ativas",
+            value: String(monitoring.summary.busyQueues),
+            hint: `${monitoring.summary.totalQueues} filas monitoradas agora.`,
+            tone: monitoring.summary.totalWaiting > 0 ? "sky" : "slate"
+          },
+          {
+            label: "Em espera",
+            value: String(monitoring.summary.totalWaiting),
+            hint: "Clientes aguardando atendimento nas filas do painel.",
+            tone:
+              monitoring.summary.totalWaiting >= 4
+                ? "rose"
+                : monitoring.summary.totalWaiting >= 2
+                  ? "amber"
+                  : "emerald"
+          },
+          {
             label: "Disponiveis",
-            value: String(agents.filter((agent) => agent.status === "available").length),
-            hint: "Operadores aptos para receber novas chamadas.",
-            icon: <Headset className="h-4 w-4" />
-          },
-          {
-            label: "Em chamada",
-            value: String(agents.filter((agent) => agent.status === "in_call").length),
-            hint: "Ramais ocupados em atendimento agora.",
-            icon: <PhoneIncoming className="h-4 w-4" />
-          },
-          {
-            label: "Em pausa",
-            value: String(agents.filter((agent) => agent.status === "paused").length),
-            hint: "Pausas operacionais e intervalos monitorados.",
-            icon: <PauseCircle className="h-4 w-4" />
-          },
-          {
-            label: "Offline",
-            value: String(agents.filter((agent) => agent.status === "offline").length),
-            hint: "Ramais deslogados ou sem registro ativo.",
-            icon: <WifiOff className="h-4 w-4" />
+            value: String(monitoring.summary.availableAgents),
+            hint: "Ramais livres para receber novas chamadas.",
+            tone: "emerald"
           },
           {
             label: "Tocando",
-            value: String(agents.filter((agent) => agent.status === "ringing").length),
-            hint: "Chamadas em oferta, aguardando aceite.",
-            icon: <Clock3 className="h-4 w-4" />
+            value: String(monitoring.summary.ringingAgents),
+            hint: "Ofertas de chamadas em andamento agora.",
+            tone: "amber"
           },
           {
-            label: "Total de ramais",
-            value: String(agents.length),
-            hint: "Base total do time de atendimento no Voice.",
-            icon: <UserRoundSearch className="h-4 w-4" />
+            label: "Em ligacao",
+            value: String(monitoring.summary.inCallAgents),
+            hint: "Atendimentos ativos ou receptivos em curso.",
+            tone: "sky"
+          },
+          {
+            label: "Offline",
+            value: String(monitoring.summary.offlineAgents),
+            hint: "Ramais sem sessao ativa no momento.",
+            tone: "slate"
           }
         ]}
       />
 
-      {currentAgent ? (
-        <section className="rounded-[22px] border border-cyan-200 bg-[linear-gradient(135deg,rgba(236,254,255,0.92)_0%,rgba(255,255,255,1)_100%)] p-4 shadow-[0_14px_36px_-30px_rgba(8,145,178,0.45)]">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-700">
-            Meu ramal
-          </p>
-          <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-lg font-semibold text-slate-950">{currentAgent.name}</p>
-              <p className="mt-1 text-sm text-slate-600">
-                Ramal {currentAgent.extension} • Login SIP {currentIdentity?.sipUsername || currentAgent.extension}
-              </p>
-              <p className="mt-1 text-sm text-slate-500">
-                O softphone do Axion usa esse ramal automaticamente quando voce estiver autenticado.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-cyan-200 bg-white px-4 py-3 text-sm text-slate-700">
-              Status atual: <span className="font-semibold text-slate-950">{currentAgent.status}</span>
-            </div>
+      <QueueMonitorStrip queues={monitoring.queueCards} />
+
+      <section className="rounded-[24px] border border-[#d9e2ec] bg-white p-4 shadow-[0_14px_34px_-30px_rgba(15,23,42,0.18)]">
+        <div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+              Monitoramento dos ramais
+            </p>
           </div>
-        </section>
-      ) : (
-        <section className="rounded-[22px] border border-amber-200 bg-[linear-gradient(135deg,rgba(255,251,235,0.96)_0%,rgba(255,255,255,1)_100%)] p-4 shadow-[0_14px_36px_-30px_rgba(217,119,6,0.25)]">
-          <p className="text-sm font-medium text-amber-900">
-            Este usuario ainda nao tem um ramal do Axion Voice vinculado. Assim que o cadastro em `voice_agents` for criado com o seu `user_id` de `profiles`, o softphone vai preencher login e extensao automaticamente.
-          </p>
-        </section>
-      )}
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
+          {monitoring.agentCards.map((agent) => (
+            <AgentMonitorCard key={agent.id} agent={agent} />
+          ))}
+        </div>
+      </section>
 
       <AgentProvisionPanel
         users={unassignedUsers}
@@ -117,19 +131,9 @@ export default function VoiceAgentsPage() {
           await provision(input)
           await reloadDirectory()
           await reload()
+          await reloadMonitoring()
         }}
       />
-
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-        {orderedAgents.map((agent) => (
-          <AgentCard
-            key={agent.id}
-            agent={agent}
-            isCurrentUser={agent.user_id === user?.id}
-            activePhone={agent.current_call_id ? activeCallMap.get(agent.current_call_id) || null : null}
-          />
-        ))}
-      </section>
     </div>
   )
 }

@@ -344,15 +344,6 @@ export default function RelatorioMetaPage() {
                   <BarChart3 className="h-4 w-4" />
                   Relatório Meta
                 </div>
-
-                <h1 className="text-3xl font-semibold tracking-tight text-gray-900">
-                  Meta - Performance de Marketing e Vendas
-                </h1>
-
-                <p className="mt-2 max-w-3xl text-sm text-gray-500">
-                  Acompanhe investimento, receita, conversão, ROI e ROAS do canal Meta.
-                </p>
-
                 {error && (
                   <p className="mt-3 text-sm font-medium text-red-600">{error}</p>
                 )}

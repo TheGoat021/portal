@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Users } from 'lucide-react'
 import { updateLeadStatus } from '@/services/leads'
+import { CommercialSubmenu } from '@/components/CommercialSubmenu'
 import LeadCard from './LeadCard'
 import { Lead } from '@/types/lead'
 import NovoLeadModal from './NovoLeadModal'
@@ -205,7 +206,9 @@ export default function LeadsPage() {
   }, [allLoadedLeads])
 
   return (
-    <div className="h-full bg-[#f8fafc] p-6">
+    <div className="space-y-4 bg-[#f8fafc] p-6">
+      <CommercialSubmenu />
+
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">
@@ -244,11 +247,11 @@ export default function LeadsPage() {
       </div>
 
       {loading ? (
-        <div className="flex h-[calc(100vh-180px)] items-center justify-center rounded-2xl border border-gray-200 bg-white text-sm text-gray-500">
+        <div className="flex h-[calc(100vh-244px)] items-center justify-center rounded-2xl border border-gray-200 bg-white text-sm text-gray-500">
           Carregando pipeline...
         </div>
       ) : (
-        <div className="grid h-[calc(100vh-180px)] grid-cols-5 gap-4">
+        <div className="grid h-[calc(100vh-244px)] grid-cols-5 gap-4">
           {colunas.map((coluna) => {
             const stage = stages[coluna.key]
             const leadsDaColuna =

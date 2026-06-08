@@ -12,6 +12,12 @@ import {
 } from "../services/callService.js"
 import { resolveQueueForInboundNumber, selectEligibleAgents } from "../services/routingService.js"
 import { updateAgentStatus } from "../services/agentService.js"
+import { resolveQueueGreetingAsset } from "../services/queueGreetingService.js"
+import {
+  attachExternalMediaRemote,
+  startExternalMediaPlayback,
+  stopExternalMediaPlayback
+} from "../services/externalMediaService.js"
 
 type AriEvent = Record<string, any>
 
@@ -27,6 +33,8 @@ type InboundSession = {
   queueId: string | null
   bridgeId: string | null
   answered: boolean
+  greetingPlaybackId: string | null
+  externalMediaChannelId: string | null
   ringingAgents: RoutedChannel[]
   timeout: NodeJS.Timeout | null
 }
@@ -40,6 +48,11 @@ function deriveSessionId(channelId: string) {
 
 function buildAgentEndpoint(extension: string) {
   return `PJSIP/${extension}${env.asterisk.agentEndpointSuffix}`
+}
+
+function isExternalMediaChannel(event: AriEvent) {
+  const channelName = String(event?.channel?.name || "")
+  return channelName.startsWith("UnicastRTP/")
 }
 
 async function setAgentAvailable(agentId: string) {
@@ -65,6 +78,22 @@ async function resolveExistingCall(payload: {
 async function cleanupSession(session: InboundSession) {
   if (session.timeout) {
     clearTimeout(session.timeout)
+  }
+
+  if (session.greetingPlaybackId) {
+    try {
+      await stopExternalMediaPlayback(session.greetingPlaybackId)
+    } catch {
+      // ignore cleanup errors
+    }
+  }
+
+  if (session.externalMediaChannelId) {
+    try {
+      await ariClient.hangupChannel(session.externalMediaChannelId)
+    } catch {
+      // ignore cleanup errors
+    }
   }
 
   for (const ringingChannel of session.ringingAgents) {
@@ -116,6 +145,9 @@ async function startRingForQueue(payload: {
       name: string
     } | null
   }>
+  greetingAsset?: {
+    alawPath: string
+  } | null
 }) {
   const bridge = await ariClient.createBridge("mixing")
   const bridgeId = String(bridge?.id || "")
@@ -134,11 +166,64 @@ async function startRingForQueue(payload: {
     queueId: payload.queueId,
     bridgeId,
     answered: false,
+    greetingPlaybackId: null,
+    externalMediaChannelId: null,
     ringingAgents: [],
     timeout: null
   }
 
   sessionsByInboundChannel.set(payload.inboundChannelId, session)
+
+  if (payload.greetingAsset?.alawPath) {
+    try {
+      const mediaPlayback = await startExternalMediaPlayback({
+        audioFilePath: payload.greetingAsset.alawPath
+      })
+
+      session.greetingPlaybackId = mediaPlayback.playbackId
+
+      const externalMediaChannel = await ariClient.createExternalMediaChannel({
+        externalHost: `${env.asterisk.externalMediaHost}:${mediaPlayback.port}`,
+        format: mediaPlayback.format,
+        appArgs: ["external-media", session.sessionId, mediaPlayback.playbackId]
+      })
+
+      const externalMediaChannelId = String(externalMediaChannel?.id || "")
+      if (externalMediaChannelId) {
+        session.externalMediaChannelId = externalMediaChannelId
+
+        const [localAddressVar, localPortVar] = await Promise.all([
+          ariClient.getChannelVariable(externalMediaChannelId, "UNICASTRTP_LOCAL_ADDRESS"),
+          ariClient.getChannelVariable(externalMediaChannelId, "UNICASTRTP_LOCAL_PORT")
+        ])
+
+        const remoteAddress = String(localAddressVar?.value || "").trim()
+        const remotePort = Number(localPortVar?.value || 0)
+
+        if (remoteAddress && Number.isFinite(remotePort) && remotePort > 0) {
+          attachExternalMediaRemote(mediaPlayback.playbackId, {
+            address: remoteAddress,
+            port: remotePort
+          })
+        } else {
+          logger.warn("External media channel did not expose RTP return address", {
+            channelId: externalMediaChannelId,
+            callId: payload.callId,
+            localAddress: remoteAddress,
+            localPort: remotePort
+          })
+        }
+
+        await ariClient.addChannelToBridge(bridgeId, externalMediaChannelId)
+      }
+    } catch (error) {
+      logger.warn("Failed to start external media greeting session", {
+        queueId: payload.queueId,
+        callId: payload.callId,
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+  }
 
   for (const target of payload.targets) {
     const extension = target.agent?.extension
@@ -203,6 +288,10 @@ async function startRingForQueue(payload: {
 }
 
 async function handleInboundStasisStart(event: AriEvent) {
+  if (isExternalMediaChannel(event)) {
+    return
+  }
+
   const channel = event.channel
   if (!channel?.id) return
 
@@ -276,13 +365,30 @@ async function handleInboundStasisStart(event: AriEvent) {
     selectedAgentIds: selectedAgents.map((member) => member.agent_id)
   })
 
+  let greetingAsset: Awaited<ReturnType<typeof resolveQueueGreetingAsset>> | null = null
+  if (matchedQueue.greeting_audio_url) {
+    try {
+      greetingAsset = await resolveQueueGreetingAsset({
+        queueSlug: matchedQueue.slug,
+        greetingAudioUrl: matchedQueue.greeting_audio_url
+      })
+    } catch (error) {
+      logger.warn("Failed to prepare queue greeting asset", {
+        queueId: matchedQueue.id,
+        callId: call.id,
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+  }
+
   await startRingForQueue({
     inboundChannelId: channelId,
     callId: String(call.id),
     queueId: matchedQueue.id,
     callerNumber,
     maxWaitSeconds: matchedQueue.max_wait_seconds || 30,
-    targets: selectedAgents
+    targets: selectedAgents,
+    greetingAsset
   })
 }
 
@@ -304,6 +410,32 @@ async function handleAgentStasisStart(event: AriEvent) {
   sessionsByAgentChannel.set(channelId, session)
 }
 
+function handleExternalMediaStasisStart(event: AriEvent) {
+  const channelId = String(event?.channel?.id || "")
+  const args = Array.isArray(event?.args) ? event.args.map(String) : []
+  const [, sessionId] = args
+
+  if (!channelId) return
+
+  if (!sessionId) {
+    const fallbackSession = Array.from(sessionsByInboundChannel.values()).find(
+      (item) => item.externalMediaChannelId === channelId
+    )
+    if (fallbackSession) {
+      fallbackSession.externalMediaChannelId = channelId
+    }
+    return
+  }
+
+  const session = Array.from(sessionsByInboundChannel.values()).find(
+    (item) => item.sessionId === sessionId
+  )
+
+  if (session) {
+    session.externalMediaChannelId = channelId
+  }
+}
+
 async function handleChannelStateChange(event: AriEvent) {
   const channelId = String(event?.channel?.id || "")
   const state = String(event?.channel?.state || "")
@@ -316,6 +448,24 @@ async function handleChannelStateChange(event: AriEvent) {
   if (!selectedAgent) return
 
   session.answered = true
+
+  if (session.greetingPlaybackId) {
+    try {
+      await stopExternalMediaPlayback(session.greetingPlaybackId)
+    } catch {
+      // ignore cleanup errors
+    }
+    session.greetingPlaybackId = null
+  }
+
+  if (session.externalMediaChannelId) {
+    try {
+      await ariClient.hangupChannel(session.externalMediaChannelId)
+    } catch {
+      // ignore cleanup errors
+    }
+    session.externalMediaChannelId = null
+  }
 
   await setCallAnswered(session.callId, selectedAgent.agentId, new Date().toISOString())
   await updateAgentStatus(selectedAgent.agentId, "in_call", session.callId)
@@ -349,6 +499,14 @@ async function handleStasisEnd(event: AriEvent) {
     return
   }
 
+  const mediaSession = Array.from(sessionsByInboundChannel.values()).find(
+    (item) => item.externalMediaChannelId === channelId
+  )
+  if (mediaSession) {
+    mediaSession.externalMediaChannelId = null
+    return
+  }
+
   const session = sessionsByAgentChannel.get(channelId)
   if (!session) return
 
@@ -371,7 +529,9 @@ export async function handleAriEvent(event: AriEvent) {
   switch (type) {
     case "StasisStart": {
       const args = Array.isArray(event?.args) ? event.args.map(String) : []
-      if (args[0] === "agent") {
+      if (isExternalMediaChannel(event) || args[0] === "external-media") {
+        handleExternalMediaStasisStart(event)
+      } else if (args[0] === "agent") {
         await handleAgentStasisStart(event)
       } else {
         await handleInboundStasisStart(event)

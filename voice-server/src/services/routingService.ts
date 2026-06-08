@@ -29,6 +29,8 @@ type QueueRoutingRow = {
   slug: string
   description: string | null
   inbound_number: string | null
+  greeting_audio_url: string | null
+  greeting_audio_name: string | null
   strategy: string
   max_wait_seconds: number
   active: boolean
@@ -71,6 +73,8 @@ export async function resolveQueueForInboundNumber(input: {
         slug,
         description,
         inbound_number,
+        greeting_audio_url,
+        greeting_audio_name,
         strategy,
         max_wait_seconds,
         active,
