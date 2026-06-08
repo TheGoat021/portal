@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 
 import { getLeagueAvailableUsers, saveLeagueParticipants } from "@/lib/axionLeague";
 
+type ParticipantInput = {
+  userId?: unknown;
+  nickname?: unknown;
+  participating?: unknown;
+};
+
 export async function GET() {
   try {
     const users = await getLeagueAvailableUsers();
@@ -15,8 +21,8 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const participants = Array.isArray(body?.participants) ? body.participants : [];
+    const body: { participants?: unknown } = await request.json();
+    const participants: ParticipantInput[] = Array.isArray(body?.participants) ? body.participants : [];
 
     const normalized = participants
       .map((item) => ({
