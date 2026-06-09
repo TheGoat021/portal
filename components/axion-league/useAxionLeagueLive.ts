@@ -15,6 +15,8 @@ export function useAxionLeagueLive(options: UseAxionLeagueLiveOptions = {}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [goalOverlayEvent, setGoalOverlayEvent] = useState<LeagueEvent | null>(null);
+  const overlayQueueRef = useRef<LeagueEvent[]>([]);
+  const overlayActiveRef = useRef(false);
   const lastOverlayEventId = useRef<string | null>(null);
 
   const loadSnapshot = useEffectEvent(async () => {
@@ -53,7 +55,14 @@ export function useAxionLeagueLive(options: UseAxionLeagueLiveOptions = {}) {
       }
 
       lastOverlayEventId.current = goalId;
-      setGoalOverlayEvent(payload as LeagueEvent);
+      const event = payload as LeagueEvent;
+
+      if (overlayActiveRef.current) {
+        overlayQueueRef.current.push(event);
+      } else {
+        overlayActiveRef.current = true;
+        setGoalOverlayEvent(event);
+      }
     } catch {
       // Mantem a arena estavel mesmo se um evento individual falhar.
     }
@@ -96,12 +105,19 @@ export function useAxionLeagueLive(options: UseAxionLeagueLiveOptions = {}) {
 
   useEffect(() => {
     if (!goalOverlayEvent) {
+      if (overlayQueueRef.current.length > 0) {
+        overlayActiveRef.current = true;
+        const nextEvent = overlayQueueRef.current.shift() ?? null;
+        setGoalOverlayEvent(nextEvent);
+      } else {
+        overlayActiveRef.current = false;
+      }
       return;
     }
 
     const timeoutId = window.setTimeout(() => {
       setGoalOverlayEvent(null);
-    }, 3000);
+    }, 10000);
 
     return () => window.clearTimeout(timeoutId);
   }, [goalOverlayEvent]);

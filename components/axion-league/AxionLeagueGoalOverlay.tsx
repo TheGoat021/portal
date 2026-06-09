@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import confetti from "canvas-confetti";
 import Image from "next/image";
 
@@ -21,22 +21,46 @@ const CARD_STAT_LABELS: Array<{ key: keyof LeagueEvent["card_stats"]; label: str
 ];
 
 export function AxionLeagueGoalOverlay({ event }: AxionLeagueGoalOverlayProps) {
+  const [celebrationPhase, setCelebrationPhase] = useState(true);
+
+  const crowdBars = useMemo(
+    () =>
+      Array.from({ length: 28 }).map((_, index) => ({
+        id: index,
+        left: `${index * 3.6}%`,
+        delay: `${(index % 7) * 0.12}s`,
+        duration: `${0.7 + (index % 5) * 0.16}s`,
+      })),
+    [],
+  );
+
+  const fireworksBursts = useMemo(
+    () => [
+      { id: "left-main", left: "12%", top: "18%", delay: "0s", scale: 1.15, color: "#ffdf00" },
+      { id: "left-high", left: "24%", top: "10%", delay: "0.35s", scale: 0.9, color: "#ffffff" },
+      { id: "right-main", left: "78%", top: "20%", delay: "0.18s", scale: 1.12, color: "#ffdf00" },
+      { id: "right-high", left: "68%", top: "9%", delay: "0.52s", scale: 0.88, color: "#5eead4" },
+      { id: "top-center", left: "50%", top: "8%", delay: "0.25s", scale: 1.04, color: "#7dd3fc" },
+    ],
+    [],
+  );
+
   useEffect(() => {
-    if (!event) {
+    if (!event?.id) {
       return;
     }
 
-    const burst = () => {
+    const burst = (particleCount = 140, spread = 96) => {
       confetti({
-        particleCount: 140,
-        spread: 96,
+        particleCount,
+        spread,
         startVelocity: 48,
         origin: { x: 0.2, y: 0.45 },
         colors: ["#38bdf8", "#facc15", "#ffffff", "#1d4ed8", "#14b8a6"],
       });
       confetti({
-        particleCount: 140,
-        spread: 96,
+        particleCount,
+        spread,
         startVelocity: 48,
         origin: { x: 0.8, y: 0.45 },
         colors: ["#38bdf8", "#facc15", "#ffffff", "#1d4ed8", "#14b8a6"],
@@ -44,9 +68,77 @@ export function AxionLeagueGoalOverlay({ event }: AxionLeagueGoalOverlayProps) {
     };
 
     burst();
-    const followUp = window.setTimeout(burst, 260);
-    return () => window.clearTimeout(followUp);
-  }, [event]);
+    const followUp = window.setTimeout(() => burst(120, 88), 260);
+    const finale = window.setTimeout(() => burst(100, 72), 1200);
+    const phaseTimeout = window.setTimeout(() => setCelebrationPhase(false), 5000);
+
+    let audioContext: AudioContext | null = null;
+    let sourceNode: AudioBufferSourceNode | null = null;
+    let gainNode: GainNode | null = null;
+    let filterNode: BiquadFilterNode | null = null;
+
+    const playCrowd = async () => {
+      try {
+        const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!AudioContextCtor) {
+          return;
+        }
+
+        audioContext = new AudioContextCtor();
+        const sampleRate = audioContext.sampleRate;
+        const durationSeconds = 5;
+        const frameCount = sampleRate * durationSeconds;
+        const buffer = audioContext.createBuffer(1, frameCount, sampleRate);
+        const data = buffer.getChannelData(0);
+
+        let previous = 0;
+        for (let index = 0; index < frameCount; index += 1) {
+          const white = Math.random() * 2 - 1;
+          previous = (previous + 0.02 * white) / 1.02;
+          data[index] = previous * 2.4;
+        }
+
+        sourceNode = audioContext.createBufferSource();
+        sourceNode.buffer = buffer;
+
+        filterNode = audioContext.createBiquadFilter();
+        filterNode.type = "lowpass";
+        filterNode.frequency.value = 780;
+        filterNode.Q.value = 0.7;
+
+        gainNode = audioContext.createGain();
+        gainNode.gain.setValueAtTime(0.0001, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.14, audioContext.currentTime + 0.22);
+        gainNode.gain.linearRampToValueAtTime(0.11, audioContext.currentTime + 3.8);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + durationSeconds);
+
+        sourceNode.connect(filterNode);
+        filterNode.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        sourceNode.start();
+        sourceNode.stop(audioContext.currentTime + durationSeconds);
+      } catch {
+        // Se o navegador bloquear audio, o overlay continua funcionando normalmente.
+      }
+    };
+
+    void playCrowd();
+
+    return () => {
+      window.clearTimeout(followUp);
+      window.clearTimeout(finale);
+      window.clearTimeout(phaseTimeout);
+      try {
+        sourceNode?.stop();
+      } catch {
+        // ignorado
+      }
+      gainNode?.disconnect();
+      filterNode?.disconnect();
+      sourceNode?.disconnect();
+      void audioContext?.close();
+    };
+  }, [event?.id]);
 
   if (!event) {
     return null;
@@ -59,6 +151,60 @@ export function AxionLeagueGoalOverlay({ event }: AxionLeagueGoalOverlayProps) {
       className={`fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/86 p-6 backdrop-blur-md ${styles.overlayBackdrop}`}
     >
       <div className={`absolute inset-0 bg-white/10 ${styles.overlayFlash}`} />
+      {celebrationPhase ? (
+        <>
+          <div className={styles.fireworksLeft} />
+          <div className={styles.fireworksRight} />
+          <div className={styles.fireworksTop} />
+          {fireworksBursts.map((burst) => (
+            <div
+              key={burst.id}
+              className={styles.fireworkBurst}
+              style={
+                {
+                  left: burst.left,
+                  top: burst.top,
+                  animationDelay: burst.delay,
+                  ["--burst-scale" as string]: burst.scale,
+                  ["--burst-color" as string]: burst.color,
+                } as CSSProperties
+              }
+            >
+              <span className={styles.fireworkCore} />
+              {Array.from({ length: 14 }).map((_, index) => (
+                <span
+                  key={`${burst.id}-${index}`}
+                  className={styles.fireworkParticle}
+                  style={
+                    {
+                      ["--angle" as string]: `${index * 25.7}deg`,
+                      ["--particle-delay" as string]: `${index * 0.02}s`,
+                    } as CSSProperties
+                  }
+                />
+              ))}
+            </div>
+          ))}
+          <div className={styles.crowdBackdrop}>
+            <div className={styles.crowdGlow} />
+            <div className={styles.crowdWave} />
+            <div className={styles.crowdWaveSecondary} />
+            <div className={styles.crowdEqualizer}>
+              {crowdBars.map((bar) => (
+                <span
+                  key={bar.id}
+                  className={styles.crowdBar}
+                  style={{
+                    left: bar.left,
+                    animationDelay: bar.delay,
+                    animationDuration: bar.duration,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        </>
+      ) : null}
 
       {Array.from({ length: 18 }).map((_, index) => (
         <span
@@ -79,7 +225,7 @@ export function AxionLeagueGoalOverlay({ event }: AxionLeagueGoalOverlayProps) {
 
       <div className={`relative mx-auto w-full max-w-5xl ${styles.overlayCard}`}>
         <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="overflow-hidden rounded-[34px] border border-white/15 bg-[linear-gradient(135deg,rgba(10,37,64,0.94),rgba(10,24,51,0.94))] p-7 text-white shadow-[0_28px_80px_rgba(2,6,23,0.45)]">
+          <div className={`overflow-hidden rounded-[34px] border border-white/15 p-7 text-white shadow-[0_28px_80px_rgba(2,6,23,0.45)] ${celebrationPhase ? "bg-[linear-gradient(135deg,rgba(10,37,64,0.94),rgba(10,24,51,0.94))]" : "bg-[linear-gradient(135deg,rgba(7,24,40,0.96),rgba(11,38,66,0.96))]"}`}>
             <div className="flex flex-wrap items-center gap-4">
               <span className="rounded-full border border-cyan-300/40 bg-cyan-400/10 px-4 py-2 text-sm font-semibold uppercase tracking-[0.34em] text-cyan-100">
                 Axion League
@@ -91,7 +237,7 @@ export function AxionLeagueGoalOverlay({ event }: AxionLeagueGoalOverlayProps) {
 
             <div className="mt-6">
               <p className="text-sm font-semibold uppercase tracking-[0.48em] text-cyan-200/82">
-                Evento ao vivo
+                {celebrationPhase ? "Evento ao vivo" : "Replay do lance"}
               </p>
               <h2 className="mt-3 text-6xl font-bold uppercase tracking-[0.06em] text-white lg:text-7xl">
                 {isSale ? "GOOOOOL !!!" : "RECUPERACAO !!!"}

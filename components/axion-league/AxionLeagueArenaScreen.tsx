@@ -93,7 +93,7 @@ export function AxionLeagueArenaScreen() {
         </footer>
       </main>
 
-      <AxionLeagueGoalOverlay event={goalOverlayEvent} />
+      <AxionLeagueGoalOverlay key={goalOverlayEvent?.id ?? "idle"} event={goalOverlayEvent} />
     </div>
   );
 }
