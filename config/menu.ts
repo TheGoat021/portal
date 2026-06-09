@@ -290,7 +290,7 @@ export const menuConfig: MenuSection[] = [
 {
     title: "Extras Comercial",
     icon: Calendar,
-    roles: ["AGENDAMENTO"],
+    roles: ["COMERCIAL"],
     items: [
       { label: "Metas Geral",
          href: "https://glittering-dieffenbachia-ed9bc9.netlify.app/",
