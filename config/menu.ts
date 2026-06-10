@@ -170,7 +170,7 @@ export const menuConfig: MenuSection[] = [
   },
   {
     icon: FileText,
-    roles: ["COMERCIAL", "DIRETORIA"],
+    roles: ["DIRETORIA"],
     items: [
       {
         label: "Assinaturas",
