@@ -19,6 +19,7 @@ import {
   Gauge,
   ChartNoAxesColumn,
   Megaphone,
+  FileText,
 } from "lucide-react";
 import { graphicalItemsReducer } from "recharts/types/state/graphicalItemsSlice";
 
@@ -157,13 +158,23 @@ export const menuConfig: MenuSection[] = [
     ],
   },
 
-   {
+  {
     icon: ChartNoAxesColumn,
     roles: ["DIRETORIA"],
     items: [
       {
         label: "Performance",
         href: "/portal/relatorios/consolidado",
+      },
+    ],
+  },
+  {
+    icon: FileText,
+    roles: ["COMERCIAL", "DIRETORIA"],
+    items: [
+      {
+        label: "Assinaturas",
+        href: "/portal/assinaturas",
       },
     ],
   },
