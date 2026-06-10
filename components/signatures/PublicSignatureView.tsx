@@ -53,7 +53,6 @@ export default function PublicSignatureView({ token }: { token: string }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isMobileViewport, setIsMobileViewport] = useState(false);
 
   const activeFontFamily = useMemo(
     () => fontOptions.find((option) => option.id === signatureFont)?.family || fontOptions[0].family,
@@ -84,16 +83,6 @@ export default function PublicSignatureView({ token }: { token: string }) {
   useEffect(() => {
     void loadDocument();
   }, [loadDocument]);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(max-width: 1023px)");
-    const syncViewport = () => setIsMobileViewport(mediaQuery.matches);
-
-    syncViewport();
-    mediaQuery.addEventListener("change", syncViewport);
-
-    return () => mediaQuery.removeEventListener("change", syncViewport);
-  }, []);
 
   async function handleSign() {
     try {
@@ -279,45 +268,43 @@ export default function PublicSignatureView({ token }: { token: string }) {
         </section>
 
         <section className="rounded-[28px] border border-white/70 bg-white/88 p-4 shadow-[0_24px_70px_-30px_rgba(15,23,42,0.35)]">
-          {isMobileViewport ? (
-            <div className="space-y-4 rounded-[24px] border border-slate-200 bg-white p-5">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">Contrato para leitura</h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  Em alguns navegadores mobile o PDF nao renderiza embutido. Abra o contrato no visualizador nativo do seu celular para ler o documento completo.
-                </p>
-              </div>
+          <div className="space-y-4 rounded-[24px] border border-slate-200 bg-white p-5 lg:hidden">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Contrato para leitura</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Em navegadores mobile, o contrato abre melhor no visualizador nativo do celular. Use os botões abaixo para ler ou baixar o PDF completo.
+              </p>
+            </div>
 
-              <div className="flex flex-col gap-3">
-                <a
-                  href={document.originalFileUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#0f172a,#2563eb)] px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_45px_-18px_rgba(37,99,235,0.55)]"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Abrir contrato no navegador
-                </a>
-                <a
-                  href={document.originalFileUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                >
-                  <Download className="h-4 w-4" />
-                  Baixar PDF original
-                </a>
-              </div>
+            <div className="flex flex-col gap-3">
+              <a
+                href={document.originalFileUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#0f172a,#2563eb)] px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_45px_-18px_rgba(37,99,235,0.55)]"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Abrir contrato
+              </a>
+              <a
+                href={document.originalFileUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                <Download className="h-4 w-4" />
+                Baixar PDF original
+              </a>
             </div>
-          ) : (
-            <div className="overflow-hidden rounded-[24px] border border-slate-200">
-              <iframe
-                src={document.originalFileUrl}
-                title={`Contrato ${document.title}`}
-                className="h-[85vh] min-h-[720px] w-full bg-white"
-              />
-            </div>
-          )}
+          </div>
+
+          <div className="hidden overflow-hidden rounded-[24px] border border-slate-200 lg:block">
+            <iframe
+              src={document.originalFileUrl}
+              title={`Contrato ${document.title}`}
+              className="h-[85vh] min-h-[720px] w-full bg-white"
+            />
+          </div>
         </section>
       </div>
     </div>
