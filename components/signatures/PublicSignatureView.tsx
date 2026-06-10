@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Download, LoaderCircle, PenTool } from "lucide-react";
+import { CheckCircle2, Download, ExternalLink, LoaderCircle, PenTool } from "lucide-react";
 
 import type { PublicSignatureDocument, SignatureFont } from "@/types/signatures";
 
@@ -26,6 +26,24 @@ function formatDate(value?: string | null) {
   }).format(date);
 }
 
+function normalizePhoneInput(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+function normalizeCpfInput(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+}
+
 export default function PublicSignatureView({ token }: { token: string }) {
   const [document, setDocument] = useState<PublicSignatureDocument | null>(null);
   const [fullName, setFullName] = useState("");
@@ -35,6 +53,7 @@ export default function PublicSignatureView({ token }: { token: string }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
 
   const activeFontFamily = useMemo(
     () => fontOptions.find((option) => option.id === signatureFont)?.family || fontOptions[0].family,
@@ -65,6 +84,16 @@ export default function PublicSignatureView({ token }: { token: string }) {
   useEffect(() => {
     void loadDocument();
   }, [loadDocument]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 1023px)");
+    const syncViewport = () => setIsMobileViewport(mediaQuery.matches);
+
+    syncViewport();
+    mediaQuery.addEventListener("change", syncViewport);
+
+    return () => mediaQuery.removeEventListener("change", syncViewport);
+  }, []);
 
   async function handleSign() {
     try {
@@ -175,7 +204,9 @@ export default function PublicSignatureView({ token }: { token: string }) {
                   <label className="mb-1 block text-sm font-medium text-slate-600">Telefone</label>
                   <input
                     value={phone}
-                    onChange={(event) => setPhone(event.target.value)}
+                    onChange={(event) => setPhone(normalizePhoneInput(event.target.value))}
+                    inputMode="tel"
+                    maxLength={15}
                     className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-sky-300"
                     placeholder="(11) 99999-9999"
                   />
@@ -186,7 +217,9 @@ export default function PublicSignatureView({ token }: { token: string }) {
                 <label className="mb-1 block text-sm font-medium text-slate-600">CPF</label>
                 <input
                   value={cpf}
-                  onChange={(event) => setCpf(event.target.value)}
+                  onChange={(event) => setCpf(normalizeCpfInput(event.target.value))}
+                  inputMode="numeric"
+                  maxLength={14}
                   className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-sky-300"
                   placeholder="000.000.000-00"
                 />
@@ -246,11 +279,45 @@ export default function PublicSignatureView({ token }: { token: string }) {
         </section>
 
         <section className="rounded-[28px] border border-white/70 bg-white/88 p-4 shadow-[0_24px_70px_-30px_rgba(15,23,42,0.35)]">
-          <div className="overflow-hidden rounded-[24px] border border-slate-200">
-            <object data={document.originalFileUrl} type="application/pdf" className="h-[85vh] min-h-[720px] w-full">
-              <div className="p-6 text-sm text-slate-500">Nao foi possivel renderizar o contrato neste navegador.</div>
-            </object>
-          </div>
+          {isMobileViewport ? (
+            <div className="space-y-4 rounded-[24px] border border-slate-200 bg-white p-5">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Contrato para leitura</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Em alguns navegadores mobile o PDF nao renderiza embutido. Abra o contrato no visualizador nativo do seu celular para ler o documento completo.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <a
+                  href={document.originalFileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#0f172a,#2563eb)] px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_45px_-18px_rgba(37,99,235,0.55)]"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Abrir contrato no navegador
+                </a>
+                <a
+                  href={document.originalFileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  <Download className="h-4 w-4" />
+                  Baixar PDF original
+                </a>
+              </div>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-[24px] border border-slate-200">
+              <iframe
+                src={document.originalFileUrl}
+                title={`Contrato ${document.title}`}
+                className="h-[85vh] min-h-[720px] w-full bg-white"
+              />
+            </div>
+          )}
         </section>
       </div>
     </div>
