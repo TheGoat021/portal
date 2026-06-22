@@ -26,6 +26,7 @@ export const STATUS_BY_TYPE = {
     "Cliente avisado",
     "Voucher enviado",
     "Aguardando agenda abrir",
+    "Cancelado pelo titular",
   ],
   cancelamento: ["Revertido", "Nao revertido", "Em tratativa"],
   comercial_ligacoes: ["Venda feita", "Venda nao realizada"],
