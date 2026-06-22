@@ -22,6 +22,8 @@ type MatchRow = {
   player_b: string;
   match_date: string;
   status: "scheduled" | "live" | "closed";
+  player_a_adjustment?: number;
+  player_b_adjustment?: number;
 };
 
 type ScoreboardRow = {
@@ -926,6 +928,80 @@ export async function closeCurrentLeagueRound() {
   return {
     closedMatches: matches.length,
     nextRound: nextMatches[0]?.round ?? null,
+  };
+}
+
+export async function adjustLeagueMatchScore(input: {
+  matchId: string;
+  playerAScore: number;
+  playerBScore: number;
+}) {
+  if (!Number.isInteger(input.playerAScore) || input.playerAScore < 0) {
+    throw new Error("Placar do primeiro colaborador invalido.");
+  }
+
+  if (!Number.isInteger(input.playerBScore) || input.playerBScore < 0) {
+    throw new Error("Placar do segundo colaborador invalido.");
+  }
+
+  const { data: scoreboard, error: scoreboardError } = await supabaseAdmin
+    .from("axion_league_match_scoreboard")
+    .select("id, player_a_score, player_b_score")
+    .eq("id", input.matchId)
+    .maybeSingle();
+
+  if (scoreboardError) {
+    throw new Error(`Erro ao localizar placar atual do confronto: ${scoreboardError.message}`);
+  }
+
+  if (!scoreboard) {
+    throw new Error("Confronto nao encontrado.");
+  }
+
+  const { data: match, error: matchError } = await supabaseAdmin
+    .from("matches")
+    .select("id, player_a_adjustment, player_b_adjustment")
+    .eq("id", input.matchId)
+    .maybeSingle();
+
+  if (matchError) {
+    throw new Error(`Erro ao localizar configuracao do confronto: ${matchError.message}`);
+  }
+
+  if (!match) {
+    throw new Error("Configuracao do confronto nao encontrada.");
+  }
+
+  const nextPlayerAAdjustment =
+    (match.player_a_adjustment ?? 0) + (input.playerAScore - (scoreboard.player_a_score ?? 0));
+  const nextPlayerBAdjustment =
+    (match.player_b_adjustment ?? 0) + (input.playerBScore - (scoreboard.player_b_score ?? 0));
+
+  if (nextPlayerAAdjustment < -99 || nextPlayerAAdjustment > 99) {
+    throw new Error("Ajuste do primeiro colaborador ficou fora do limite permitido.");
+  }
+
+  if (nextPlayerBAdjustment < -99 || nextPlayerBAdjustment > 99) {
+    throw new Error("Ajuste do segundo colaborador ficou fora do limite permitido.");
+  }
+
+  const { error: updateError } = await supabaseAdmin
+    .from("matches")
+    .update({
+      player_a_adjustment: nextPlayerAAdjustment,
+      player_b_adjustment: nextPlayerBAdjustment,
+    })
+    .eq("id", input.matchId);
+
+  if (updateError) {
+    throw new Error(`Erro ao salvar ajuste manual do placar: ${updateError.message}`);
+  }
+
+  return {
+    ok: true,
+    matchId: input.matchId,
+    playerAScore: input.playerAScore,
+    playerBScore: input.playerBScore,
   };
 }
 

@@ -11,6 +11,11 @@ function isMissingPaymentDueTimeColumn(message?: string) {
   return String(message || "").includes("payment_due_time");
 }
 
+function isMissingSchemaColumn(message: string | undefined, column: string) {
+  const value = String(message || "");
+  return value.includes("schema cache") && value.includes(column);
+}
+
 function isTypeStatusConstraintViolation(message?: string) {
   return String(message || "").includes("chk_agendamento_operational_type_status");
 }
@@ -97,6 +102,8 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       patient_city: payload.patient_city,
       contract_id: payload.contract_id,
       plan_name: payload.plan_name,
+      plan_activation_date: payload.plan_activation_date,
+      plan_end_date: payload.plan_end_date,
       record_type: payload.record_type,
       status: payload.status,
       appointment_date: payload.appointment_date,
@@ -142,6 +149,12 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     }
 
     if (error || !data) {
+      if (isMissingSchemaColumn(error?.message, "plan_activation_date") || isMissingSchemaColumn(error?.message, "plan_end_date")) {
+        return NextResponse.json(
+          { error: "O banco ja tem as colunas novas, mas o schema cache da API ainda nao reconheceu plan_activation_date/plan_end_date." },
+          { status: 500 }
+        );
+      }
       if (isTypeStatusConstraintViolation(error?.message)) {
         return NextResponse.json(
           { error: "Os status configurados na aplicacao nao batem com a regra atual do banco. Atualize a constraint chk_agendamento_operational_type_status." },

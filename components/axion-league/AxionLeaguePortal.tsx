@@ -36,6 +36,8 @@ export function AxionLeaguePortal() {
   const [savingParticipants, setSavingParticipants] = useState(false);
   const [roundActionLoading, setRoundActionLoading] = useState<"close" | "reset" | null>(null);
   const [uploadingPhotoFor, setUploadingPhotoFor] = useState<string | null>(null);
+  const [adjustingMatchId, setAdjustingMatchId] = useState<string | null>(null);
+  const [scoreEdits, setScoreEdits] = useState<Record<string, { playerA: string; playerB: string }>>({});
   const [feedback, setFeedback] = useState<string | null>(null);
   const [feedbackTone, setFeedbackTone] = useState<"success" | "error">("success");
   const fileInputsRef = useRef<Record<string, HTMLInputElement | null>>({});
@@ -44,6 +46,25 @@ export function AxionLeaguePortal() {
     if (snapshot?.availableUsers) {
       setParticipants(snapshot.availableUsers);
     }
+  }, [snapshot]);
+
+  useEffect(() => {
+    if (!snapshot?.matches) {
+      return;
+    }
+
+    setScoreEdits((current) => {
+      const next: Record<string, { playerA: string; playerB: string }> = {};
+
+      for (const match of snapshot.matches) {
+        next[match.id] = current[match.id] ?? {
+          playerA: String(match.player_a_score),
+          playerB: String(match.player_b_score),
+        };
+      }
+
+      return next;
+    });
   }, [snapshot]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -201,6 +222,43 @@ export function AxionLeaguePortal() {
       setFeedback(err instanceof Error ? err.message : "Erro ao resetar campeonato.");
     } finally {
       setRoundActionLoading(null);
+    }
+  }
+
+  async function handleAdjustMatchScore(matchId: string) {
+    const scores = scoreEdits[matchId];
+    if (!scores) {
+      return;
+    }
+
+    setAdjustingMatchId(matchId);
+    setFeedback(null);
+
+    try {
+      const response = await fetch("/api/axion-league/admin/matches/score", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          matchId,
+          playerAScore: Number(scores.playerA),
+          playerBScore: Number(scores.playerB),
+        }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Nao foi possivel ajustar o placar.");
+      }
+
+      setFeedbackTone("success");
+      setFeedback("Placar ajustado manualmente. A arena e a tabela vao refletir a correcao em tempo real.");
+    } catch (err) {
+      setFeedbackTone("error");
+      setFeedback(err instanceof Error ? err.message : "Erro ao ajustar placar.");
+    } finally {
+      setAdjustingMatchId(null);
     }
   }
 
@@ -423,6 +481,61 @@ export function AxionLeaguePortal() {
                                 {match.player_b_name}
                               </p>
                             </div>
+                          </div>
+
+                          <div className="mt-4 grid gap-3 rounded-[18px] border border-slate-200/80 bg-white/90 p-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+                            <div>
+                              <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                                Ajuste {match.player_a_name}
+                              </label>
+                              <input
+                                type="number"
+                                min={0}
+                                value={scoreEdits[match.id]?.playerA ?? String(match.player_a_score)}
+                                onChange={(event) =>
+                                  setScoreEdits((current) => ({
+                                    ...current,
+                                    [match.id]: {
+                                      playerA: event.target.value,
+                                      playerB: current[match.id]?.playerB ?? String(match.player_b_score),
+                                    },
+                                  }))
+                                }
+                                className="w-full rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3 text-lg font-bold text-slate-900 outline-none transition focus:border-sky-400 focus:bg-white"
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                                Ajuste {match.player_b_name}
+                              </label>
+                              <input
+                                type="number"
+                                min={0}
+                                value={scoreEdits[match.id]?.playerB ?? String(match.player_b_score)}
+                                onChange={(event) =>
+                                  setScoreEdits((current) => ({
+                                    ...current,
+                                    [match.id]: {
+                                      playerA: current[match.id]?.playerA ?? String(match.player_a_score),
+                                      playerB: event.target.value,
+                                    },
+                                  }))
+                                }
+                                className="w-full rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3 text-lg font-bold text-slate-900 outline-none transition focus:border-sky-400 focus:bg-white"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleAdjustMatchScore(match.id)}
+                              disabled={
+                                adjustingMatchId !== null ||
+                                scoreEdits[match.id]?.playerA === "" ||
+                                scoreEdits[match.id]?.playerB === ""
+                              }
+                              className="rounded-[18px] border border-amber-200 bg-amber-50 px-5 py-3 text-sm font-black uppercase tracking-[0.08em] text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {adjustingMatchId === match.id ? "Salvando..." : "Corrigir Placar"}
+                            </button>
                           </div>
                         </div>
                       ))}

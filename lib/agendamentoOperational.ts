@@ -45,6 +45,8 @@ export type OperationalRecordPayload = {
   patient_city?: unknown;
   contract_id?: unknown;
   plan_name?: unknown;
+  plan_activation_date?: unknown;
+  plan_end_date?: unknown;
   record_type?: unknown;
   status?: unknown;
   appointment_date?: unknown;
@@ -77,6 +79,8 @@ export type NormalizedOperationalRecord = {
   patient_city: string | null;
   contract_id: string | null;
   plan_name: string;
+  plan_activation_date: string | null;
+  plan_end_date: string | null;
   record_type: RecordType;
   status: string;
   appointment_date: string | null;
@@ -213,6 +217,8 @@ export function normalizeOperationalPayload(
       patient_city: asNullableString(payload.patient_city),
       contract_id: asNullableString(payload.contract_id),
       plan_name,
+      plan_activation_date: asNullableString(payload.plan_activation_date),
+      plan_end_date: asNullableString(payload.plan_end_date),
       record_type: record_type_raw,
       status,
       appointment_date: asNullableString(payload.appointment_date),

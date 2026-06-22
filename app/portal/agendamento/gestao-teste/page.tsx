@@ -44,6 +44,8 @@ type OperationalRecord = {
   patientName: string;
   contractId?: string;
   plan: string;
+  planActivationDate?: string;
+  planEndDate?: string;
   phone: string;
   cpf?: string;
   birthDate?: string;
@@ -98,6 +100,8 @@ type SortDirection = "asc" | "desc";
 type SortKey =
   | "patientName"
   | "plan"
+  | "planActivationDate"
+  | "planEndDate"
   | "phone"
   | "type"
   | "date"
@@ -126,7 +130,7 @@ const tabs: { key: TabKey; label: string }[] = [
   { key: "novo", label: "Novo Registro" },
 ];
 
-const PLAN_OPTIONS = ["Plano Light", "Plus R$ 9,90", "Plus Gratuito", "Particular"] as const;
+const PLAN_OPTIONS = ["Plano Light", "Plus R$ 9,90", "Plus Gratuito", "Plus parcial", "Particular"] as const;
 
 const tabKeys = new Set<TabKey>(tabs.map((tab) => tab.key));
 
@@ -176,6 +180,8 @@ type ApiOperationalRecord = {
   patient_city?: string | null;
   contract_id?: string | null;
   plan_name: string;
+  plan_activation_date?: string | null;
+  plan_end_date?: string | null;
   record_type: RecordType;
   status: string;
   appointment_date?: string | null;
@@ -214,6 +220,8 @@ function mapApiRecordToUi(record: ApiOperationalRecord): OperationalRecord {
     patientName: record.patient_name,
     contractId: record.contract_id || "",
     plan: record.plan_name,
+    planActivationDate: record.plan_activation_date || "",
+    planEndDate: record.plan_end_date || "",
     phone: formatPhone(record.patient_phone),
     cpf: formatCpf(record.patient_cpf || ""),
     birthDate: record.patient_birth_date || "",
@@ -253,6 +261,8 @@ function mapUiRecordToApi(record: OperationalRecord, actorUserEmail?: string) {
     patient_city: record.city || null,
     contract_id: record.contractId || null,
     plan_name: record.plan,
+    plan_activation_date: record.planActivationDate || null,
+    plan_end_date: record.planEndDate || null,
     record_type: record.type,
     status: record.status,
     appointment_date: record.date || null,
@@ -439,6 +449,10 @@ function sortOperationalRecords(records: OperationalRecord[], sortKey: SortKey, 
         return compareText(left.patientName, right.patientName);
       case "plan":
         return compareText(left.plan, right.plan);
+      case "planActivationDate":
+        return compareText(left.planActivationDate, right.planActivationDate);
+      case "planEndDate":
+        return compareText(left.planEndDate, right.planEndDate);
       case "phone":
         return compareText(left.phone, right.phone);
       case "type":
@@ -899,6 +913,8 @@ function RecordsTable({
               <th className="px-3 py-3">Acao</th>
               {renderSortableHeader("Paciente", "patientName")}
               {renderSortableHeader("Plano", "plan")}
+              {renderSortableHeader("Ativacao", "planActivationDate")}
+              {renderSortableHeader("Finalizacao", "planEndDate")}
               {mode !== "payment" && renderSortableHeader("Telefone", "phone")}
               {mode === "payment" && renderSortableHeader("Tipo", "type")}
               {mode !== "call" && mode !== "cancelamento" && (
@@ -927,6 +943,8 @@ function RecordsTable({
                 </td>
                 <td className="whitespace-nowrap px-3 py-3 font-semibold text-slate-900">{record.patientName}</td>
                 <td className="whitespace-nowrap px-3 py-3">{record.plan}</td>
+                <td className="whitespace-nowrap px-3 py-3">{formatDate(record.planActivationDate)}</td>
+                <td className="whitespace-nowrap px-3 py-3">{formatDate(record.planEndDate)}</td>
                 {mode !== "payment" && <td className="whitespace-nowrap px-3 py-3">{record.phone}</td>}
                 {mode === "payment" && <td className="whitespace-nowrap px-3 py-3">{typeLabel(record.type)}</td>}
                 {mode !== "call" && mode !== "cancelamento" && (
@@ -1279,6 +1297,8 @@ function NewRecordView({
       patientName: String(form.get("patientName") || "Novo paciente"),
       contractId: String(form.get("contractId") || ""),
       phone: String(form.get("phone") || ""),
+      planActivationDate: String(form.get("planActivationDate") || ""),
+      planEndDate: String(form.get("planEndDate") || ""),
       cpf: String(form.get("cpf") || ""),
       birthDate: String(form.get("birthDate") || ""),
       email: String(form.get("email") || ""),
@@ -1331,6 +1351,14 @@ function NewRecordView({
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <input name="patientName" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="Nome do paciente" />
           <input name="contractId" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="ID do contrato" />
+          <label className="flex flex-col gap-1 text-xs font-semibold text-slate-500">
+            <span>Data de ativacao do plano</span>
+            <input name="planActivationDate" type="date" className="rounded-xl border border-slate-200 px-3 py-3 text-sm font-normal text-slate-700" />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-semibold text-slate-500">
+            <span>Data de finalizacao do plano</span>
+            <input name="planEndDate" type="date" className="rounded-xl border border-slate-200 px-3 py-3 text-sm font-normal text-slate-700" />
+          </label>
           <input
             name="phone"
             className="rounded-xl border border-slate-200 px-3 py-3 text-sm"
@@ -1488,12 +1516,13 @@ function PatientDrawer({
 }: {
   record: OperationalRecord | null;
   onClose: () => void;
-  onSave: (id: string, patch: Partial<OperationalRecord>) => void;
+  onSave: (id: string, patch: Partial<OperationalRecord>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   users: UserOption[];
 }) {
   const [draft, setDraft] = useState<OperationalRecord | null>(record);
   const [deleting, setDeleting] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setDraft(record);
@@ -1529,6 +1558,21 @@ function PatientDrawer({
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  async function handleSave() {
+    if (!record || !draft || saving) return;
+
+    setSaving(true);
+    try {
+      await onSave(record.id, draft);
+      onClose();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erro ao salvar alteracoes";
+      window.alert(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/45" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <aside className="h-full w-full max-w-xl overflow-y-auto bg-white p-6 shadow-2xl">
@@ -1546,6 +1590,14 @@ function PatientDrawer({
         <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-2">
           <input className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.patientName} onChange={(event) => patch({ patientName: event.target.value })} />
           <input className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.contractId || ""} onChange={(event) => patch({ contractId: event.target.value })} placeholder="ID do contrato" />
+          <label className="flex flex-col gap-1 text-xs font-semibold text-slate-500">
+            <span>Data de ativacao do plano</span>
+            <input type="date" className="rounded-xl border border-slate-200 px-3 py-3 text-sm font-normal text-slate-700" value={draft.planActivationDate || ""} onChange={(event) => patch({ planActivationDate: event.target.value })} />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-semibold text-slate-500">
+            <span>Data de finalizacao do plano</span>
+            <input type="date" className="rounded-xl border border-slate-200 px-3 py-3 text-sm font-normal text-slate-700" value={draft.planEndDate || ""} onChange={(event) => patch({ planEndDate: event.target.value })} />
+          </label>
           <input
             className="rounded-xl border border-slate-200 px-3 py-3 text-sm"
             value={draft.phone}
@@ -1634,13 +1686,11 @@ function PatientDrawer({
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
-            onClick={() => {
-              onSave(record.id, draft);
-              onClose();
-            }}
-            className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700"
+            onClick={handleSave}
+            disabled={saving}
+            className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Salvar alteracoes
+            {saving ? "Salvando..." : "Salvar alteracoes"}
           </button>
           <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">
             Fechar
@@ -1796,13 +1846,14 @@ export default function GestaoAgendamentosTestePage() {
     refreshListRecords(currentPage).catch(console.error);
   }, [currentPage, isServerPaginatedTab, refreshListRecords]);
 
-  function updateRecord(id: string, patch: Partial<OperationalRecord>) {
+  async function updateRecord(id: string, patch: Partial<OperationalRecord>) {
     setRecords((current) =>
       current.map((record) => (record.id === id ? { ...record, ...patch, updatedAt: "Agora" } : record))
     );
     setListRecords((current) =>
       current.map((record) => (record.id === id ? { ...record, ...patch, updatedAt: "Agora" } : record))
     );
+    setSelectedRecord((current) => (current?.id === id ? { ...current, ...patch, updatedAt: "Agora" } : current));
 
     const currentRecord =
       records.find((record) => record.id === id) ||
@@ -1811,16 +1862,17 @@ export default function GestaoAgendamentosTestePage() {
 
     if (!currentRecord) return;
 
-    updateOperationalRecord(id, { ...currentRecord, ...patch }, String(user?.email || ""))
-      .then((saved) => {
-        setRecords((current) => current.map((record) => (record.id === id ? saved : record)));
-        setListRecords((current) => current.map((record) => (record.id === id ? saved : record)));
-      })
-      .catch((error) => {
-        console.error(error);
-        refreshDashboardRecords().catch(console.error);
-        refreshListRecords(currentPage).catch(console.error);
-      });
+    try {
+      const saved = await updateOperationalRecord(id, { ...currentRecord, ...patch }, String(user?.email || ""));
+      setRecords((current) => current.map((record) => (record.id === id ? saved : record)));
+      setListRecords((current) => current.map((record) => (record.id === id ? saved : record)));
+      setSelectedRecord((current) => (current?.id === id ? saved : current));
+    } catch (error) {
+      console.error(error);
+      await refreshDashboardRecords().catch(console.error);
+      await refreshListRecords(currentPage).catch(console.error);
+      throw error;
+    }
   }
 
   async function removeRecord(id: string) {
