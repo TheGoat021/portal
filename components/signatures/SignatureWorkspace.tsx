@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Copy, FileText, Link2, LoaderCircle, RefreshCw, Upload } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, FileText, Link2, LoaderCircle, RefreshCw, Upload } from "lucide-react";
 
 import type { SignatureDocument } from "@/types/signatures";
 
@@ -14,6 +14,8 @@ const initialForm: CreateFormState = {
   title: "",
   file: null,
 };
+
+const DOCUMENTS_PER_PAGE = 5;
 
 function formatDate(value?: string | null) {
   if (!value) return "-";
@@ -44,6 +46,16 @@ function statusClass(status: string) {
   return "border-slate-200 bg-slate-50 text-slate-600";
 }
 
+function toInputDate(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "America/Sao_Paulo",
+  }).format(date);
+}
+
 export default function SignatureWorkspace() {
   const [documents, setDocuments] = useState<SignatureDocument[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,6 +65,9 @@ export default function SignatureWorkspace() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [createState, setCreateState] = useState<CreateFormState>(initialForm);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [titleFilter, setTitleFilter] = useState("");
+  const [createdAtFilter, setCreatedAtFilter] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     void loadDocuments();
@@ -74,6 +89,38 @@ export default function SignatureWorkspace() {
     () => documents.find((document) => document.id === selectedId) || null,
     [documents, selectedId]
   );
+
+  const filteredDocuments = useMemo(() => {
+    const normalizedTitle = titleFilter.trim().toLowerCase();
+
+    return documents.filter((document) => {
+      const matchesTitle = normalizedTitle
+        ? document.title.toLowerCase().includes(normalizedTitle)
+        : true;
+      const matchesDate = createdAtFilter
+        ? toInputDate(document.createdAt) === createdAtFilter
+        : true;
+
+      return matchesTitle && matchesDate;
+    });
+  }, [createdAtFilter, documents, titleFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredDocuments.length / DOCUMENTS_PER_PAGE));
+
+  const pagedDocuments = useMemo(() => {
+    const startIndex = (currentPage - 1) * DOCUMENTS_PER_PAGE;
+    return filteredDocuments.slice(startIndex, startIndex + DOCUMENTS_PER_PAGE);
+  }, [currentPage, filteredDocuments]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [titleFilter, createdAtFilter]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   async function loadDocuments() {
     try {
@@ -280,19 +327,47 @@ export default function SignatureWorkspace() {
             </div>
           </div>
 
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-600">Filtrar por titulo</label>
+              <input
+                value={titleFilter}
+                onChange={(event) => setTitleFilter(event.target.value)}
+                placeholder="Buscar contrato"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-sky-300"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-600">Filtrar por data de criacao</label>
+              <input
+                type="date"
+                value={createdAtFilter}
+                onChange={(event) => setCreatedAtFilter(event.target.value)}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-sky-300"
+              />
+            </div>
+          </div>
+
           <div className="mt-5 space-y-3">
             {loading ? (
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">Carregando contratos...</div>
-            ) : documents.length === 0 ? (
+            ) : filteredDocuments.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
-                Nenhum contrato criado ainda.
+                Nenhum contrato encontrado com os filtros atuais.
               </div>
             ) : (
-              documents.map((document) => (
-                <button
+              pagedDocuments.map((document) => (
+                <div
                   key={document.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setSelectedId(document.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setSelectedId(document.id);
+                    }
+                  }}
                   className={`w-full rounded-[24px] border p-4 text-left transition ${
                     selectedId === document.id
                       ? "border-sky-300 bg-sky-50/60 shadow-[0_18px_40px_-26px_rgba(37,99,235,0.5)]"
@@ -350,10 +425,41 @@ export default function SignatureWorkspace() {
                       </a>
                     ) : null}
                   </div>
-                </button>
+                </div>
               ))
             )}
           </div>
+
+          {!loading && filteredDocuments.length > 0 ? (
+            <div className="mt-5 flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-sm text-slate-500">
+                Mostrando {pagedDocuments.length} de {filteredDocuments.length} contratos
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  disabled={currentPage === 1}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Anterior
+                </button>
+                <span className="text-sm font-medium text-slate-600">
+                  {currentPage} / {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                  disabled={currentPage === totalPages}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Proximo
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="rounded-[28px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_70px_-30px_rgba(15,23,42,0.28)]">

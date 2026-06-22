@@ -1,12 +1,29 @@
+import { readFile } from "fs/promises";
+import path from "path";
+
+import fontkit from "@pdf-lib/fontkit";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 import type { SignatureFont } from "@/types/signatures";
 
-function pickPdfFont(font: SignatureFont) {
-  if (font === "elegant") return StandardFonts.TimesRomanItalic;
-  if (font === "monospace") return StandardFonts.CourierOblique;
-  if (font === "formal") return StandardFonts.Helvetica;
-  return StandardFonts.HelveticaOblique;
+const signatureFontFiles: Record<SignatureFont, string> = {
+  classic: "classic.ttf",
+  elegant: "elegant.ttf",
+  formal: "formal.ttf",
+  monospace: "monospace.ttf",
+};
+
+const signatureFontCache = new Map<SignatureFont, Uint8Array>();
+
+async function loadSignatureFontBytes(font: SignatureFont) {
+  const cached = signatureFontCache.get(font);
+  if (cached) return cached;
+
+  const filePath = path.join(process.cwd(), "assets", "signature-fonts", signatureFontFiles[font]);
+  const bytes = new Uint8Array(await readFile(filePath));
+  signatureFontCache.set(font, bytes);
+
+  return bytes;
 }
 
 function formatCpf(value: string) {
@@ -88,6 +105,70 @@ function wrapText(text: string, maxCharsPerLine: number) {
   return lines;
 }
 
+function wrapTextByWidth(text: string, maxWidth: number, font: Awaited<ReturnType<PDFDocument["embedFont"]>>, fontSize: number) {
+  const normalized = text.trim();
+  if (!normalized) return ["Nao informado"];
+
+  const words = normalized.split(/\s+/);
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (font.widthOfTextAtSize(candidate, fontSize) <= maxWidth) {
+      current = candidate;
+      continue;
+    }
+
+    if (current) {
+      lines.push(current);
+      current = word;
+      continue;
+    }
+
+    let chunk = "";
+    for (const char of word) {
+      const next = `${chunk}${char}`;
+      if (font.widthOfTextAtSize(next, fontSize) <= maxWidth) {
+        chunk = next;
+      } else {
+        if (chunk) lines.push(chunk);
+        chunk = char;
+      }
+    }
+    current = chunk;
+  }
+
+  if (current) {
+    lines.push(current);
+  }
+
+  return lines;
+}
+
+function fitSignatureText(text: string, maxWidth: number, maxHeight: number, font: Awaited<ReturnType<PDFDocument["embedFont"]>>) {
+  for (let size = 22; size >= 11; size -= 1) {
+    const lines = wrapTextByWidth(text, maxWidth, font, size).slice(0, 3);
+    const lineHeight = size * 1.05;
+    const totalHeight = lines.length * lineHeight;
+
+    if (totalHeight <= maxHeight) {
+      return {
+        size,
+        lines,
+        lineHeight,
+      };
+    }
+  }
+
+  const fallbackSize = 11;
+  return {
+    size: fallbackSize,
+    lines: wrapTextByWidth(text, maxWidth, font, fallbackSize).slice(0, 3),
+    lineHeight: fallbackSize * 1.05,
+  };
+}
+
 export async function generateSignedContractPdf(input: {
   pdfBuffer: Buffer;
   documentTitle: string;
@@ -104,11 +185,13 @@ export async function generateSignedContractPdf(input: {
   userAgent?: string | null;
 }) {
   const pdfDoc = await PDFDocument.load(input.pdfBuffer);
+  pdfDoc.registerFontkit(fontkit);
   const reportPage = pdfDoc.addPage([595.28, 841.89]);
 
   const headingFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const bodyFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const signatureFont = await pdfDoc.embedFont(pickPdfFont(input.signatureFont));
+  const signatureFontBytes = await loadSignatureFontBytes(input.signatureFont);
+  const signatureFont = await pdfDoc.embedFont(signatureFontBytes, { subset: true });
 
   reportPage.drawRectangle({
     x: 28,
@@ -306,13 +389,18 @@ export async function generateSignedContractPdf(input: {
     font: bodyFont,
     color: rgb(0.3, 0.34, 0.4),
   });
-  reportPage.drawText(input.fullName, {
-    x: 440,
-    y: 356,
-    size: 22,
-    font: signatureFont,
-    color: rgb(0.09, 0.26, 0.5),
+
+  const signatureBlock = fitSignatureText(input.fullName, 86, 48, signatureFont);
+  signatureBlock.lines.forEach((line, index) => {
+    reportPage.drawText(line, {
+      x: 440,
+      y: 372 - index * signatureBlock.lineHeight,
+      size: signatureBlock.size,
+      font: signatureFont,
+      color: rgb(0.09, 0.26, 0.5),
+    });
   });
+
   reportPage.drawText(input.fullName, {
     x: 440,
     y: 328,
