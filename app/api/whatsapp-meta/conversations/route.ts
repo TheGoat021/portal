@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
 
     let query = supabaseAdmin
       .from('meta_conversations')
-      .select('*')
+      .select('id, wa_id, contact_name, profile_name, last_message, last_message_at, last_message_type, unread_count, connection_id')
       .eq('connection_id', connectionId)
       .order('last_message_at', { ascending: false, nullsFirst: false })
       .limit(3000)
@@ -126,37 +126,120 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const { data: queueSettings } = await supabaseAdmin
-      .from('meta_queue_settings')
-      .select('response_alerts_enabled, response_alert_warning_minutes, response_alert_danger_minutes')
-      .eq('connection_id', connectionId)
-      .maybeSingle()
+    const latestManagementByConversation = new Map<
+      string,
+      { status: string; assigned_user_id: string | null; assigned_user_email: string | null; assigned_department: string | null }
+    >()
 
-    const { data: reminderRowsRaw, error: reminderRowsError } = await supabaseAdmin
-      .from('meta_conversation_reminders')
-      .select('conversation_id, scheduled_for, description')
-      .eq('connection_id', connectionId)
-      .is('completed_at', null)
-
-    const reminderTableMissing =
-      reminderRowsError && /meta_conversation_reminders/i.test(reminderRowsError.message || '')
-
-    if (reminderRowsError && !reminderTableMissing) {
-      return NextResponse.json({ error: reminderRowsError.message }, { status: 500 })
+    for (const row of managementRows ?? []) {
+      const conversationId = String(row.conversation_id)
+      if (!latestManagementByConversation.has(conversationId)) {
+        latestManagementByConversation.set(conversationId, {
+          status: String(row.status || 'open'),
+          assigned_user_id: row.assigned_user_id ? String(row.assigned_user_id) : null,
+          assigned_user_email: row.assigned_user_email ? String(row.assigned_user_email) : null,
+          assigned_department: row.assigned_department ? String(row.assigned_department) : null
+        })
+      }
     }
 
-    const reminderRows = reminderTableMissing ? [] : reminderRowsRaw ?? []
+    const conversationsWithServiceState = (data ?? []).map((conversation) => {
+      const conversationId = String(conversation.id)
+      const management = latestManagementByConversation.get(conversationId)
 
-    const alertsEnabled = Boolean(queueSettings?.response_alerts_enabled)
-    const warningMinutes = Number(queueSettings?.response_alert_warning_minutes ?? 10)
-    const dangerMinutes = Number(queueSettings?.response_alert_danger_minutes ?? 30)
+      const isClosed = management?.status === 'closed'
+      // Regra de negocio: "em atendimento" apenas quando houver operador atribuido.
+      // Bot fica somente para entrada/fila sem atribuicao.
+      const hasOperator = Boolean(
+        management?.assigned_user_id ||
+          management?.assigned_user_email
+      )
+      const service_state = isClosed ? 'closed' : hasOperator ? 'operator' : 'bot'
+
+      return {
+        ...conversation,
+        service_state,
+        assigned_user_id: management?.assigned_user_id ?? null,
+        assigned_user_email: management?.assigned_user_email ?? null,
+        waiting_for_reply: false,
+        minutes_without_reply: null,
+        response_alert_level: null,
+        reminder_due_at: null,
+        reminder_description: null
+      }
+    })
+
+    const visibleConversations =
+      userId && !isDiretoria
+        ? conversationsWithServiceState.filter((conversation) => {
+            if (conversation.service_state === 'bot') return true
+            if (conversation.service_state === 'closed') return true
+            return String(conversation.assigned_user_id || '') === userId
+          })
+        : conversationsWithServiceState
+
+    const counts = {
+      bot: visibleConversations.filter((conversation) => conversation.service_state === 'bot').length,
+      operator: visibleConversations.filter((conversation) => conversation.service_state === 'operator').length,
+      closed: visibleConversations.filter((conversation) => conversation.service_state === 'closed').length
+    }
+
+    const conversationsByFilter = serviceFilter
+      ? visibleConversations.filter((conversation) => conversation.service_state === serviceFilter)
+      : visibleConversations
+
+    const total = conversationsByFilter.length
+    const pagedData = conversationsByFilter.slice(offset, offset + limit)
+
+    const pagedConversationIds = pagedData.map((conversation) => String(conversation.id))
+    const pagedOperatorConversationIds = pagedData
+      .filter((conversation) => conversation.service_state === 'operator')
+      .map((conversation) => String(conversation.id))
+
+    const reminderByConversation = new Map<string, { scheduled_for: string; description: string }>()
+
+    if (pagedConversationIds.length > 0) {
+      const { data: reminderRowsRaw, error: reminderRowsError } = await supabaseAdmin
+        .from('meta_conversation_reminders')
+        .select('conversation_id, scheduled_for, description')
+        .eq('connection_id', connectionId)
+        .in('conversation_id', pagedConversationIds)
+        .is('completed_at', null)
+
+      const reminderTableMissing =
+        reminderRowsError && /meta_conversation_reminders/i.test(reminderRowsError.message || '')
+
+      if (reminderRowsError && !reminderTableMissing) {
+        return NextResponse.json({ error: reminderRowsError.message }, { status: 500 })
+      }
+
+      for (const row of reminderTableMissing ? [] : reminderRowsRaw ?? []) {
+        reminderByConversation.set(String(row.conversation_id), {
+          scheduled_for: String(row.scheduled_for),
+          description: String(row.description || '')
+        })
+      }
+    }
 
     const latestInboundByConversation = new Map<string, string>()
     const latestOutboundByConversation = new Map<string, string>()
     const latestOperatorEmailByConversation = new Map<string, string>()
+    let alertsEnabled = false
+    let warningMinutes = 10
+    let dangerMinutes = 30
 
-    if (conversationIds.length > 0) {
-      const idChunks = chunkArray(conversationIds, IN_FILTER_CHUNK_SIZE)
+    if (pagedOperatorConversationIds.length > 0) {
+      const { data: queueSettings } = await supabaseAdmin
+        .from('meta_queue_settings')
+        .select('response_alerts_enabled, response_alert_warning_minutes, response_alert_danger_minutes')
+        .eq('connection_id', connectionId)
+        .maybeSingle()
+
+      alertsEnabled = Boolean(queueSettings?.response_alerts_enabled)
+      warningMinutes = Number(queueSettings?.response_alert_warning_minutes ?? 10)
+      dangerMinutes = Number(queueSettings?.response_alert_danger_minutes ?? 30)
+
+      const idChunks = chunkArray(pagedOperatorConversationIds, IN_FILTER_CHUNK_SIZE)
       for (const chunk of idChunks) {
         const [{ data: inboundRows, error: inboundError }, { data: outboundRowsRaw, error: outboundError }] =
           await Promise.all([
@@ -214,52 +297,16 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const latestManagementByConversation = new Map<
-      string,
-      { status: string; assigned_user_id: string | null; assigned_user_email: string | null; assigned_department: string | null }
-    >()
-
-    for (const row of managementRows ?? []) {
-      const conversationId = String(row.conversation_id)
-      if (!latestManagementByConversation.has(conversationId)) {
-        latestManagementByConversation.set(conversationId, {
-          status: String(row.status || 'open'),
-          assigned_user_id: row.assigned_user_id ? String(row.assigned_user_id) : null,
-          assigned_user_email: row.assigned_user_email ? String(row.assigned_user_email) : null,
-          assigned_department: row.assigned_department ? String(row.assigned_department) : null
-        })
-      }
-    }
-
-    const reminderByConversation = new Map<string, { scheduled_for: string; description: string }>()
-    for (const row of reminderRows) {
-      reminderByConversation.set(String(row.conversation_id), {
-        scheduled_for: String(row.scheduled_for),
-        description: String(row.description || '')
-      })
-    }
-
-    const conversationsWithServiceState = (data ?? []).map((conversation) => {
+    const enrichedPagedData = pagedData.map((conversation) => {
       const conversationId = String(conversation.id)
-      const management = latestManagementByConversation.get(conversationId)
-      const fallbackAgentEmail = latestOperatorEmailByConversation.get(conversationId) ?? null
-
-      const isClosed = management?.status === 'closed'
-      // Regra de negocio: "em atendimento" apenas quando houver operador atribuido.
-      // Bot fica somente para entrada/fila sem atribuicao.
-      const hasOperator = Boolean(
-        management?.assigned_user_id ||
-          management?.assigned_user_email
-      )
-      const service_state = isClosed ? 'closed' : hasOperator ? 'operator' : 'bot'
-
       const lastInboundAt = latestInboundByConversation.get(conversationId) ?? null
       const lastOutboundAt = latestOutboundByConversation.get(conversationId) ?? null
-
       const inboundDate = lastInboundAt ? new Date(lastInboundAt) : null
       const outboundDate = lastOutboundAt ? new Date(lastOutboundAt) : null
       const waitingForReply =
-        Boolean(inboundDate) && (!outboundDate || (inboundDate as Date).getTime() > (outboundDate as Date).getTime())
+        conversation.service_state === 'operator' &&
+        Boolean(inboundDate) &&
+        (!outboundDate || (inboundDate as Date).getTime() > (outboundDate as Date).getTime())
 
       const minutesWithoutReply =
         waitingForReply && inboundDate
@@ -268,12 +315,12 @@ export async function GET(req: NextRequest) {
 
       const responseAlertLevel =
         alertsEnabled &&
-        service_state === 'operator' &&
+        conversation.service_state === 'operator' &&
         minutesWithoutReply !== null &&
         minutesWithoutReply >= dangerMinutes
           ? 'danger'
           : alertsEnabled &&
-              service_state === 'operator' &&
+              conversation.service_state === 'operator' &&
               minutesWithoutReply !== null &&
               minutesWithoutReply >= warningMinutes
             ? 'warning'
@@ -283,9 +330,8 @@ export async function GET(req: NextRequest) {
 
       return {
         ...conversation,
-        service_state,
-        assigned_user_id: management?.assigned_user_id ?? null,
-        assigned_user_email: management?.assigned_user_email ?? fallbackAgentEmail,
+        assigned_user_email:
+          conversation.assigned_user_email ?? latestOperatorEmailByConversation.get(conversationId) ?? null,
         waiting_for_reply: waitingForReply,
         minutes_without_reply: minutesWithoutReply,
         response_alert_level: responseAlertLevel,
@@ -294,31 +340,9 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    const visibleConversations =
-      userId && !isDiretoria
-        ? conversationsWithServiceState.filter((conversation) => {
-            if (conversation.service_state === 'bot') return true
-            if (conversation.service_state === 'closed') return true
-            return String(conversation.assigned_user_id || '') === userId
-          })
-        : conversationsWithServiceState
-
-    const counts = {
-      bot: visibleConversations.filter((conversation) => conversation.service_state === 'bot').length,
-      operator: visibleConversations.filter((conversation) => conversation.service_state === 'operator').length,
-      closed: visibleConversations.filter((conversation) => conversation.service_state === 'closed').length
-    }
-
-    const conversationsByFilter = serviceFilter
-      ? visibleConversations.filter((conversation) => conversation.service_state === serviceFilter)
-      : visibleConversations
-
-    const total = conversationsByFilter.length
-    const pagedData = conversationsByFilter.slice(offset, offset + limit)
-
     return NextResponse.json({
       ok: true,
-      data: pagedData,
+      data: enrichedPagedData,
       counts,
       pagination: {
         total,

@@ -2,7 +2,7 @@
 
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useDeferredValue, useEffect, useMemo, useState } from "react"
 import {
   Archive,
   Bell,
@@ -214,6 +214,7 @@ export default function ConversationsList({
   const [newPhone, setNewPhone] = useState("")
   const [newMessage, setNewMessage] = useState("")
   const [search, setSearch] = useState("")
+  const deferredSearch = useDeferredValue(search)
   const [serviceFilter, setServiceFilter] = useState<ServiceFilter>("bot")
   const [loadingConnections, setLoadingConnections] = useState(false)
   const [creatingConversation, setCreatingConversation] = useState(false)
@@ -288,7 +289,7 @@ export default function ConversationsList({
       }
 
       const res = await fetch(
-        `/api/whatsapp-meta/conversations?connectionId=${encodeURIComponent(activeConnectionId)}&userId=${encodeURIComponent(currentUser.id)}&userRole=${encodeURIComponent(currentUser.role || "")}&serviceFilter=${encodeURIComponent(serviceFilter)}&search=${encodeURIComponent(search)}&limit=${PAGE_SIZE}&offset=${nextOffset}`,
+        `/api/whatsapp-meta/conversations?connectionId=${encodeURIComponent(activeConnectionId)}&userId=${encodeURIComponent(currentUser.id)}&userRole=${encodeURIComponent(currentUser.role || "")}&serviceFilter=${encodeURIComponent(serviceFilter)}&search=${encodeURIComponent(deferredSearch)}&limit=${PAGE_SIZE}&offset=${nextOffset}`,
         { cache: "no-store" }
       )
 
@@ -378,7 +379,7 @@ export default function ConversationsList({
     fetchConversations(selectedConnectionId, { append: false })
     const interval = setInterval(() => fetchConversations(selectedConnectionId, { append: false }), 3000)
     return () => clearInterval(interval)
-  }, [selectedConnectionId, serviceFilter, search])
+  }, [selectedConnectionId, serviceFilter, deferredSearch])
 
   useEffect(() => {
     if (serviceFilter !== "bot") {
@@ -485,7 +486,7 @@ export default function ConversationsList({
   }, [conversations])
 
   const filteredConversations = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = deferredSearch.trim().toLowerCase()
     let base = visibleConversations.filter((conversation) => conversation.serviceState === serviceFilter)
 
     if (isDiretoria && selectedOperatorFilter !== "all") {
@@ -545,7 +546,7 @@ export default function ConversationsList({
     })
   }, [
     visibleConversations,
-    search,
+    deferredSearch,
     serviceFilter,
     isDiretoria,
     onlyUnreadForOperator,

@@ -61,6 +61,10 @@ function cleanNodeLabel(node: Node<FlowNodeData>) {
   return title || "node"
 }
 
+function normalizeRuleValue(value: string) {
+  return value.trim().toLowerCase()
+}
+
 export default function MetaChatbotBuilderPage() {
   const [connections, setConnections] = useState<MetaConnection[]>([])
   const [departmentRoles, setDepartmentRoles] = useState<string[]>([])
@@ -83,6 +87,16 @@ export default function MetaChatbotBuilderPage() {
     () => edges.find((edge) => edge.id === selectedEdgeId) ?? null,
     [edges, selectedEdgeId]
   )
+
+  const selectedNodeOutgoingEdges = useMemo(() => {
+    if (!selectedNodeId) return []
+    return edges.filter((edge) => edge.source === selectedNodeId)
+  }, [edges, selectedNodeId])
+
+  const selectedQuestionOptions = useMemo(() => {
+    if (selectedNode?.data?.kind !== "question") return []
+    return (selectedNode.data.options || []).map((option) => option.trim()).filter(Boolean)
+  }, [selectedNode])
 
   const fetchConnections = useCallback(async () => {
     const res = await fetch("/api/meta/embedded-signup/connections", { cache: "no-store" })
@@ -161,18 +175,30 @@ export default function MetaChatbotBuilderPage() {
 
   const onConnect: OnConnect = useCallback(
     (params) => {
+      const sourceNode = nodes.find((node) => node.id === params.source)
+      const sourceOptions =
+        sourceNode?.data?.kind === "question"
+          ? (sourceNode.data.options || []).map((item) => item.trim()).filter(Boolean)
+          : []
+
       setEdges((eds) =>
         addEdge(
           {
             ...params,
             id: uid("edge"),
-            label: ""
+            label: sourceOptions.length === 1 ? sourceOptions[0] : "",
+            data:
+              sourceOptions.length === 1
+                ? {
+                    rule: sourceOptions[0]
+                  }
+                : undefined
           },
           eds
         )
       )
     },
-    [setEdges]
+    [nodes, setEdges]
   )
 
   const onSelectionChange = useCallback<OnSelectionChangeFunc>(
@@ -215,6 +241,17 @@ export default function MetaChatbotBuilderPage() {
 
   const updateEdge = (edgeId: string, updater: (current: Edge) => Edge) => {
     setEdges((prev) => prev.map((edge) => (edge.id === edgeId ? updater(edge) : edge)))
+  }
+
+  const assignQuestionOptionToEdge = (edgeId: string, option: string) => {
+    updateEdge(edgeId, (edge) => ({
+      ...edge,
+      label: option,
+      data: {
+        ...(edge.data || {}),
+        rule: option
+      }
+    }))
   }
 
   const removeSelected = () => {
@@ -409,6 +446,45 @@ export default function MetaChatbotBuilderPage() {
               className="w-full border rounded-lg px-3 py-2 text-sm min-h-[88px]"
             />
 
+            {selectedNode.data?.kind === "question" && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-900">
+                Cada saÃ­da da pergunta pode levar para um bloco diferente. Depois de ligar as conexÃµes no fluxo,
+                vincule abaixo qual resposta ativa cada saÃ­da.
+              </div>
+            )}
+
+            {selectedNode.data?.kind === "question" && selectedNodeOutgoingEdges.length > 0 && (
+              <div className="space-y-2 rounded-xl border border-gray-200 p-3">
+                <div className="text-xs font-semibold text-gray-700">Direcionamento por resposta</div>
+                {selectedNodeOutgoingEdges.map((edge) => {
+                  const targetNode = nodes.find((node) => node.id === edge.target)
+                  const currentRule = edge.data?.rule || (typeof edge.label === "string" ? edge.label : "")
+                  const selectedOption =
+                    selectedQuestionOptions.find((option) => normalizeRuleValue(option) === normalizeRuleValue(currentRule)) || ""
+
+                  return (
+                    <div key={edge.id} className="rounded-lg border border-gray-200 p-2">
+                      <div className="mb-2 text-[11px] text-gray-500">
+                        SaÃ­da para {targetNode ? cleanNodeLabel(targetNode) : edge.target}
+                      </div>
+                      <select
+                        value={selectedOption}
+                        onChange={(e) => assignQuestionOptionToEdge(edge.id, e.target.value)}
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      >
+                        <option value="">Selecione a resposta desta saÃ­da</option>
+                        {selectedQuestionOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
             <select
               value={selectedNode.data?.questionMode || "text"}
               onChange={(e) =>
@@ -531,6 +607,13 @@ export default function MetaChatbotBuilderPage() {
             <div className="text-[11px] text-gray-500">
               {selectedEdge.source} {"->"} {selectedEdge.target}
             </div>
+
+            {nodes.find((node) => node.id === selectedEdge.source)?.data?.kind === "question" && (
+              <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-3 text-xs text-sky-900">
+                Em conexÃµes que saem de uma pergunta, use a prÃ³pria resposta como regra. Exemplo:
+                `Sim` vai para um bloco e `NÃ£o` vai para outro.
+              </div>
+            )}
 
             <input
               value={typeof selectedEdge.label === "string" ? selectedEdge.label : ""}
