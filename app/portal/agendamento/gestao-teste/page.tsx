@@ -60,6 +60,7 @@ type OperationalRecord = {
   commercialOwner?: string;
   status: string;
   observation: string;
+  documentAdditionalInfo: string;
   cancellationReason?: string;
   needsPayment: boolean;
   paymentStatus: PaymentStatus;
@@ -199,6 +200,7 @@ type ApiOperationalRecord = {
   call_status?: CallStatus | null;
   cancellation_reason?: string | null;
   observation?: string | null;
+  document_additional_info?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -262,6 +264,7 @@ function mapApiRecordToUi(record: ApiOperationalRecord): OperationalRecord {
     commercialOwner: record.commercial_owner_email || "",
     status: record.status,
     observation: record.observation || "",
+    documentAdditionalInfo: record.document_additional_info || "",
     cancellationReason: record.cancellation_reason || "",
     needsPayment: Boolean(record.needs_payment),
     paymentStatus: record.payment_status,
@@ -305,6 +308,7 @@ function mapUiRecordToApi(record: OperationalRecord, actorUserEmail?: string) {
     call_status: record.callStatus || null,
     cancellation_reason: record.cancellationReason || null,
     observation: record.observation || "",
+    document_additional_info: record.documentAdditionalInfo || "",
     actor_user_email: actorUserEmail || null,
   };
 }
@@ -1338,6 +1342,7 @@ function NewRecordView({
       attendant: currentUserEmail,
       status: statusOptionsByType[type][0],
       observation: String(form.get("observation") || ""),
+      documentAdditionalInfo: String(form.get("documentAdditionalInfo") || ""),
       cancellationReason: String(form.get("cancellationReason") || ""),
       needsPayment,
       paymentStatus: needsPayment ? "a_pagar" : "nao_aplica",
@@ -1505,6 +1510,12 @@ function NewRecordView({
           </select>
           <input name="cancellationReason" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" placeholder="Motivo do cancelamento" />
           <textarea name="observation" rows={4} className="rounded-xl border border-slate-200 px-3 py-3 text-sm md:col-span-2" placeholder="Observacao do operador sobre o atendimento" />
+          <textarea
+            name="documentAdditionalInfo"
+            rows={4}
+            className="rounded-xl border border-slate-200 px-3 py-3 text-sm md:col-span-2"
+            placeholder="Informacoes complementares que devem aparecer no voucher/declaracao"
+          />
         </div>
 
         <div className="mt-5 flex flex-wrap gap-3">
@@ -1719,6 +1730,13 @@ function PatientDrawer({
           </select>
           <input className="rounded-xl border border-slate-200 px-3 py-3 text-sm" value={draft.cancellationReason || ""} onChange={(event) => patch({ cancellationReason: event.target.value })} placeholder="Motivo do cancelamento" />
           <textarea rows={4} className="rounded-xl border border-slate-200 px-3 py-3 text-sm md:col-span-2" value={draft.observation} onChange={(event) => patch({ observation: event.target.value })} placeholder="Observacao do operador sobre o atendimento" />
+          <textarea
+            rows={4}
+            className="rounded-xl border border-slate-200 px-3 py-3 text-sm md:col-span-2"
+            value={draft.documentAdditionalInfo}
+            onChange={(event) => patch({ documentAdditionalInfo: event.target.value })}
+            placeholder="Informacoes complementares que devem aparecer no voucher/declaracao"
+          />
         </div>
 
         <div className="flex flex-wrap gap-3">

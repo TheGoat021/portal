@@ -64,6 +64,7 @@ export type OperationalRecordPayload = {
   call_status?: unknown;
   cancellation_reason?: unknown;
   observation?: unknown;
+  document_additional_info?: unknown;
   source_lead_id?: unknown;
   source_client_id?: unknown;
   source_conversation_id?: unknown;
@@ -98,6 +99,7 @@ export type NormalizedOperationalRecord = {
   call_status: CallStatus | null;
   cancellation_reason: string | null;
   observation: string;
+  document_additional_info: string;
   source_lead_id: string | null;
   source_client_id: string | null;
   source_conversation_id: string | null;
@@ -236,6 +238,7 @@ export function normalizeOperationalPayload(
       call_status: call_status_raw,
       cancellation_reason: asNullableString(payload.cancellation_reason),
       observation: asTrimmedString(payload.observation),
+      document_additional_info: asTrimmedString(payload.document_additional_info),
       source_lead_id: asNullableString(payload.source_lead_id),
       source_client_id: asNullableString(payload.source_client_id),
       source_conversation_id: asNullableString(payload.source_conversation_id),

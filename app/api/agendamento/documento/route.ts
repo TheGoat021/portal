@@ -2,12 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   renderAgendamentoDocumentHtml,
-  type AgendamentoDocumentRecord,
+type AgendamentoDocumentRecord,
   type DocumentType,
 } from "@/lib/agendamentoDocument";
 
 function isDocumentType(value: string): value is DocumentType {
   return value === "voucher" || value === "declaracao";
+}
+
+function isMissingSchemaColumn(message: string | undefined, column: string) {
+  const value = String(message || "");
+  return value.includes("schema cache") && value.includes(column);
 }
 
 export async function GET(req: NextRequest) {
@@ -24,13 +29,26 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "documentType invalido" }, { status: 400 });
     }
 
-    const { data, error } = await supabaseAdmin
+    let { data, error } = await supabaseAdmin
       .from("agendamento_operational_records")
       .select(
-        "id, patient_name, plan_name, specialty_name, appointment_date, appointment_time, payment_due_date, payment_due_time, clinic_name, patient_city, payment_amount, observation"
+        "id, patient_name, plan_name, specialty_name, appointment_date, appointment_time, payment_due_date, payment_due_time, clinic_name, patient_city, payment_amount, document_additional_info"
       )
       .eq("id", recordId)
       .maybeSingle<AgendamentoDocumentRecord>();
+
+    if (error && isMissingSchemaColumn(error.message, "document_additional_info")) {
+      const fallback = await supabaseAdmin
+        .from("agendamento_operational_records")
+        .select(
+          "id, patient_name, plan_name, specialty_name, appointment_date, appointment_time, payment_due_date, payment_due_time, clinic_name, patient_city, payment_amount"
+        )
+        .eq("id", recordId)
+        .maybeSingle<AgendamentoDocumentRecord>();
+
+      data = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

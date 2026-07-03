@@ -12,7 +12,7 @@ type AgendamentoDocumentRecord = {
   clinic_name: string | null;
   patient_city: string | null;
   payment_amount: number | string | null;
-  observation: string | null;
+  document_additional_info?: string | null;
 };
 
 function escapeHtml(value: string) {
@@ -76,7 +76,7 @@ export function renderAgendamentoDocumentHtml(
   const city = escapeHtml(record.patient_city || "Cidade nao informada");
   const plan = escapeHtml(record.plan_name || "Plano nao informado");
   const amount = formatCurrency(record.payment_amount);
-  const observation = escapeHtml(record.observation || "Sem observacoes complementares.");
+  const documentAdditionalInfo = escapeHtml(record.document_additional_info || "Sem informacoes complementares.");
   const bodyText = escapeHtml(getBodyText(documentType, record.patient_name || "o paciente"));
   const issuerName = escapeHtml(options?.issuerName?.trim() || "Nao informado");
 
@@ -315,7 +315,7 @@ export function renderAgendamentoDocumentHtml(
 
         <div class="notes">
           <span class="label">Informacoes complementares</span>
-          <p>${observation}</p>
+          <p>${documentAdditionalInfo}</p>
         </div>
 
         <div class="grid" style="margin-top: 24px; margin-bottom: 0;">

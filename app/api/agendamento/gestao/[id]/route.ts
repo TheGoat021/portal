@@ -120,6 +120,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       call_status: payload.call_status,
       cancellation_reason: payload.cancellation_reason,
       observation: payload.observation,
+      document_additional_info: payload.document_additional_info,
       source_lead_id: payload.source_lead_id,
       source_client_id: payload.source_client_id,
       source_conversation_id: payload.source_conversation_id,
@@ -134,9 +135,10 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       .select("*")
       .single();
 
-    if (error && isMissingPaymentDueTimeColumn(error.message)) {
-      const { payment_due_time, ...fallbackPayload } = updatePayload;
+    if (error && (isMissingPaymentDueTimeColumn(error.message) || isMissingSchemaColumn(error.message, "document_additional_info"))) {
+      const { payment_due_time, document_additional_info, ...fallbackPayload } = updatePayload;
       void payment_due_time;
+      void document_additional_info;
       const retry = await supabaseAdmin
         .from("agendamento_operational_records")
         .update(fallbackPayload)
@@ -149,9 +151,13 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     }
 
     if (error || !data) {
-      if (isMissingSchemaColumn(error?.message, "plan_activation_date") || isMissingSchemaColumn(error?.message, "plan_end_date")) {
+      if (
+        isMissingSchemaColumn(error?.message, "plan_activation_date") ||
+        isMissingSchemaColumn(error?.message, "plan_end_date") ||
+        isMissingSchemaColumn(error?.message, "document_additional_info")
+      ) {
         return NextResponse.json(
-          { error: "O banco ja tem as colunas novas, mas o schema cache da API ainda nao reconheceu plan_activation_date/plan_end_date." },
+          { error: "O banco ja tem as colunas novas, mas o schema cache da API ainda nao reconheceu plan_activation_date, plan_end_date ou document_additional_info." },
           { status: 500 }
         );
       }
