@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
   try {
     const recordId = req.nextUrl.searchParams.get("recordId")?.trim() || "";
     const documentTypeRaw = req.nextUrl.searchParams.get("documentType")?.trim() || "";
+    const issuerName = req.nextUrl.searchParams.get("issuerName")?.trim() || "";
 
     if (!recordId) {
       return NextResponse.json({ error: "recordId e obrigatorio" }, { status: 400 });
@@ -39,7 +40,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Registro nao encontrado" }, { status: 404 });
     }
 
-    const html = renderAgendamentoDocumentHtml(documentTypeRaw, data);
+    const html = renderAgendamentoDocumentHtml(documentTypeRaw, data, { issuerName });
 
     return new NextResponse(html, {
       status: 200,

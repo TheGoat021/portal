@@ -64,7 +64,8 @@ function getBodyText(documentType: DocumentType, patientName: string) {
 
 export function renderAgendamentoDocumentHtml(
   documentType: DocumentType,
-  record: AgendamentoDocumentRecord
+  record: AgendamentoDocumentRecord,
+  options?: { issuerName?: string | null }
 ) {
   const patientName = escapeHtml(record.patient_name || "Paciente");
   const title = getDocumentTitle(documentType);
@@ -77,6 +78,7 @@ export function renderAgendamentoDocumentHtml(
   const amount = formatCurrency(record.payment_amount);
   const observation = escapeHtml(record.observation || "Sem observacoes complementares.");
   const bodyText = escapeHtml(getBodyText(documentType, record.patient_name || "o paciente"));
+  const issuerName = escapeHtml(options?.issuerName?.trim() || "Nao informado");
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -314,6 +316,13 @@ export function renderAgendamentoDocumentHtml(
         <div class="notes">
           <span class="label">Informacoes complementares</span>
           <p>${observation}</p>
+        </div>
+
+        <div class="grid" style="margin-top: 24px; margin-bottom: 0;">
+          <div class="field">
+            <span class="label">Emitido por</span>
+            <span class="value">${issuerName}</span>
+          </div>
         </div>
 
         <div class="stamp-wrap">

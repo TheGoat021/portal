@@ -125,7 +125,16 @@ function matchQuestionOption(options: string[], inboundText: string) {
   const exact = options.find((option) => normalizeText(option) === normalizedInput)
   if (exact) return exact
 
-  const contains = options.find((option) => normalizedInput.includes(normalizeText(option)))
+  const startsWith = options.find((option) => {
+    const normalizedOption = normalizeText(option)
+    return normalizedOption.startsWith(normalizedInput) || normalizedInput.startsWith(normalizedOption)
+  })
+  if (startsWith) return startsWith
+
+  const contains = options.find((option) => {
+    const normalizedOption = normalizeText(option)
+    return normalizedInput.includes(normalizedOption) || normalizedOption.includes(normalizedInput)
+  })
   if (contains) return contains
 
   return null

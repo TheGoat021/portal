@@ -215,6 +215,31 @@ function formatRelativeDateTime(value?: string | null) {
   }).format(date);
 }
 
+function resolveUserDisplayName(user: unknown) {
+  const authUser = user as {
+    email?: string | null;
+    user_metadata?: {
+      full_name?: string | null;
+      name?: string | null;
+      display_name?: string | null;
+    } | null;
+  } | null;
+
+  const metadataName =
+    authUser?.user_metadata?.full_name ||
+    authUser?.user_metadata?.name ||
+    authUser?.user_metadata?.display_name;
+
+  if (typeof metadataName === "string" && metadataName.trim()) {
+    return metadataName.trim();
+  }
+
+  const email = typeof authUser?.email === "string" ? authUser.email.trim() : "";
+  if (!email) return "";
+
+  return email.split("@")[0]?.replace(/[._-]+/g, " ").trim() || "";
+}
+
 function mapApiRecordToUi(record: ApiOperationalRecord): OperationalRecord {
   return {
     id: record.id,
@@ -1514,20 +1539,27 @@ function PatientDrawer({
   onSave,
   onDelete,
   users,
+  currentUserName,
 }: {
   record: OperationalRecord | null;
   onClose: () => void;
   onSave: (id: string, patch: Partial<OperationalRecord>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   users: UserOption[];
+  currentUserName: string;
 }) {
   const [draft, setDraft] = useState<OperationalRecord | null>(record);
   const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [documentIssuerName, setDocumentIssuerName] = useState(currentUserName);
 
   useEffect(() => {
     setDraft(record);
   }, [record]);
+
+  useEffect(() => {
+    setDocumentIssuerName(currentUserName);
+  }, [currentUserName, record?.id]);
 
   if (!record || !draft) return null;
 
@@ -1554,8 +1586,13 @@ function PatientDrawer({
   function openDocument(documentType: "voucher" | "declaracao") {
     const recordId = draft?.id || record?.id;
     if (!recordId) return;
+    const issuerName = documentIssuerName.trim();
+    if (!issuerName) {
+      window.alert("Preencha o nome do atendente que esta emitindo o documento.");
+      return;
+    }
 
-    const url = `/api/agendamento/documento?recordId=${encodeURIComponent(recordId)}&documentType=${documentType}`;
+    const url = `/api/agendamento/documento?recordId=${encodeURIComponent(recordId)}&documentType=${documentType}&issuerName=${encodeURIComponent(issuerName)}`;
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
@@ -1700,7 +1737,17 @@ function PatientDrawer({
 
         <div className="mt-8 border-t border-slate-200 pt-6">
           <h4 className="mb-3 text-sm font-semibold text-slate-500">Documentos</h4>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="min-w-[240px] flex-1 text-xs font-semibold text-slate-500">
+              <span className="mb-1 block">Nome do atendente que emitiu</span>
+              <input
+                type="text"
+                value={documentIssuerName}
+                onChange={(event) => setDocumentIssuerName(event.target.value)}
+                placeholder="Digite o nome do atendente"
+                className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-normal text-slate-700"
+              />
+            </label>
             <button
               type="button"
               onClick={() => openDocument("voucher")}
@@ -1737,6 +1784,7 @@ export default function GestaoAgendamentosTestePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, role } = useAuth();
+  const currentUserName = resolveUserDisplayName(user);
   const activeTab = resolveTab(searchParams.get("tab"));
   const [records, setRecords] = useState<OperationalRecord[]>([]);
   const [listRecords, setListRecords] = useState<OperationalRecord[]>([]);
@@ -2014,7 +2062,14 @@ export default function GestaoAgendamentosTestePage() {
         {activeTab === "novo" && <NewRecordView onSave={createRecord} currentUserEmail={String(user?.email || "")} currentUserRole={role} />}
       </div>
 
-      <PatientDrawer record={selectedRecord} onClose={() => setSelectedRecord(null)} onSave={updateRecord} onDelete={removeRecord} users={users} />
+      <PatientDrawer
+        record={selectedRecord}
+        onClose={() => setSelectedRecord(null)}
+        onSave={updateRecord}
+        onDelete={removeRecord}
+        users={users}
+        currentUserName={currentUserName}
+      />
     </div>
   );
 }
