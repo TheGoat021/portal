@@ -7,11 +7,16 @@ export async function getUserProfile() {
 
   if (!user) return null;
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("profiles")
     .select("role")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
+
+  if (error) {
+    console.error("Erro ao buscar perfil do usuario autenticado:", error);
+    return null;
+  }
 
   return data;
 }

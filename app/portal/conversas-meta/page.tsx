@@ -36,20 +36,23 @@ export default function ConversasMetaPage() {
         .from("profiles")
         .select("id, role")
         .eq("id", authUser.id)
-        .single()
+        .maybeSingle()
 
       if (profileError) {
         console.error("Erro ao buscar profile:", profileError)
         return
       }
 
-      if (profile) {
-        setCurrentUser({
-          id: profile.id,
-          role: profile.role,
-          email: authUser.email ?? ""
-        })
+      if (!profile) {
+        console.error("Perfil do usuario nao encontrado ou sem permissao de leitura no RLS")
+        return
       }
+
+      setCurrentUser({
+        id: profile.id,
+        role: profile.role,
+        email: authUser.email ?? ""
+      })
     }
 
     loadUser()
