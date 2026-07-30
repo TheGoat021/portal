@@ -1,21 +1,6 @@
 // app/portal/integracoes/whatsapp/conectar/page.tsx
 
-import dynamic from 'next/dynamic';
-
-const MetaWhatsAppConnectCard = dynamic(() => import('./MetaWhatsAppConnectCard'), {
-  loading: () => (
-    <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-      <div className="h-6 w-48 rounded bg-zinc-200" />
-      <div className="mt-3 h-4 w-72 rounded bg-zinc-100" />
-      <div className="mt-6 grid gap-4 md:grid-cols-3">
-        <div className="h-28 rounded-2xl bg-zinc-100" />
-        <div className="h-28 rounded-2xl bg-zinc-100" />
-        <div className="h-28 rounded-2xl bg-zinc-100" />
-      </div>
-    </div>
-  ),
-  ssr: false,
-});
+import MetaWhatsAppConnectCard from './MetaWhatsAppConnectCard';
 
 export default function ConectarWhatsAppPage() {
   return (
