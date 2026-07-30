@@ -1,8 +1,6 @@
 "use client";
 
 import { Sidebar } from "@/components/Sidebar";
-import FloatingSoftphone from "@/components/voice/FloatingSoftphone";
-import VoiceSoftphoneBootstrap from "@/components/voice/VoiceSoftphoneBootstrap";
 import { usePortalStore } from "@/store/portalStore";
 
 export default function PortalLayout({
@@ -27,8 +25,6 @@ export default function PortalLayout({
       >
         {children}
       </main>
-      <VoiceSoftphoneBootstrap />
-      <FloatingSoftphone />
     </div>
   );
 }

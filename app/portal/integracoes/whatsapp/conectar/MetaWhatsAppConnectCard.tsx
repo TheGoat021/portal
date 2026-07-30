@@ -120,6 +120,7 @@ export default function MetaWhatsAppConnectCard() {
   const [config, setConfig] = useState<ConfigResponse | null>(null)
   const [loadingConfig, setLoadingConfig] = useState(true)
   const [sdkReady, setSdkReady] = useState(false)
+  const [loadingSdk, setLoadingSdk] = useState(false)
   const [busy, setBusy] = useState(false)
   const [pin, setPin] = useState('')
   const [status, setStatus] = useState<
@@ -143,10 +144,11 @@ export default function MetaWhatsAppConnectCard() {
   }>({})
 
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollingInFlightRef = useRef(false)
 
   const canConnect = useMemo(() => {
-    return Boolean(config?.ok && sdkReady && !busy)
-  }, [config, sdkReady, busy])
+    return Boolean(config?.ok && !busy && !loadingSdk)
+  }, [config, busy, loadingSdk])
 
   const isPendingConnection = connection?.status === 'pending_waba'
   const isConnected = connection?.status === 'connected'
@@ -156,7 +158,70 @@ export default function MetaWhatsAppConnectCard() {
       clearInterval(pollingRef.current)
       pollingRef.current = null
     }
+
+    pollingInFlightRef.current = false
   }, [])
+
+  const ensureSdkReady = useCallback(async () => {
+    if (window.FB && sdkReady) {
+      return
+    }
+
+    if (!config?.appId) {
+      throw new Error('Configuração da Meta indisponível no momento.')
+    }
+
+    setLoadingSdk(true)
+
+    try {
+      const existingScript = document.getElementById('facebook-jssdk')
+
+      if (existingScript && window.FB) {
+        window.FB.init({
+          appId: config.appId,
+          autoLogAppEvents: false,
+          xfbml: false,
+          version: config.apiVersion,
+        })
+        setSdkReady(true)
+        return
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        window.fbAsyncInit = function () {
+          try {
+            window.FB?.init({
+              appId: config.appId,
+              autoLogAppEvents: false,
+              xfbml: false,
+              version: config.apiVersion,
+            })
+            setSdkReady(true)
+            resolve()
+          } catch (error) {
+            reject(error)
+          }
+        }
+
+        if (existingScript) {
+          return
+        }
+
+        const script = document.createElement('script')
+        script.id = 'facebook-jssdk'
+        script.async = true
+        script.defer = true
+        script.crossOrigin = 'anonymous'
+        script.src = 'https://connect.facebook.net/pt_BR/sdk.js'
+        script.onerror = () =>
+          reject(new Error('Não foi possível carregar o SDK do Facebook.'))
+
+        document.body.appendChild(script)
+      })
+    } finally {
+      setLoadingSdk(false)
+    }
+  }, [config, sdkReady])
 
   const loadConfig = useCallback(async () => {
     setLoadingConfig(true)
@@ -202,6 +267,12 @@ export default function MetaWhatsAppConnectCard() {
       stopPolling()
 
       pollingRef.current = setInterval(async () => {
+        if (pollingInFlightRef.current) {
+          return
+        }
+
+        pollingInFlightRef.current = true
+
         try {
           const latest = await fetchConnectionById(connectionId)
           setConnection(latest)
@@ -223,6 +294,8 @@ export default function MetaWhatsAppConnectCard() {
           }
         } catch (err: any) {
           console.error('Erro ao consultar status da conexão Meta:', err)
+        } finally {
+          pollingInFlightRef.current = false
         }
       }, 3000)
     },
@@ -417,39 +490,6 @@ export default function MetaWhatsAppConnectCard() {
   useEffect(() => {
     loadConfig()
   }, [loadConfig])
-
-  useEffect(() => {
-    if (!config?.appId) return
-
-    const existingScript = document.getElementById('facebook-jssdk')
-    if (existingScript) {
-      setSdkReady(true)
-      return
-    }
-
-    window.fbAsyncInit = function () {
-      window.FB?.init({
-        appId: config.appId,
-        autoLogAppEvents: true,
-        xfbml: false,
-        version: config.apiVersion,
-      })
-      setSdkReady(true)
-    }
-
-    const script = document.createElement('script')
-    script.id = 'facebook-jssdk'
-    script.async = true
-    script.defer = true
-    script.crossOrigin = 'anonymous'
-    script.src = 'https://connect.facebook.net/pt_BR/sdk.js'
-
-    document.body.appendChild(script)
-
-    return () => {
-      window.fbAsyncInit = undefined
-    }
-  }, [config])
 
   useEffect(() => {
     function tryParseMessageData(raw: any) {
@@ -659,17 +699,38 @@ export default function MetaWhatsAppConnectCard() {
 
   useEffect(() => {
     return () => {
+      window.fbAsyncInit = undefined
       stopPolling()
     }
   }, [stopPolling])
 
-  const openEmbeddedSignup = useCallback(() => {
-    if (!window.FB || !config?.configId) return
+  const openEmbeddedSignup = useCallback(async () => {
+    if (!config?.configId) return
+
+    setError('')
+    try {
+      await ensureSdkReady()
+    } catch (err: unknown) {
+      setStatus('error')
+      setStatusMessage('')
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Erro ao preparar o Embedded Signup da Meta.'
+      )
+      return
+    }
+
+    if (!window.FB) {
+      setStatus('error')
+      setStatusMessage('')
+      setError('SDK da Meta não ficou disponível após o carregamento.')
+      return
+    }
 
     stopPolling()
     setBusy(true)
     setStatus('waiting-meta')
-    setError('')
     setDebugMessage('')
     setStatusMessage('Aguardando conclusão do Embedded Signup...')
     setConnection(null)
@@ -714,7 +775,7 @@ export default function MetaWhatsAppConnectCard() {
         },
       }
     )
-  }, [config, finalizeConnection, stopPolling])
+  }, [config, ensureSdkReady, finalizeConnection, stopPolling])
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -841,6 +902,11 @@ export default function MetaWhatsAppConnectCard() {
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   {status === 'saving' ? 'Finalizando...' : 'Aguardando Meta...'}
                 </>
+              ) : loadingSdk ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Carregando Meta...
+                </>
               ) : (
                 'Conectar com Meta'
               )}
@@ -941,7 +1007,7 @@ export default function MetaWhatsAppConnectCard() {
             <ChecklistItem done={Boolean(config?.configId)}>
               META_EMBEDDED_SIGNUP_CONFIG_ID
             </ChecklistItem>
-            <ChecklistItem done={sdkReady}>Facebook SDK carregado</ChecklistItem>
+            <ChecklistItem done={sdkReady}>Facebook SDK pronto sob demanda</ChecklistItem>
             <ChecklistItem done={isConnected}>Número conectado</ChecklistItem>
           </div>
 

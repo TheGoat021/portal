@@ -117,6 +117,7 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
   const [closingConversation, setClosingConversation] = useState(false)
 
   const recordIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
@@ -125,6 +126,8 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
   const streamRef = useRef<MediaStream | null>(null)
   const recordMimeTypeRef = useRef<string>("audio/ogg")
   const shouldSendRecordingRef = useRef(false)
+  const fetchingMessagesRef = useRef(false)
+  const shouldAutoScrollRef = useRef(true)
 
   function formatTime(dateString: string) {
     const date = new Date(dateString)
@@ -167,9 +170,20 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
     setConversation(data)
   }
 
-  const fetchMessages = async (conversationId: string) => {
+  const fetchMessages = async (
+    conversationId: string,
+    options?: { showLoader?: boolean }
+  ) => {
+    if (fetchingMessagesRef.current) {
+      return
+    }
+
     try {
-      setLoading(true)
+      fetchingMessagesRef.current = true
+
+      if (options?.showLoader) {
+        setLoading(true)
+      }
 
       const res = await fetch(`/api/whatsapp-meta/conversations/${conversationId}/messages`, {
         cache: "no-store"
@@ -204,7 +218,10 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
     } catch (error) {
       console.error("Erro ao buscar mensagens meta:", error)
     } finally {
-      setLoading(false)
+      fetchingMessagesRef.current = false
+      if (options?.showLoader) {
+        setLoading(false)
+      }
     }
   }
 
@@ -310,20 +327,23 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
       setMessages([])
       setConversation(null)
       setLoading(false)
+      shouldAutoScrollRef.current = true
       return
     }
 
     let active = true
     setMessages([])
+    shouldAutoScrollRef.current = true
 
     fetchConversation(selectedConversationId)
-    fetchMessages(selectedConversationId)
+    void fetchMessages(selectedConversationId, { showLoader: true })
     markConversationAsRead(selectedConversationId)
 
     const interval = setInterval(() => {
       if (!active) return
-      fetchMessages(selectedConversationId)
-    }, 2500)
+      if (document.visibilityState === "hidden") return
+      void fetchMessages(selectedConversationId)
+    }, 4000)
 
     return () => {
       active = false
@@ -332,7 +352,17 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
   }, [selectedConversationId])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+    const container = scrollContainerRef.current
+    if (!container || !bottomRef.current) return
+
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight
+    const isNearBottom = distanceFromBottom < 120
+
+    if (shouldAutoScrollRef.current || isNearBottom) {
+      bottomRef.current.scrollIntoView({ behavior: "auto", block: "end" })
+      shouldAutoScrollRef.current = false
+    }
   }, [messages.length])
 
   useEffect(() => {
@@ -747,91 +777,14 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
   })
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.26),rgba(248,250,255,0.38))]">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[linear-gradient(180deg,#f5f9ff,#eef5ff)]">
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute inset-x-0 bottom-0 top-[24%] opacity-95">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_20%,rgba(255,255,255,0.96),rgba(255,255,255,0)_30%),radial-gradient(circle_at_22%_42%,rgba(112,211,252,0.44),rgba(255,255,255,0)_18%),radial-gradient(circle_at_56%_74%,rgba(139,92,246,0.26),rgba(255,255,255,0)_24%),radial-gradient(circle_at_82%_44%,rgba(34,211,238,0.22),rgba(255,255,255,0)_18%)]" />
-          <div className="absolute left-[12%] top-[14%] h-[26%] w-[26%] rounded-full bg-cyan-300/45 blur-[88px] mix-blend-screen" />
-          <div className="absolute left-[10%] bottom-[6%] h-[24%] w-[38%] rounded-full bg-fuchsia-300/18 blur-[92px] mix-blend-screen" />
-          <div className="absolute right-[10%] bottom-[10%] h-[24%] w-[30%] rounded-full bg-sky-200/34 blur-[88px] mix-blend-screen" />
-          <div className="absolute left-[24%] bottom-[16%] h-[12%] w-[30%] rounded-full bg-violet-400/18 blur-[70px]" />
-          <svg className="absolute bottom-[8%] left-0 h-[48%] w-full opacity-[0.99]" viewBox="0 0 1200 420" preserveAspectRatio="none" aria-hidden="true">
-            <defs>
-              <linearGradient id="auroraWaveFront" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="rgba(167,139,250,0.72)" />
-                <stop offset="25%" stopColor="rgba(96,165,250,0.68)" />
-                <stop offset="50%" stopColor="rgba(34,211,238,0.62)" />
-                <stop offset="75%" stopColor="rgba(196,181,253,0.58)" />
-                <stop offset="100%" stopColor="rgba(248,250,255,0.42)" />
-              </linearGradient>
-              <linearGradient id="auroraWaveFrontUnderside" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="rgba(124,58,237,0.32)" />
-                <stop offset="35%" stopColor="rgba(59,130,246,0.28)" />
-                <stop offset="64%" stopColor="rgba(14,165,233,0.2)" />
-                <stop offset="100%" stopColor="rgba(255,255,255,0.08)" />
-              </linearGradient>
-              <linearGradient id="auroraWaveMid" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="rgba(167,139,250,0.38)" />
-                <stop offset="35%" stopColor="rgba(96,165,250,0.34)" />
-                <stop offset="70%" stopColor="rgba(34,211,238,0.3)" />
-                <stop offset="100%" stopColor="rgba(196,181,253,0.22)" />
-              </linearGradient>
-              <linearGradient id="auroraWaveMidUnderside" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="rgba(139,92,246,0.18)" />
-                <stop offset="36%" stopColor="rgba(59,130,246,0.16)" />
-                <stop offset="72%" stopColor="rgba(6,182,212,0.12)" />
-                <stop offset="100%" stopColor="rgba(255,255,255,0.04)" />
-              </linearGradient>
-              <linearGradient id="auroraWaveBack" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="rgba(167,139,250,0.18)" />
-                <stop offset="40%" stopColor="rgba(96,165,250,0.16)" />
-                <stop offset="72%" stopColor="rgba(34,211,238,0.14)" />
-                <stop offset="100%" stopColor="rgba(196,181,253,0.1)" />
-              </linearGradient>
-              <linearGradient id="auroraWaveHighlight" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="rgba(255,255,255,0)" />
-                <stop offset="36%" stopColor="rgba(255,255,255,0.82)" />
-                <stop offset="62%" stopColor="rgba(255,255,255,0.36)" />
-                <stop offset="100%" stopColor="rgba(255,255,255,0.04)" />
-              </linearGradient>
-              <filter id="auroraShadow" x="-20%" y="-20%" width="140%" height="160%">
-                <feGaussianBlur in="SourceAlpha" stdDeviation="16" result="blur" />
-                <feOffset dy="18" result="offsetBlur" />
-                <feColorMatrix
-                  in="offsetBlur"
-                  type="matrix"
-                  values="0 0 0 0 0.43 0 0 0 0 0.33 0 0 0 0 0.94 0 0 0 0.18 0"
-                  result="shadow"
-                />
-                <feBlend in="SourceGraphic" in2="shadow" mode="normal" />
-              </filter>
-              <filter id="auroraInnerGlow" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="8" result="coloredBlur" />
-                <feMerge>
-                  <feMergeNode in="coloredBlur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
-            <g opacity="0.84">
-              <path d="M-42 334C58 340 122 302 212 302C326 302 382 388 494 388C626 388 656 188 814 188C940 188 1020 250 1238 272L1238 420L-42 420Z" fill="url(#auroraWaveBack)" />
-            </g>
-            <g filter="url(#auroraInnerGlow)" opacity="0.92">
-              <path d="M-28 314C74 322 138 266 222 266C324 266 366 354 478 354C620 354 654 196 812 196C944 196 1018 238 1230 248L1230 420L-28 420Z" fill="url(#auroraWaveMidUnderside)" />
-              <path d="M-24 300C76 308 140 256 220 256C320 256 358 352 476 352C620 352 650 186 810 186C944 186 1016 236 1230 244L1230 420L-24 420Z" fill="url(#auroraWaveMid)" />
-            </g>
-            <g filter="url(#auroraShadow)">
-              <path d="M-14 302C92 302 152 232 238 232C344 232 384 332 500 332C642 332 672 136 826 136C956 136 1022 220 1228 226L1228 420L-14 420Z" fill="url(#auroraWaveFrontUnderside)" opacity="0.9" />
-              <path d="M-18 284C84 284 144 220 232 220C336 220 364 330 486 330C640 330 660 114 822 114C958 114 1020 214 1226 220L1226 420L-18 420Z" fill="url(#auroraWaveFront)" />
-            </g>
-            <path d="M-6 270C96 270 150 210 240 210C342 210 370 320 492 320C644 320 664 102 824 102C958 102 1024 206 1212 212" fill="none" stroke="url(#auroraWaveHighlight)" strokeWidth="10" strokeLinecap="round" />
-            <path d="M16 286C114 286 164 238 246 238C338 238 376 318 490 318C630 318 666 124 818 124C944 124 1016 208 1186 214" fill="none" stroke="rgba(255,255,255,0.28)" strokeWidth="4" strokeLinecap="round" />
-          </svg>
-          <div className="absolute bottom-[9%] left-[8%] h-32 w-80 opacity-40 [background-image:radial-gradient(circle,rgba(255,255,255,0.42)_1px,transparent_1.5px)] [background-size:10px_10px] [mask-image:radial-gradient(circle_at_18%_55%,rgba(0,0,0,1),rgba(0,0,0,0.42),transparent_78%)]" />
-        </div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(125,211,252,0.18),transparent_26%),radial-gradient(circle_at_bottom_right,rgba(165,180,252,0.14),transparent_30%)]" />
+        <div className="absolute left-[8%] top-[10%] h-44 w-44 rounded-full bg-sky-200/16 blur-3xl" />
+        <div className="absolute right-[10%] bottom-[10%] h-52 w-52 rounded-full bg-indigo-200/12 blur-3xl" />
       </div>
 
-      <div className="relative z-10 flex h-16 items-center justify-between border-b border-white/60 bg-white/36 px-4 backdrop-blur-xl">
+      <div className="relative z-10 flex h-16 items-center justify-between border-b border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fbff)] px-4">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-gray-900 truncate">
             {selectedConversationId ? conversationLabel : "Selecione uma conversa"}
@@ -864,7 +817,10 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
         </div>
       </div>
 
-      <div className="relative z-10 flex-1 min-h-0 overflow-y-auto px-4 py-5 space-y-3">
+      <div
+        ref={scrollContainerRef}
+        className="relative z-10 flex-1 min-h-0 overflow-y-auto px-4 py-5 space-y-3"
+      >
         {!selectedConversationId ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center text-gray-600">
@@ -901,8 +857,8 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
                     )}
 
                     <div
-                      className={`rounded-2xl px-3 py-2 shadow-sm border border-black/5 ${
-                        outbound ? "bg-[#D9FDD3]" : "bg-white"
+                      className={`rounded-2xl px-3 py-2 shadow-sm border ${
+                        outbound ? "border-emerald-200 bg-[#dcfce7]" : "border-slate-200 bg-white"
                       }`}
                     >
                       {renderQuotedMessage(msg)}
@@ -923,7 +879,7 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
         )}
       </div>
 
-      <div className="relative z-10 border-t border-white/60 bg-white/36 px-3 py-3 backdrop-blur-xl">
+      <div className="relative z-10 border-t border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fbff)] px-3 py-3">
         {!isRecording ? (
           <div className="flex items-center gap-2">
             <button
@@ -948,7 +904,7 @@ export default function ChatWindow({ selectedConversationId, onCloseConversation
 
             <div className="flex-1">
               <textarea
-                className="w-full min-h-[42px] max-h-32 resize-none overflow-y-auto rounded-2xl border border-white/75 bg-white/72 px-4 py-2.5 text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] outline-none disabled:opacity-60"
+                className="w-full min-h-[42px] max-h-32 resize-none overflow-y-auto rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none disabled:opacity-60"
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 placeholder={

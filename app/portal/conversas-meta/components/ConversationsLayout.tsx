@@ -22,15 +22,15 @@ export default function ConversationsMetaLayout({
   currentUser
 }: Props) {
   return (
-    <div className="relative h-[calc(100vh-64px)] overflow-hidden rounded-[36px] border border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.54),rgba(244,247,255,0.74))] p-3 shadow-[0_30px_80px_rgba(148,163,184,0.16)] backdrop-blur-2xl">
+    <div className="relative h-[calc(100vh-64px)] overflow-hidden rounded-[36px] border border-slate-200/90 bg-[linear-gradient(180deg,#e8eef8,#dde7f5)] p-3 shadow-[0_20px_48px_rgba(94,109,138,0.16)]">
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-0 top-0 h-80 w-80 rounded-full bg-cyan-200/25 blur-3xl" />
-        <div className="absolute right-0 top-10 h-96 w-96 rounded-full bg-violet-200/20 blur-3xl" />
-        <div className="absolute bottom-0 left-1/3 h-72 w-80 rounded-full bg-emerald-200/20 blur-3xl" />
+        <div className="absolute left-0 top-0 h-80 w-80 rounded-full bg-sky-200/30 blur-3xl" />
+        <div className="absolute right-0 top-10 h-96 w-96 rounded-full bg-indigo-200/24 blur-3xl" />
+        <div className="absolute bottom-0 left-1/3 h-72 w-80 rounded-full bg-cyan-100/22 blur-3xl" />
       </div>
 
       <div className="relative z-10 grid h-full min-h-0 grid-cols-12 gap-3">
-        <div className="col-span-4 flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-white/70 bg-white/58 shadow-[0_18px_44px_rgba(148,163,184,0.12)] backdrop-blur-xl">
+        <div className="col-span-4 flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_12px_28px_rgba(94,109,138,0.1)]">
           <div className="h-full min-h-0 flex-1 overflow-y-auto">
             <ConversationsList
               selectedConversationId={selectedConversationId}
@@ -40,7 +40,7 @@ export default function ConversationsMetaLayout({
           </div>
         </div>
 
-        <div className="col-span-5 flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-white/70 bg-white/50 shadow-[0_18px_44px_rgba(148,163,184,0.12)] backdrop-blur-xl">
+        <div className="col-span-5 flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-sky-100 bg-[#f8fbff] shadow-[0_12px_28px_rgba(94,109,138,0.1)]">
           <div className="h-full min-h-0 flex-1 overflow-y-auto">
             <ChatWindow
               selectedConversationId={selectedConversationId}
@@ -53,7 +53,7 @@ export default function ConversationsMetaLayout({
           </div>
         </div>
 
-        <div className="col-span-3 flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-white/70 bg-white/58 shadow-[0_18px_44px_rgba(148,163,184,0.12)] backdrop-blur-xl">
+        <div className="col-span-3 flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-emerald-100 bg-white shadow-[0_12px_28px_rgba(94,109,138,0.1)]">
           <div className="h-full min-h-0 flex-1 overflow-y-auto">
             <ClientDetails
               selectedConversationId={selectedConversationId}

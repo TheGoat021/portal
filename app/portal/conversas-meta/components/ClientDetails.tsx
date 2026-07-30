@@ -164,6 +164,27 @@ export default function ClientDetails({ selectedConversationId, currentUser }: P
   }
 
   useEffect(() => {
+    let active = true
+
+    fetch("/api/origens", { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) return []
+        return (await res.json()) as Origem[]
+      })
+      .then((data) => {
+        if (!active) return
+        setOrigens(Array.isArray(data) ? data : [])
+      })
+      .catch((error) => {
+        console.error("Erro ao carregar origens:", error)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
     if (!selectedConversationId) {
       setClient(null)
       return
@@ -173,10 +194,9 @@ export default function ClientDetails({ selectedConversationId, currentUser }: P
       try {
         setLoading(true)
 
-        const [conversationRes, leadsRes, origensRes, notesRes, reminderRes] = await Promise.all([
+        const [conversationRes, leadsRes, notesRes, reminderRes] = await Promise.all([
           fetch(`/api/whatsapp-meta/conversations/${selectedConversationId}`, { cache: "no-store" }),
           fetch("/api/leads", { cache: "no-store" }),
-          fetch("/api/origens", { cache: "no-store" }),
           fetch(`/api/whatsapp-meta/conversations/${selectedConversationId}/notes`, { cache: "no-store" }),
           fetch(`/api/whatsapp-meta/conversations/${selectedConversationId}/reminder`, { cache: "no-store" })
         ])
@@ -189,11 +209,9 @@ export default function ClientDetails({ selectedConversationId, currentUser }: P
         const conversationPayload = await conversationRes.json()
         const conversation: MetaConversation | null = conversationPayload?.data ?? conversationPayload ?? null
         const leads: LeadRecord[] = await leadsRes.json()
-        const origensData: Origem[] = origensRes.ok ? await origensRes.json() : []
         const notesPayload = notesRes.ok ? await notesRes.json() : { data: [] }
         const reminderPayload = reminderRes.ok ? await reminderRes.json() : { data: null }
 
-        setOrigens(origensData || [])
         setNotes((notesPayload?.data ?? []) as ConversationNote[])
         setActiveReminder((reminderPayload?.data as ConversationReminder | null) ?? null)
         setReminderDateTime(formatDateTimeLocalInput(reminderPayload?.data?.scheduled_for))
@@ -404,10 +422,10 @@ export default function ClientDetails({ selectedConversationId, currentUser }: P
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-transparent">
-      <div className="border-b border-white/60 bg-white/42 p-4 backdrop-blur-xl">
+      <div className="border-b border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fbff)] p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/80 bg-white/82 text-sm font-semibold text-slate-700">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700">
               {(displayName[0] || "C").toUpperCase()}
             </div>
 
@@ -423,7 +441,7 @@ export default function ClientDetails({ selectedConversationId, currentUser }: P
 
           <button
             onClick={copyPhone}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/75 bg-white/72 hover:bg-white"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white hover:bg-slate-50"
             title="Copiar telefone"
           >
             <Copy size={14} />
@@ -432,7 +450,7 @@ export default function ClientDetails({ selectedConversationId, currentUser }: P
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
-        <div className="rounded-[24px] border border-white/75 bg-white/66 p-4 shadow-[0_12px_30px_rgba(148,163,184,0.1)] backdrop-blur-xl">
+        <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-[0_10px_24px_rgba(94,109,138,0.08)]">
           <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-2">Pipeline</div>
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
             {pipelineSteps.map((step, index) => {
@@ -490,7 +508,7 @@ export default function ClientDetails({ selectedConversationId, currentUser }: P
           </div>
         </div>
 
-        <div className="rounded-[24px] border border-white/75 bg-white/66 p-4 space-y-3 shadow-[0_12px_30px_rgba(148,163,184,0.1)] backdrop-blur-xl">
+        <div className="rounded-[24px] border border-slate-200 bg-white p-4 space-y-3 shadow-[0_10px_24px_rgba(94,109,138,0.08)]">
           <div className="text-[11px] uppercase tracking-wide text-gray-500">Dados do cliente</div>
 
           <div className="grid grid-cols-1 gap-3">
@@ -562,7 +580,7 @@ export default function ClientDetails({ selectedConversationId, currentUser }: P
           </button>
         </div>
 
-        <div className="rounded-[24px] border border-white/75 bg-white/66 p-4 space-y-3 shadow-[0_12px_30px_rgba(148,163,184,0.1)] backdrop-blur-xl">
+        <div className="rounded-[24px] border border-slate-200 bg-white p-4 space-y-3 shadow-[0_10px_24px_rgba(94,109,138,0.08)]">
           <div className="text-[11px] uppercase tracking-wide text-gray-500">Realizar mais tarde</div>
 
           {activeReminder ? (
@@ -607,7 +625,7 @@ export default function ClientDetails({ selectedConversationId, currentUser }: P
           </div>
         </div>
 
-        <div className="rounded-[24px] border border-white/75 bg-white/66 p-4 space-y-3 shadow-[0_12px_30px_rgba(148,163,184,0.1)] backdrop-blur-xl">
+        <div className="rounded-[24px] border border-slate-200 bg-white p-4 space-y-3 shadow-[0_10px_24px_rgba(94,109,138,0.08)]">
           <div className="text-[11px] uppercase tracking-wide text-gray-500">Notas</div>
 
           <div className="space-y-2">

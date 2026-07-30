@@ -2,7 +2,7 @@
 
 "use client"
 
-import { useDeferredValue, useEffect, useMemo, useState } from "react"
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import {
   Archive,
   Bell,
@@ -235,6 +235,7 @@ export default function ConversationsList({
   const [currentOffset, setCurrentOffset] = useState(0)
   const [hasMoreConversations, setHasMoreConversations] = useState(false)
   const [loadingMoreConversations, setLoadingMoreConversations] = useState(false)
+  const fetchingConversationsRef = useRef(false)
   const roleUpper = (currentUser.role || "").toUpperCase()
   const isDiretoria =
     roleUpper === "DIRETORIA" ||
@@ -275,7 +276,12 @@ export default function ConversationsList({
     connectionId?: string,
     options?: { append?: boolean }
   ) => {
+    if (fetchingConversationsRef.current) {
+      return
+    }
+
     try {
+      fetchingConversationsRef.current = true
       const activeConnectionId = connectionId || selectedConnectionId
       const append = Boolean(options?.append)
       const nextOffset = append ? currentOffset : 0
@@ -357,6 +363,8 @@ export default function ConversationsList({
       setHasMoreConversations(Boolean(payload?.pagination?.hasMore))
     } catch (error) {
       console.error("Erro ao buscar conversas meta", error)
+    } finally {
+      fetchingConversationsRef.current = false
     }
   }
 
@@ -376,8 +384,12 @@ export default function ConversationsList({
 
     setCurrentOffset(0)
     setHasMoreConversations(false)
-    fetchConversations(selectedConnectionId, { append: false })
-    const interval = setInterval(() => fetchConversations(selectedConnectionId, { append: false }), 3000)
+    void fetchConversations(selectedConnectionId, { append: false })
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === "hidden") return
+      void fetchConversations(selectedConnectionId, { append: false })
+    }, 5000)
     return () => clearInterval(interval)
   }, [selectedConnectionId, serviceFilter, deferredSearch])
 
@@ -759,7 +771,7 @@ export default function ConversationsList({
 
   return (
     <div className="relative min-h-0 bg-transparent">
-      <div className="sticky top-0 z-10 space-y-3 border-b border-white/60 bg-white/42 p-4 backdrop-blur-xl">
+      <div className="sticky top-0 z-10 space-y-3 border-b border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f7fbff)] p-4">
         <div>
           <select
             value={selectedConnectionId}
@@ -767,7 +779,7 @@ export default function ConversationsList({
               setSelectedConnectionId(e.target.value)
               onSelectConversation("")
             }}
-            className="w-full rounded-2xl border border-white/75 bg-white/72 px-3 py-2.5 text-sm text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] outline-none"
+            className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none"
             disabled={loadingConnections}
           >
             <option value="">
@@ -787,7 +799,7 @@ export default function ConversationsList({
             placeholder="Buscar por nome, telefone ou mensagem..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-2xl border border-white/75 bg-white/72 px-3 py-2.5 text-sm text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] outline-none"
+            className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none"
           />
           <button
             onClick={() => setShowModal(true)}
@@ -993,13 +1005,13 @@ export default function ConversationsList({
                   }
                 }}
                 className={[
-                  "mx-3 mb-2 rounded-[22px] border px-4 py-3 transition cursor-pointer shadow-[0_10px_28px_rgba(148,163,184,0.08)] backdrop-blur-xl",
+                  "mx-3 mb-2 rounded-[22px] border px-4 py-3 transition cursor-pointer shadow-[0_8px_20px_rgba(94,109,138,0.08)]",
                   conv.responseAlertLevel === "danger"
-                    ? "border-rose-200/80 bg-[linear-gradient(135deg,rgba(255,241,242,0.96),rgba(255,255,255,0.82))] hover:bg-[linear-gradient(135deg,rgba(255,228,230,0.98),rgba(255,255,255,0.88))]"
+                    ? "border-rose-200 bg-[linear-gradient(135deg,#fff5f6,#ffffff)] hover:bg-[linear-gradient(135deg,#ffeef1,#ffffff)]"
                     : conv.responseAlertLevel === "warning"
-                      ? "border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,251,235,0.96),rgba(255,255,255,0.82))] hover:bg-[linear-gradient(135deg,rgba(254,243,199,0.94),rgba(255,255,255,0.88))]"
-                      : "border-white/75 bg-white/66 hover:bg-white/82",
-                  isSelected ? "ring-1 ring-cyan-200/80" : ""
+                      ? "border-amber-200 bg-[linear-gradient(135deg,#fffaf0,#ffffff)] hover:bg-[linear-gradient(135deg,#fff4da,#ffffff)]"
+                      : "border-slate-200 bg-[linear-gradient(135deg,#ffffff,#f8fbff)] hover:bg-[linear-gradient(135deg,#ffffff,#f1f6fd)]",
+                  isSelected ? "ring-2 ring-sky-200 border-sky-300" : ""
                 ].join(" ")}
               >
                 <div className="flex items-start gap-3">
