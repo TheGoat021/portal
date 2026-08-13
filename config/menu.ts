@@ -43,7 +43,7 @@ export const menuConfig: MenuSection[] = [
   // âœ… HOME (sem submenu, aparece direto)
   {
     icon: Home,
-    roles: ["TREINAMENTO", "COMERCIAL", "AGENDAMENTO", "EXAMES", "DIRETORIA"],
+    roles: ["TREINAMENTO", "COMERCIAL", "AGENDAMENTO", "EXAMES", "DIRETORIA", "PÓS-VENDA"],
     items: [
       {
         label: "Home",
@@ -65,7 +65,7 @@ export const menuConfig: MenuSection[] = [
 
   {
     icon: Calendar,
-    roles: ["AGENDAMENTO", "DIRETORIA"],
+    roles: ["AGENDAMENTO", "DIRETORIA","PÓS-VENDA"],
     items: [
       {
         label: "Dasboard",
@@ -76,7 +76,7 @@ export const menuConfig: MenuSection[] = [
 
   {
     icon: Calendar,
-    roles: ["TREINAMENTO", "COMERCIAL", "EXAMES",],
+    roles: ["TREINAMENTO", "COMERCIAL", "EXAMES","PÓS-VENDA"],
     items: [
       {
         label: "Novo registro",
@@ -96,7 +96,7 @@ export const menuConfig: MenuSection[] = [
   },
   {
     icon: Crown,
-    roles: ["DIRETORIA"],
+    roles: ["DIRETORIA","PÓS-VENDA"],
     items: [
       {
         label: "Axion League",
@@ -106,7 +106,7 @@ export const menuConfig: MenuSection[] = [
   },
    {
     icon: Crown,
-    roles: ["COMERCIAL"],
+    roles: ["COMERCIAL","PÓS-VENDA"],
     items: [
       {
         label: "Tabela Copa",
@@ -117,7 +117,7 @@ export const menuConfig: MenuSection[] = [
 
   {
     icon: MessageCircle,
-    roles: ["TREINAMENTO", "COMERCIAL", "AGENDAMENTO", "EXAMES", "DIRETORIA"],
+    roles: ["TREINAMENTO", "COMERCIAL", "AGENDAMENTO", "EXAMES", "DIRETORIA","PÓS-VENDA"],
     items: [
       {
         label: "WhatsApp Oficial",
@@ -170,7 +170,7 @@ export const menuConfig: MenuSection[] = [
   },
   {
     icon: FileText,
-    roles: ["DIRETORIA"],
+    roles: ["DIRETORIA","PÓS-VENDA"],
     items: [
       {
         label: "Assinaturas",
@@ -193,7 +193,7 @@ export const menuConfig: MenuSection[] = [
   {
     title: "Treinamento",
     icon: GraduationCap,
-    roles: ["TREINAMENTO", "COMERCIAL", "AGENDAMENTO", "EXAMES", "DIRETORIA"],
+    roles: ["TREINAMENTO", "COMERCIAL", "AGENDAMENTO", "EXAMES", "DIRETORIA","PÓS-VENDA"],
     items: [
       {
         label: "Agendamento",

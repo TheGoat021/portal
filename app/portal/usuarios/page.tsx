@@ -128,6 +128,7 @@ export default function UsuariosPage() {
           <option value="EXAMES">Exames</option>
           <option value="DIRETORIA">Diretoria</option>
           <option value="TREINAMENTO">Treinamento</option>
+          <option value="PÓS-VENDA">Pós-venda</option>
         </select>
 
         <button
