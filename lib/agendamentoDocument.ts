@@ -133,13 +133,14 @@ export function renderAgendamentoDocumentHtml(
         align-items: flex-start;
         margin-bottom: 28px;
       }
-      .brand-name {
-        font-size: 24px;
-        font-weight: 800;
-        color: #1d4ed8;
+      .brand-logo {
+        display: block;
+        max-width: 220px;
+        width: 100%;
+        height: auto;
       }
       .brand-sub {
-        margin-top: 4px;
+        margin-top: 10px;
         font-size: 13px;
         color: #475569;
       }
@@ -269,7 +270,7 @@ export function renderAgendamentoDocumentHtml(
       <div class="sheet">
         <div class="brand">
           <div>
-            <div class="brand-name">Doutor de Todos</div>
+            <img class="brand-logo" src="/logo.png" alt="Doutor de Todos" />
             <div class="brand-sub">Documento gerado automaticamente pelo portal interno</div>
           </div>
           <div class="doc-type">${escapeHtml(title)}</div>
